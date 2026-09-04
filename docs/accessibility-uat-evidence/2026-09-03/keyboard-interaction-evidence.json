@@ -1,0 +1,153 @@
+{
+  "collectedAt": "2026-09-03T18:54:14.000Z",
+  "dataPolicy": "Synthetic Local data; no credentials, cookies, tokens or secret URLs retained.",
+  "overallResult": "PARTIAL",
+  "routes": [
+    {
+      "route": "Login",
+      "role": "Administrator",
+      "result": "PASS",
+      "controls": [
+        "Email",
+        "Forgot password link",
+        "Password",
+        "Sign in",
+        "Password recovery email",
+        "Send reset email",
+        "Back to sign in"
+      ],
+      "keyboardSequence": "Tab to Email; type synthetic account; Tab to Forgot password; Tab to Password; type synthetic password; Tab to Sign in. Shift+Tab back to Forgot password; Enter opens /auth/forgot-password; Tab to recovery email; type invalid email; Enter triggers validation alert with aria-invalid; type synthetic email; Enter triggers success alert; Tab to Back to sign in; Enter returns to /login; Tab to Email; type synthetic account; Tab to Password; type synthetic password; Tab to Sign in; Enter.",
+      "activationResult": "Password recovery validated and submitted safely with controlled alerts; returned cleanly to /login; authenticated sign-in redirected to /admin projects page.",
+      "focusRestoration": "Focus transitioned logically across /login -> /auth/forgot-password -> /login -> /admin without trap.",
+      "keyboardTrapObserved": false,
+      "limitations": []
+    },
+    {
+      "route": "Projects",
+      "role": "Administrator",
+      "result": "PASS",
+      "controls": [
+        "Skip to main content",
+        "Search projects",
+        "Search",
+        "Clear search and filters",
+        "Title column sort",
+        "Status column sort",
+        "Pagination (Previous / Next)",
+        "Select current page checkbox",
+        "Row selection checkbox",
+        "Clear selection button",
+        "Bulk review preflight button",
+        "Bulk review cancel button"
+      ],
+      "keyboardSequence": "Tab reveals skip link; Enter moves focus to main; Tab to Search projects; type synthetic query; Tab to Search; Enter; Tab to Clear search and filters; Enter resets; Tab to Title sort header; Enter sorts asc/desc; Tab to Status sort header; Enter sorts; Tab to Select current page checkbox; Space selects all visible rows; Tab to Clear selection; Enter clears; Tab to row checkbox; Space selects row; Tab to Bulk review; Enter opens preflight confirmation dialog; Tab to Cancel; Enter dismisses dialog safely; Shift+Tab reverses focus without trap.",
+      "focusRestoration": "HISTORICAL LIMITATION: Bulk review inline preflight cancellation unmounted the Cancel button and dropped focus to document.body in the 2026-09-03 codebase (fixed on 2026-09-04 with trigger refs); skip link restored focus to main content.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/skip-link-after.png",
+      "limitations": [
+        "HISTORICAL DEFECT NOTE: Cancelling the inline bulk review preflight unmounted the Cancel button without programmatic focus restoration, causing focus to drop to document.body. Resolved in BulkProjectReviewPanel.tsx on 2026-09-04 (see 2026-09-04 evidence)."
+      ]
+    },
+    {
+      "route": "Import",
+      "role": "Administrator",
+      "result": "PARTIAL",
+      "controls": [
+        "All imports navigation link",
+        "Workflow steps orientation bar",
+        "Folder and file preparation guide disclosure button",
+        "Choose School reference spreadsheet file input",
+        "Check spreadsheet button"
+      ],
+      "keyboardSequence": "Tab to All imports link; Tab to workflow steps navigation; Tab to Folder and file preparation guide toggle; Enter expands guide; Enter collapses guide; Tab to Choose School reference spreadsheet; select synthetic invalid file; Tab to Check spreadsheet button; Enter triggers validation; Check Failed alert renders with descriptive error message; Shift+Tab traverses backwards cleanly.",
+      "activationResult": "Guide disclosure expanded and collapsed cleanly with focus retention; invalid file triggered controlled Check Failed alert without application crash; reverse traversal confirmed no keyboard trap.",
+      "focusRestoration": "Focus remained on disclosure toggle across state changes; Check spreadsheet button retained focus after validation failure.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/import-workflow-controlled-failure.png",
+      "limitations": [
+        "Full package replacement, project saving, and participant correction package steps are actively governed by PR #262 and deferred to the post-#262 integrated pass."
+      ]
+    },
+    {
+      "route": "Project Detail",
+      "role": "Administrator",
+      "result": "PARTIAL",
+      "controls": [
+        "Technical details and history anchor",
+        "Technical configuration disclosure",
+        "Edit project information",
+        "Disciplines MultiSelect",
+        "Search disciplines",
+        "Save changes"
+      ],
+      "keyboardSequence": "Enter on section anchor; Tab to disclosure; Enter expands; Enter collapses; Enter on Edit project information; Enter on Disciplines; type Virtual; Escape; save temporary synthetic summary and restore it.",
+      "activationResult": "Disclosure expanded and collapsed; search reduced options from 8 to 1; summary saved and then restored.",
+      "focusRestoration": "Escape returned focus to Disciplines trigger.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshots": [
+        "screenshots/project-detail-disclosure-focus.png",
+        "screenshots/multi-select-search-focus.png"
+      ],
+      "limitations": [
+        "Not every review, media or publication action was exercised."
+      ]
+    },
+    {
+      "route": "Participant Preview",
+      "role": "Participant",
+      "result": "PASS",
+      "controls": [
+        "Skip link (Skip to project review)",
+        "Document link (poster.pdf)",
+        "Confirm project details button",
+        "Request corrections disclosure summary",
+        "Correction comment textarea",
+        "Submit correction request button"
+      ],
+      "keyboardSequence": "Tab reveals Skip link; Tab to document link; Tab to Confirm project details; Tab to Request corrections summary; Space activates disclosure to expand; Tab focuses textarea#correction-comment with visible 3px focus outline; Tab focuses Submit correction request button; Shift+Tab reverses focus backwards without keyboard trap.",
+      "activationResult": "Space key toggles disclosure open and closed. Submit button on empty required textarea triggers HTML5 constraint validation bubble ('Please fill out this field.'). Reverse Tab sequence traverses backwards through DOM cleanly.",
+      "focusRestoration": "Shift+Tab restores focus cleanly back through textarea, summary, confirm button, document link, and skip link.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/participant-preview-validation-failure.png",
+      "limitations": [
+        "Safe validation failure triggered without submitting a persistent correction record to preserve project review state."
+      ]
+    },
+    {
+      "route": "Staff access",
+      "role": "Administrator",
+      "result": "PARTIAL",
+      "controls": [
+        "Staff access navigation link",
+        "Staff directory table",
+        "Account menu button",
+        "Log out item"
+      ],
+      "keyboardSequence": "Enter on Staff access navigation; Tab to account menu trigger; Enter opens dropdown; Tab to Log out; Escape dismisses menu; Tab through staff directory rows; Shift+Tab reverses traversal cleanly.",
+      "activationResult": "Staff directory rendered; account menu opened and dismissed with focus restoration; invitation controls are legitimately unavailable because STAFF_PROVISIONING_ENABLED is paused/disabled in local development environment.",
+      "focusRestoration": "Escape from open account menu returned focus cleanly to the account-menu trigger button.",
+      "keyboardTrapObserved": false,
+      "limitations": [
+        "Staff invitation creation is paused in this local environment (STAFF_PROVISIONING_ENABLED disabled); invitation controls were not manufactured per repository governance."
+      ]
+    },
+    {
+      "route": "Admin deployment/history",
+      "role": "Administrator",
+      "result": "PASS",
+      "controls": [
+        "Publishing navigation",
+        "Choose a project to publish link",
+        "Advanced publishing details disclosure summary",
+        "Publishing status summary cards"
+      ],
+      "keyboardSequence": "Enter on Publishing; Tab through navigation to Choose a project to publish link; Tab to Advanced publishing details summary; Enter expands disclosure; Enter collapses disclosure; Shift+Tab reverses focus cleanly.",
+      "activationResult": "Navigation links focused; Advanced publishing disclosure toggled open and closed with focus retention; non-consequential controls fully operable without calling /api/publish-cloud-feed or mutating public showcase.",
+      "focusRestoration": "Focus remained on disclosure summary across toggles.",
+      "keyboardTrapObserved": false,
+      "limitations": [
+        "Bounded strictly to non-consequential keyboard scope: live cloud feed publishing (/api/publish-cloud-feed), project removal, and Duda mutations were intentionally not executed per repository safety policy."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "route": "Projects",
+  "timestamp": "2026-09-03T17:02:21.129Z",
+  "states": {
+    "default": {
+      "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+      "effectiveBackground": "rgb(230, 30, 42)",
+      "foreground": "rgb(255, 255, 255)",
+      "hover": false,
+      "keyboardFocus": false,
+      "label": "New import",
+      "outlineOffset": "0px",
+      "outlineStyle": "none",
+      "outlineWidth": "3px",
+      "rect": {
+        "bottom": 169,
+        "height": 40,
+        "left": 1100.875,
+        "right": 1233,
+        "top": 129,
+        "width": 132.125,
+        "x": 1100.875,
+        "y": 129
+      }
+    },
+    "hover": {
+      "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.07) 0px 4px 6px -1px, rgba(0, 0, 0, 0.05) 0px 2px 4px -2px",
+      "effectiveBackground": "rgb(230, 30, 42)",
+      "foreground": "rgb(255, 255, 255)",
+      "hover": true,
+      "keyboardFocus": false,
+      "label": "New import",
+      "outlineOffset": "0px",
+      "outlineStyle": "none",
+      "outlineWidth": "3px",
+      "rect": {
+        "bottom": 169,
+        "height": 40,
+        "left": 1100.875,
+        "right": 1233,
+        "top": 129,
+        "width": 132.125,
+        "x": 1100.875,
+        "y": 129
+      }
+    },
+    "keyboardFocus": {
+      "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+      "effectiveBackground": "rgb(230, 30, 42)",
+      "foreground": "rgb(255, 255, 255)",
+      "hover": false,
+      "keyboardFocus": true,
+      "label": "New import",
+      "outlineOffset": "2px",
+      "outlineStyle": "none",
+      "outlineWidth": "2px",
+      "rect": {
+        "bottom": 169,
+        "height": 40,
+        "left": 1100.875,
+        "right": 1233,
+        "top": 129,
+        "width": 132.125,
+        "x": 1100.875,
+        "y": 129
+      }
+    }
+  },
+  "contrastRatios": {
+    "default": 4.581410088788193,
+    "hover": 4.581410088788193,
+    "keyboardFocus": 4.581410088788193
+  },
+  "focusIndicator": "Red box-shadow ring with white offset; outline-style is none."
+}

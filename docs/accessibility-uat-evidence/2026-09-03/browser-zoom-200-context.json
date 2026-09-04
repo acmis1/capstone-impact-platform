@@ -1,0 +1,41 @@
+{
+  "zoomMethod": "Actual Google Chrome Browser Host & Default Zoom Preference",
+  "zoomLevelParam": 3.8017840169239308,
+  "calculatedZoomPercent": "200%",
+  "windowDimensions": {
+    "width": 1280,
+    "height": 800
+  },
+  "pages": {
+    "admin": {
+      "dpr": 2,
+      "innerWidth": 632,
+      "innerHeight": 352,
+      "outerWidth": 1280,
+      "outerHeight": 800,
+      "scrollWidth": 624,
+      "clientWidth": 624,
+      "visualViewportScale": 1
+    },
+    "projectDetail": {
+      "dpr": 2,
+      "innerWidth": 632,
+      "innerHeight": 352,
+      "outerWidth": 1280,
+      "outerHeight": 800,
+      "scrollWidth": 624,
+      "clientWidth": 624,
+      "visualViewportScale": 1
+    },
+    "participantPreview": {
+      "dpr": 2,
+      "innerWidth": 632,
+      "innerHeight": 352,
+      "outerWidth": 1280,
+      "outerHeight": 800,
+      "scrollWidth": 624,
+      "clientWidth": 624,
+      "visualViewportScale": 1
+    }
+  }
+}

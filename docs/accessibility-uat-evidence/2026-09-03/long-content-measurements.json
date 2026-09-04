@@ -1,0 +1,31 @@
+{
+  "summary": {
+    "characters": 950,
+    "clientWidth": 523,
+    "documentClientWidth": 1265,
+    "documentScrollWidth": 1265,
+    "rect": {
+      "bottom": 698,
+      "height": 295.75,
+      "left": 313,
+      "right": 836,
+      "top": 402.25,
+      "width": 523,
+      "x": 313,
+      "y": 402.25
+    },
+    "scrollWidth": 523,
+    "screenshot": "screenshots/long-content-summary.png",
+    "result": "PASS",
+    "fixtureRestored": true
+  },
+  "filename": {
+    "result": "PARTIAL",
+    "characters": 193,
+    "observation": "Native file input elides the selected filename; wrapping is not proven."
+  },
+  "validationMessage": {
+    "result": "PENDING",
+    "reason": "No meaningfully long real validation message captured."
+  }
+}

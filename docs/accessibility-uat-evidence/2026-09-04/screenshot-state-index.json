@@ -1,0 +1,86 @@
+{
+  "generatedAt": "2026-09-04T06:50:00.000Z",
+  "inspectionRule": "Each accepted screenshot was opened visually; context-only captures support no interaction claim.",
+  "entries": [
+    {
+      "filename": "import-workflow-controlled-failure.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Import route with invalid synthetic spreadsheet uploaded; visible Check Failed validation summary and error message displayed with controlled recovery."
+    },
+    {
+      "filename": "import-workflow-mobile-375px.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Import projects in a narrow mobile layout with a visible focus ring on the account-menu button; the preparation guide is collapsed and the School spreadsheet step is shown."
+    },
+    {
+      "filename": "login-keyboard-focus.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Staff sign-in form with a synthetic email and masked password entered; no visible Sign in focus ring or validation alert."
+    },
+    {
+      "filename": "long-content-filename.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Import route with long synthetic filename; file input handles long filename without breaking layout container."
+    },
+    {
+      "filename": "participant-preview-browser-zoom-200.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview reflowed at genuine 200% Chrome host zoom; single-column reflow, controls accessible without horizontal page overflow."
+    },
+    {
+      "filename": "participant-preview-mobile-375px.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview layout and touch targets at 375 x 812 CSS mobile viewport with zero horizontal page overflow."
+    },
+    {
+      "filename": "participant-preview-reading-order.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Participant Preview showing the Smart Medical Drone Delivery heading, project metadata, private-preview notice, Project overview and Your Response sections; no focused skip link is visible."
+    },
+    {
+      "filename": "participant-preview-validation-failure.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Participant Preview with Request corrections expanded and the empty comment textarea visibly focused; no native validation bubble is visible."
+    },
+    {
+      "filename": "project-detail-browser-zoom-200.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Project detail route reflowed at genuine 200% Chrome host zoom; section navigation and poster disclosure accessible without horizontal page overflow."
+    },
+    {
+      "filename": "project-detail-desktop-keyboard.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Project detail route with keyboard focus on Read full poster text disclosure, merged PR #262 participant section visible."
+    },
+    {
+      "filename": "project-detail-mobile-375px.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Project detail route at 375 x 812 CSS mobile viewport; navigation and project metadata reflow cleanly without horizontal overflow."
+    },
+    {
+      "filename": "projects-index-browser-zoom-200.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Projects dashboard route at genuine 200% Chrome host zoom; table controls, search, sort, and pagination reflow cleanly without horizontal page overflow."
+    },
+    {
+      "filename": "projects-index-desktop-keyboard.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Projects dashboard with a visible focus ring on the Year filter (All years), no selected rows or bulk-review panel, and the first-page range Showing 1–10 of 12 projects."
+    },
+    {
+      "filename": "projects-index-mobile-375px.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Projects dashboard route at 375 x 812 CSS mobile viewport; search, filter, and project table adapt cleanly to narrow viewport."
+    },
+    {
+      "filename": "public-feed-keyboard-focus.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Showcase publishing history with the collapsed Advanced publishing details summary visibly focused; the activity section says No publishing activity recorded yet."
+    },
+    {
+      "filename": "staff-access-invitation-keyboard.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Staff invitation form with synthetic name and email entered, Reviewer checked, Administrator unchecked, and no visible focus ring on Send invitation."
+    }
+  ]
+}

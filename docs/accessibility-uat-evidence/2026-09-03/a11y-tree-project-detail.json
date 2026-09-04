@@ -1,0 +1,7094 @@
+[
+  {
+    "nodeId": "3342",
+    "role": "RootWebArea",
+    "name": "Capstone Impact Platform",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "4070"
+    ]
+  },
+  {
+    "nodeId": "4070",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4105"
+    ]
+  },
+  {
+    "nodeId": "4105",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4107",
+      "4197",
+      "4263"
+    ]
+  },
+  {
+    "nodeId": "4107",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4108",
+      "4109",
+      "4110"
+    ]
+  },
+  {
+    "nodeId": "4108",
+    "role": "link",
+    "name": "Skip to main content",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3341"
+    ]
+  },
+  {
+    "nodeId": "4109",
+    "role": "generic",
+    "name": "",
+    "properties": [
+      {
+        "name": "live",
+        "value": "polite"
+      },
+      {
+        "name": "atomic",
+        "value": true
+      },
+      {
+        "name": "relevant",
+        "value": "additions text"
+      }
+    ],
+    "childIds": []
+  },
+  {
+    "nodeId": "4110",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4111",
+      "4151"
+    ]
+  },
+  {
+    "nodeId": "4111",
+    "role": "complementary",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4112"
+    ]
+  },
+  {
+    "nodeId": "4151",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4152",
+      "4179",
+      "4186"
+    ]
+  },
+  {
+    "nodeId": "4152",
+    "role": "banner",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4153",
+      "4169"
+    ]
+  },
+  {
+    "nodeId": "4179",
+    "role": "region",
+    "name": "Environment notice",
+    "properties": [],
+    "childIds": [
+      "4184"
+    ]
+  },
+  {
+    "nodeId": "4186",
+    "role": "main",
+    "name": "",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3344"
+    ]
+  },
+  {
+    "nodeId": "4197",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4198"
+    ]
+  },
+  {
+    "nodeId": "4263",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4264"
+    ]
+  },
+  {
+    "nodeId": "3341",
+    "role": "StaticText",
+    "name": "Skip to main content",
+    "properties": [],
+    "childIds": [
+      "-1000003764"
+    ]
+  },
+  {
+    "nodeId": "4112",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4113",
+      "4121"
+    ]
+  },
+  {
+    "nodeId": "4153",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4159"
+    ]
+  },
+  {
+    "nodeId": "4159",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4160",
+      "4168"
+    ]
+  },
+  {
+    "nodeId": "4160",
+    "role": "navigation",
+    "name": "Breadcrumb",
+    "properties": [],
+    "childIds": [
+      "4161"
+    ]
+  },
+  {
+    "nodeId": "4168",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3336"
+    ]
+  },
+  {
+    "nodeId": "4169",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4170",
+      "4171"
+    ]
+  },
+  {
+    "nodeId": "4170",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3327"
+    ]
+  },
+  {
+    "nodeId": "3327",
+    "role": "StaticText",
+    "name": "STAGING",
+    "properties": [],
+    "childIds": [
+      "-1000003583"
+    ]
+  },
+  {
+    "nodeId": "4171",
+    "role": "button",
+    "name": "Open account menu for Local Synthetic Admin",
+    "properties": [
+      {
+        "name": "invalid",
+        "value": "false"
+      },
+      {
+        "name": "focusable",
+        "value": true
+      },
+      {
+        "name": "hasPopup",
+        "value": "menu"
+      },
+      {
+        "name": "expanded",
+        "value": false
+      }
+    ],
+    "childIds": [
+      "4172",
+      "4176"
+    ]
+  },
+  {
+    "nodeId": "4184",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4185",
+      "3340"
+    ]
+  },
+  {
+    "nodeId": "4185",
+    "role": "strong",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3339"
+    ]
+  },
+  {
+    "nodeId": "3340",
+    "role": "StaticText",
+    "name": " Work here uses staging data and does not update the public showcase website.",
+    "properties": [],
+    "childIds": [
+      "-1000003587"
+    ]
+  },
+  {
+    "nodeId": "3344",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3345",
+      "3380",
+      "3397"
+    ]
+  },
+  {
+    "nodeId": "3345",
+    "role": "sectionheader",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3346",
+      "3352"
+    ]
+  },
+  {
+    "nodeId": "3380",
+    "role": "navigation",
+    "name": "On this page",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3381"
+    ]
+  },
+  {
+    "nodeId": "3397",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3398",
+      "3990"
+    ]
+  },
+  {
+    "nodeId": "3398",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3399",
+      "3530",
+      "3783",
+      "3888"
+    ]
+  },
+  {
+    "nodeId": "3399",
+    "role": "region",
+    "name": "Review and edit",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3400",
+      "3405"
+    ]
+  },
+  {
+    "nodeId": "3530",
+    "role": "region",
+    "name": "Content and media",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3531",
+      "3536"
+    ]
+  },
+  {
+    "nodeId": "3783",
+    "role": "region",
+    "name": "Participant and publication",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3784",
+      "3789"
+    ]
+  },
+  {
+    "nodeId": "3888",
+    "role": "region",
+    "name": "Technical details and history",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3889",
+      "3894"
+    ]
+  },
+  {
+    "nodeId": "3990",
+    "role": "complementary",
+    "name": "Project record context",
+    "properties": [],
+    "childIds": [
+      "3991",
+      "4034",
+      "4046"
+    ]
+  },
+  {
+    "nodeId": "4198",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4214"
+    ]
+  },
+  {
+    "nodeId": "4264",
+    "role": "alert",
+    "name": "",
+    "properties": [
+      {
+        "name": "live",
+        "value": "assertive"
+      },
+      {
+        "name": "atomic",
+        "value": true
+      },
+      {
+        "name": "relevant",
+        "value": "additions text"
+      }
+    ],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003764",
+    "role": "InlineTextBox",
+    "name": "Skip to main content",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4113",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4118"
+    ]
+  },
+  {
+    "nodeId": "4118",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4119",
+      "4120"
+    ]
+  },
+  {
+    "nodeId": "4119",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3328"
+    ]
+  },
+  {
+    "nodeId": "3328",
+    "role": "StaticText",
+    "name": "Capstone Impact",
+    "properties": [],
+    "childIds": [
+      "-1000003574"
+    ]
+  },
+  {
+    "nodeId": "4120",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3329"
+    ]
+  },
+  {
+    "nodeId": "3329",
+    "role": "StaticText",
+    "name": "Admin CMS",
+    "properties": [],
+    "childIds": [
+      "-1000003575"
+    ]
+  },
+  {
+    "nodeId": "4121",
+    "role": "navigation",
+    "name": "Primary administration",
+    "properties": [],
+    "childIds": [
+      "4122",
+      "4129",
+      "4138",
+      "4144"
+    ]
+  },
+  {
+    "nodeId": "4161",
+    "role": "list",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4162",
+      "4164"
+    ]
+  },
+  {
+    "nodeId": "3336",
+    "role": "StaticText",
+    "name": "Project details",
+    "properties": [],
+    "childIds": [
+      "-1000003765"
+    ]
+  },
+  {
+    "nodeId": "-1000003583",
+    "role": "InlineTextBox",
+    "name": "STAGING",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4172",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4176",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4177",
+      "4178"
+    ]
+  },
+  {
+    "nodeId": "4177",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3337"
+    ]
+  },
+  {
+    "nodeId": "3337",
+    "role": "StaticText",
+    "name": "Local Synthetic Admin",
+    "properties": [],
+    "childIds": [
+      "-1000003584"
+    ]
+  },
+  {
+    "nodeId": "4178",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3338"
+    ]
+  },
+  {
+    "nodeId": "3338",
+    "role": "StaticText",
+    "name": "ADMIN",
+    "properties": [],
+    "childIds": [
+      "-1000003585"
+    ]
+  },
+  {
+    "nodeId": "3339",
+    "role": "StaticText",
+    "name": "Test environment:",
+    "properties": [],
+    "childIds": [
+      "-1000003586"
+    ]
+  },
+  {
+    "nodeId": "-1000003587",
+    "role": "InlineTextBox",
+    "name": " Work here uses staging data and does not update the public showcase website.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3346",
+    "role": "link",
+    "name": "Back to projects",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3350"
+    ]
+  },
+  {
+    "nodeId": "3352",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3353",
+      "3377"
+    ]
+  },
+  {
+    "nodeId": "3353",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3354",
+      "3356"
+    ]
+  },
+  {
+    "nodeId": "3354",
+    "role": "heading",
+    "name": "Smart Medical Drone Delivery",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "3355"
+    ]
+  },
+  {
+    "nodeId": "3356",
+    "role": "DescriptionList",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3357",
+      "3362",
+      "3367",
+      "3372"
+    ]
+  },
+  {
+    "nodeId": "3377",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3379"
+    ]
+  },
+  {
+    "nodeId": "3381",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3382",
+      "3384"
+    ]
+  },
+  {
+    "nodeId": "3382",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3383"
+    ]
+  },
+  {
+    "nodeId": "3384",
+    "role": "list",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3385",
+      "3388",
+      "3391",
+      "3394"
+    ]
+  },
+  {
+    "nodeId": "3400",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3401",
+      "3403"
+    ]
+  },
+  {
+    "nodeId": "3401",
+    "role": "heading",
+    "name": "Review and edit",
+    "properties": [
+      {
+        "name": "level",
+        "value": 2
+      }
+    ],
+    "childIds": [
+      "3402"
+    ]
+  },
+  {
+    "nodeId": "3403",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3404"
+    ]
+  },
+  {
+    "nodeId": "3405",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3406",
+      "3485",
+      "3520"
+    ]
+  },
+  {
+    "nodeId": "3406",
+    "role": "region",
+    "name": "Review status: Approved",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3407",
+      "3414"
+    ]
+  },
+  {
+    "nodeId": "3485",
+    "role": "region",
+    "name": "Assistive checks",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3486",
+      "3503"
+    ]
+  },
+  {
+    "nodeId": "3520",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3521"
+    ]
+  },
+  {
+    "nodeId": "3531",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3532",
+      "3534"
+    ]
+  },
+  {
+    "nodeId": "3532",
+    "role": "heading",
+    "name": "Content and media",
+    "properties": [
+      {
+        "name": "level",
+        "value": 2
+      }
+    ],
+    "childIds": [
+      "3533"
+    ]
+  },
+  {
+    "nodeId": "3534",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3535"
+    ]
+  },
+  {
+    "nodeId": "3536",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3537",
+      "3609"
+    ]
+  },
+  {
+    "nodeId": "3537",
+    "role": "region",
+    "name": "Public showcase content",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3538",
+      "3550"
+    ]
+  },
+  {
+    "nodeId": "3609",
+    "role": "region",
+    "name": "Media and accessibility",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3610",
+      "3621"
+    ]
+  },
+  {
+    "nodeId": "3784",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3785",
+      "3787"
+    ]
+  },
+  {
+    "nodeId": "3785",
+    "role": "heading",
+    "name": "Participant and publication",
+    "properties": [
+      {
+        "name": "level",
+        "value": 2
+      }
+    ],
+    "childIds": [
+      "3786"
+    ]
+  },
+  {
+    "nodeId": "3787",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3788"
+    ]
+  },
+  {
+    "nodeId": "3789",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3790",
+      "3811"
+    ]
+  },
+  {
+    "nodeId": "3790",
+    "role": "region",
+    "name": "Participant confirmation",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3791",
+      "3802"
+    ]
+  },
+  {
+    "nodeId": "3811",
+    "role": "region",
+    "name": "Showcase publishing",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3812",
+      "3824"
+    ]
+  },
+  {
+    "nodeId": "3889",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3890",
+      "3892"
+    ]
+  },
+  {
+    "nodeId": "3890",
+    "role": "heading",
+    "name": "Technical details and history",
+    "properties": [
+      {
+        "name": "level",
+        "value": 2
+      }
+    ],
+    "childIds": [
+      "3891"
+    ]
+  },
+  {
+    "nodeId": "3892",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3893"
+    ]
+  },
+  {
+    "nodeId": "3894",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3895",
+      "3975"
+    ]
+  },
+  {
+    "nodeId": "3895",
+    "role": "group",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3897",
+      "3900"
+    ]
+  },
+  {
+    "nodeId": "3975",
+    "role": "region",
+    "name": "Change history",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3976",
+      "3987"
+    ]
+  },
+  {
+    "nodeId": "3991",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3992",
+      "3994"
+    ]
+  },
+  {
+    "nodeId": "3992",
+    "role": "heading",
+    "name": "Project record",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "3993"
+    ]
+  },
+  {
+    "nodeId": "3994",
+    "role": "DescriptionList",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3995",
+      "4000",
+      "4005",
+      "4010",
+      "4015",
+      "4024",
+      "4029"
+    ]
+  },
+  {
+    "nodeId": "4034",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4035",
+      "4042",
+      "4044"
+    ]
+  },
+  {
+    "nodeId": "4035",
+    "role": "heading",
+    "name": "Import origin",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "4041"
+    ]
+  },
+  {
+    "nodeId": "4042",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4043"
+    ]
+  },
+  {
+    "nodeId": "4044",
+    "role": "link",
+    "name": "View import batch",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "4045"
+    ]
+  },
+  {
+    "nodeId": "4046",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4051"
+    ]
+  },
+  {
+    "nodeId": "4051",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4052",
+      "4054"
+    ]
+  },
+  {
+    "nodeId": "4214",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4215"
+    ]
+  },
+  {
+    "nodeId": "-1000003574",
+    "role": "InlineTextBox",
+    "name": "Capstone Impact",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003575",
+    "role": "InlineTextBox",
+    "name": "Admin CMS",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4122",
+    "role": "link",
+    "name": "Projects",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "4128"
+    ]
+  },
+  {
+    "nodeId": "4129",
+    "role": "link",
+    "name": "Imports",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "4137"
+    ]
+  },
+  {
+    "nodeId": "4138",
+    "role": "link",
+    "name": "Publishing",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "4143"
+    ]
+  },
+  {
+    "nodeId": "4144",
+    "role": "link",
+    "name": "Staff access",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "4150"
+    ]
+  },
+  {
+    "nodeId": "4162",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "4163"
+    ]
+  },
+  {
+    "nodeId": "4164",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "4167"
+    ]
+  },
+  {
+    "nodeId": "-1000003765",
+    "role": "InlineTextBox",
+    "name": "Project details",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003584",
+    "role": "InlineTextBox",
+    "name": "Local Synthetic Admin",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003585",
+    "role": "InlineTextBox",
+    "name": "ADMIN",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003586",
+    "role": "InlineTextBox",
+    "name": "Test environment:",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3350",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3351"
+    ]
+  },
+  {
+    "nodeId": "3351",
+    "role": "StaticText",
+    "name": "Back to projects",
+    "properties": [],
+    "childIds": [
+      "-1000003588"
+    ]
+  },
+  {
+    "nodeId": "3355",
+    "role": "StaticText",
+    "name": "Smart Medical Drone Delivery",
+    "properties": [],
+    "childIds": [
+      "-1000003589"
+    ]
+  },
+  {
+    "nodeId": "3357",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3358",
+      "3360"
+    ]
+  },
+  {
+    "nodeId": "3358",
+    "role": "term",
+    "name": "Project ID",
+    "properties": [],
+    "childIds": [
+      "3359"
+    ]
+  },
+  {
+    "nodeId": "3360",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3361"
+    ]
+  },
+  {
+    "nodeId": "3362",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3363",
+      "3365"
+    ]
+  },
+  {
+    "nodeId": "3363",
+    "role": "term",
+    "name": "Year",
+    "properties": [],
+    "childIds": [
+      "3364"
+    ]
+  },
+  {
+    "nodeId": "3365",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3366"
+    ]
+  },
+  {
+    "nodeId": "3367",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3368",
+      "3370"
+    ]
+  },
+  {
+    "nodeId": "3368",
+    "role": "term",
+    "name": "Program",
+    "properties": [],
+    "childIds": [
+      "3369"
+    ]
+  },
+  {
+    "nodeId": "3370",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3371"
+    ]
+  },
+  {
+    "nodeId": "3372",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3373",
+      "3375"
+    ]
+  },
+  {
+    "nodeId": "3373",
+    "role": "term",
+    "name": "Discipline",
+    "properties": [],
+    "childIds": [
+      "3374"
+    ]
+  },
+  {
+    "nodeId": "3375",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3376"
+    ]
+  },
+  {
+    "nodeId": "3379",
+    "role": "StaticText",
+    "name": "Approved",
+    "properties": [],
+    "childIds": [
+      "-1000003598"
+    ]
+  },
+  {
+    "nodeId": "3383",
+    "role": "StaticText",
+    "name": "On this page",
+    "properties": [],
+    "childIds": [
+      "-1000003766"
+    ]
+  },
+  {
+    "nodeId": "3385",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "3386"
+    ]
+  },
+  {
+    "nodeId": "3388",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "3389"
+    ]
+  },
+  {
+    "nodeId": "3391",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "3392"
+    ]
+  },
+  {
+    "nodeId": "3394",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "3395"
+    ]
+  },
+  {
+    "nodeId": "3402",
+    "role": "StaticText",
+    "name": "Review and edit",
+    "properties": [],
+    "childIds": [
+      "-1000003767"
+    ]
+  },
+  {
+    "nodeId": "3404",
+    "role": "StaticText",
+    "name": "Understand the current workflow decision, resolve blockers, take the permitted action, and update project information.",
+    "properties": [],
+    "childIds": [
+      "-1000003605",
+      "-1000003606"
+    ]
+  },
+  {
+    "nodeId": "3407",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3408"
+    ]
+  },
+  {
+    "nodeId": "3408",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3409"
+    ]
+  },
+  {
+    "nodeId": "3409",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3410",
+      "3412"
+    ]
+  },
+  {
+    "nodeId": "3410",
+    "role": "heading",
+    "name": "Review status: Approved",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "3411"
+    ]
+  },
+  {
+    "nodeId": "3412",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3413"
+    ]
+  },
+  {
+    "nodeId": "3413",
+    "role": "StaticText",
+    "name": "Internal review is complete. The project is approved but is not published.",
+    "properties": [],
+    "childIds": [
+      "-1000003608"
+    ]
+  },
+  {
+    "nodeId": "3414",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3415"
+    ]
+  },
+  {
+    "nodeId": "3415",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3416",
+      "3421"
+    ]
+  },
+  {
+    "nodeId": "3416",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3417",
+      "3419"
+    ]
+  },
+  {
+    "nodeId": "3417",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3418"
+    ]
+  },
+  {
+    "nodeId": "3419",
+    "role": "link",
+    "name": "Go to project information",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3420"
+    ]
+  },
+  {
+    "nodeId": "3421",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3422",
+      "3463"
+    ]
+  },
+  {
+    "nodeId": "3422",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3423"
+    ]
+  },
+  {
+    "nodeId": "3423",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3424",
+      "3426",
+      "3435",
+      "3449"
+    ]
+  },
+  {
+    "nodeId": "3424",
+    "role": "heading",
+    "name": "Compliance and validation",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3425"
+    ]
+  },
+  {
+    "nodeId": "3426",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3430"
+    ]
+  },
+  {
+    "nodeId": "3430",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3431",
+      "3434"
+    ]
+  },
+  {
+    "nodeId": "3431",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3432"
+    ]
+  },
+  {
+    "nodeId": "3432",
+    "role": "StaticText",
+    "name": "Validation passed",
+    "properties": [],
+    "childIds": [
+      "-1000003613"
+    ]
+  },
+  {
+    "nodeId": "3434",
+    "role": "StaticText",
+    "name": "This project has no blocking validation issues.",
+    "properties": [],
+    "childIds": [
+      "-1000003614"
+    ]
+  },
+  {
+    "nodeId": "3435",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3436",
+      "3447"
+    ]
+  },
+  {
+    "nodeId": "3436",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3441"
+    ]
+  },
+  {
+    "nodeId": "3441",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3442",
+      "3444",
+      "3446"
+    ]
+  },
+  {
+    "nodeId": "3442",
+    "role": "StaticText",
+    "name": "Blocking issues (",
+    "properties": [],
+    "childIds": [
+      "-1000003615"
+    ]
+  },
+  {
+    "nodeId": "3444",
+    "role": "StaticText",
+    "name": "0",
+    "properties": [],
+    "childIds": [
+      "-1000003616"
+    ]
+  },
+  {
+    "nodeId": "3446",
+    "role": "StaticText",
+    "name": ")",
+    "properties": [],
+    "childIds": [
+      "-1000003617"
+    ]
+  },
+  {
+    "nodeId": "3447",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3448"
+    ]
+  },
+  {
+    "nodeId": "3449",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3450",
+      "3461"
+    ]
+  },
+  {
+    "nodeId": "3450",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3455"
+    ]
+  },
+  {
+    "nodeId": "3455",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3456",
+      "3458",
+      "3460"
+    ]
+  },
+  {
+    "nodeId": "3456",
+    "role": "StaticText",
+    "name": "Quality warnings (",
+    "properties": [],
+    "childIds": [
+      "-1000003619"
+    ]
+  },
+  {
+    "nodeId": "3458",
+    "role": "StaticText",
+    "name": "0",
+    "properties": [],
+    "childIds": [
+      "-1000003620"
+    ]
+  },
+  {
+    "nodeId": "3460",
+    "role": "StaticText",
+    "name": ")",
+    "properties": [],
+    "childIds": [
+      "-1000003621"
+    ]
+  },
+  {
+    "nodeId": "3461",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3462"
+    ]
+  },
+  {
+    "nodeId": "3463",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3464",
+      "3466"
+    ]
+  },
+  {
+    "nodeId": "3464",
+    "role": "heading",
+    "name": "Available actions",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3465"
+    ]
+  },
+  {
+    "nodeId": "3466",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3467",
+      "3476",
+      "3481"
+    ]
+  },
+  {
+    "nodeId": "3467",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3468",
+      "3470"
+    ]
+  },
+  {
+    "nodeId": "3468",
+    "role": "LabelText",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3469"
+    ]
+  },
+  {
+    "nodeId": "3470",
+    "role": "textbox",
+    "name": "Review comments",
+    "properties": [
+      {
+        "name": "invalid",
+        "value": "false"
+      },
+      {
+        "name": "focusable",
+        "value": true
+      },
+      {
+        "name": "editable",
+        "value": "plaintext"
+      },
+      {
+        "name": "settable",
+        "value": true
+      },
+      {
+        "name": "multiline",
+        "value": true
+      },
+      {
+        "name": "readonly",
+        "value": false
+      },
+      {
+        "name": "required",
+        "value": false
+      },
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3472",
+      "3474"
+    ]
+  },
+  {
+    "nodeId": "3476",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3477",
+      "3479"
+    ]
+  },
+  {
+    "nodeId": "3477",
+    "role": "button",
+    "name": "Request changes",
+    "properties": [
+      {
+        "name": "invalid",
+        "value": "false"
+      },
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3478"
+    ]
+  },
+  {
+    "nodeId": "3479",
+    "role": "button",
+    "name": "Archive project",
+    "properties": [
+      {
+        "name": "invalid",
+        "value": "false"
+      },
+      {
+        "name": "focusable",
+        "value": true
+      },
+      {
+        "name": "hasPopup",
+        "value": "dialog"
+      },
+      {
+        "name": "expanded",
+        "value": false
+      }
+    ],
+    "childIds": [
+      "3480"
+    ]
+  },
+  {
+    "nodeId": "3481",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3482",
+      "3484"
+    ]
+  },
+  {
+    "nodeId": "3486",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3487",
+      "3498"
+    ]
+  },
+  {
+    "nodeId": "3487",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3488",
+      "3496"
+    ]
+  },
+  {
+    "nodeId": "3488",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3494"
+    ]
+  },
+  {
+    "nodeId": "3494",
+    "role": "heading",
+    "name": "Assistive checks",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "3495"
+    ]
+  },
+  {
+    "nodeId": "3496",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3497"
+    ]
+  },
+  {
+    "nodeId": "3498",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3499"
+    ]
+  },
+  {
+    "nodeId": "3499",
+    "role": "button",
+    "name": "Run checks",
+    "description": "Start assistive checks.",
+    "properties": [
+      {
+        "name": "invalid",
+        "value": "false"
+      },
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3502"
+    ]
+  },
+  {
+    "nodeId": "3503",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3504"
+    ]
+  },
+  {
+    "nodeId": "3504",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3505",
+      "3511",
+      "3513",
+      "3515"
+    ]
+  },
+  {
+    "nodeId": "3505",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3511",
+    "role": "heading",
+    "name": "No assistive checks run yet",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "3512"
+    ]
+  },
+  {
+    "nodeId": "3513",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3514"
+    ]
+  },
+  {
+    "nodeId": "3515",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3516"
+    ]
+  },
+  {
+    "nodeId": "3521",
+    "role": "region",
+    "name": "Project information",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3522"
+    ]
+  },
+  {
+    "nodeId": "3533",
+    "role": "StaticText",
+    "name": "Content and media",
+    "properties": [],
+    "childIds": [
+      "-1000003780"
+    ]
+  },
+  {
+    "nodeId": "3535",
+    "role": "StaticText",
+    "name": "Inspect the public-facing narrative, supporting links, poster and document assets, and their accessibility evidence.",
+    "properties": [],
+    "childIds": [
+      "-1000003647",
+      "-1000003648"
+    ]
+  },
+  {
+    "nodeId": "3538",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3539"
+    ]
+  },
+  {
+    "nodeId": "3539",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3545"
+    ]
+  },
+  {
+    "nodeId": "3545",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3546",
+      "3548"
+    ]
+  },
+  {
+    "nodeId": "3546",
+    "role": "heading",
+    "name": "Public showcase content",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "3547"
+    ]
+  },
+  {
+    "nodeId": "3548",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3549"
+    ]
+  },
+  {
+    "nodeId": "3549",
+    "role": "StaticText",
+    "name": "The written content that appears on the public project card and detail view.",
+    "properties": [],
+    "childIds": [
+      "-1000003650"
+    ]
+  },
+  {
+    "nodeId": "3550",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3551"
+    ]
+  },
+  {
+    "nodeId": "3551",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3552",
+      "3558",
+      "3564",
+      "3570",
+      "3578",
+      "3598"
+    ]
+  },
+  {
+    "nodeId": "3552",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3553",
+      "3555"
+    ]
+  },
+  {
+    "nodeId": "3553",
+    "role": "heading",
+    "name": "Short summary",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3554"
+    ]
+  },
+  {
+    "nodeId": "3555",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3556"
+    ]
+  },
+  {
+    "nodeId": "3556",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3557"
+    ]
+  },
+  {
+    "nodeId": "3558",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3559",
+      "3561"
+    ]
+  },
+  {
+    "nodeId": "3559",
+    "role": "heading",
+    "name": "Problem background",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3560"
+    ]
+  },
+  {
+    "nodeId": "3561",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3562"
+    ]
+  },
+  {
+    "nodeId": "3562",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3563"
+    ]
+  },
+  {
+    "nodeId": "3564",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3565",
+      "3567"
+    ]
+  },
+  {
+    "nodeId": "3565",
+    "role": "heading",
+    "name": "Developed solution",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3566"
+    ]
+  },
+  {
+    "nodeId": "3567",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3568"
+    ]
+  },
+  {
+    "nodeId": "3568",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3569"
+    ]
+  },
+  {
+    "nodeId": "3570",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3571",
+      "3573"
+    ]
+  },
+  {
+    "nodeId": "3571",
+    "role": "heading",
+    "name": "Accessibility description",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3572"
+    ]
+  },
+  {
+    "nodeId": "3573",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3574",
+      "3576"
+    ]
+  },
+  {
+    "nodeId": "3574",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3575"
+    ]
+  },
+  {
+    "nodeId": "3576",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3577"
+    ]
+  },
+  {
+    "nodeId": "3578",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3579"
+    ]
+  },
+  {
+    "nodeId": "3579",
+    "role": "group",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3581",
+      "3584"
+    ]
+  },
+  {
+    "nodeId": "3598",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3599",
+      "3604"
+    ]
+  },
+  {
+    "nodeId": "3599",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3600",
+      "3602"
+    ]
+  },
+  {
+    "nodeId": "3600",
+    "role": "heading",
+    "name": "External citations",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3601"
+    ]
+  },
+  {
+    "nodeId": "3602",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3603"
+    ]
+  },
+  {
+    "nodeId": "3604",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3605",
+      "3607"
+    ]
+  },
+  {
+    "nodeId": "3605",
+    "role": "heading",
+    "name": "External web links",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3606"
+    ]
+  },
+  {
+    "nodeId": "3607",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3608"
+    ]
+  },
+  {
+    "nodeId": "3610",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3611"
+    ]
+  },
+  {
+    "nodeId": "3611",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3616"
+    ]
+  },
+  {
+    "nodeId": "3616",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3617",
+      "3619"
+    ]
+  },
+  {
+    "nodeId": "3617",
+    "role": "heading",
+    "name": "Media and accessibility",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "3618"
+    ]
+  },
+  {
+    "nodeId": "3619",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3620"
+    ]
+  },
+  {
+    "nodeId": "3620",
+    "role": "StaticText",
+    "name": "Uploaded poster, document, and snapshot files, their text alternatives, and external showcase links.",
+    "properties": [],
+    "childIds": [
+      "-1000003667",
+      "-1000003668"
+    ]
+  },
+  {
+    "nodeId": "3621",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3622"
+    ]
+  },
+  {
+    "nodeId": "3622",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3623",
+      "3750"
+    ]
+  },
+  {
+    "nodeId": "3623",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3624",
+      "3690"
+    ]
+  },
+  {
+    "nodeId": "3624",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3625",
+      "3654"
+    ]
+  },
+  {
+    "nodeId": "3625",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3626",
+      "3631",
+      "3633",
+      "3638"
+    ]
+  },
+  {
+    "nodeId": "3626",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3627"
+    ]
+  },
+  {
+    "nodeId": "3631",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3632"
+    ]
+  },
+  {
+    "nodeId": "3632",
+    "role": "image",
+    "name": "Infographic depicting drone models with insulated internal temperature chambers.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3633",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3634",
+      "3636"
+    ]
+  },
+  {
+    "nodeId": "3634",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3635"
+    ]
+  },
+  {
+    "nodeId": "3636",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3637"
+    ]
+  },
+  {
+    "nodeId": "3638",
+    "role": "DescriptionList",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3639",
+      "3644",
+      "3649"
+    ]
+  },
+  {
+    "nodeId": "3654",
+    "role": "region",
+    "name": "ACCESSIBILITY REVIEW — POSTER IMAGE: poster.png",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3655",
+      "3663"
+    ]
+  },
+  {
+    "nodeId": "3690",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3691",
+      "3721"
+    ]
+  },
+  {
+    "nodeId": "3691",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3692",
+      "3701",
+      "3703",
+      "3705"
+    ]
+  },
+  {
+    "nodeId": "3692",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3693",
+      "3695"
+    ]
+  },
+  {
+    "nodeId": "3693",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3694"
+    ]
+  },
+  {
+    "nodeId": "3695",
+    "role": "link",
+    "name": "Open PDF in a new tab",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3696"
+    ]
+  },
+  {
+    "nodeId": "3701",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3702"
+    ]
+  },
+  {
+    "nodeId": "3702",
+    "role": "StaticText",
+    "name": "For keyboard access or if the inline preview is unavailable, open the PDF in a new tab.",
+    "properties": [],
+    "childIds": [
+      "-1000003800",
+      "-1000003801"
+    ]
+  },
+  {
+    "nodeId": "3703",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3704"
+    ]
+  },
+  {
+    "nodeId": "3704",
+    "role": "Iframe",
+    "name": "PDF preview of poster.pdf",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3705",
+    "role": "DescriptionList",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3706",
+      "3711",
+      "3716"
+    ]
+  },
+  {
+    "nodeId": "3721",
+    "role": "region",
+    "name": "ACCESSIBILITY REVIEW — POSTER PDF: poster.pdf",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "3722",
+      "3730"
+    ]
+  },
+  {
+    "nodeId": "3750",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3751",
+      "3753"
+    ]
+  },
+  {
+    "nodeId": "3751",
+    "role": "heading",
+    "name": "External showcase links",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3752"
+    ]
+  },
+  {
+    "nodeId": "3753",
+    "role": "DescriptionList",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3754",
+      "3763",
+      "3773"
+    ]
+  },
+  {
+    "nodeId": "3786",
+    "role": "StaticText",
+    "name": "Participant and publication",
+    "properties": [],
+    "childIds": [
+      "-1000003812"
+    ]
+  },
+  {
+    "nodeId": "3788",
+    "role": "StaticText",
+    "name": "Follow the later confirmation and publication stages while each panel reports its own authoritative availability and readiness.",
+    "properties": [],
+    "childIds": [
+      "-1000003711",
+      "-1000003712"
+    ]
+  },
+  {
+    "nodeId": "3791",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3792"
+    ]
+  },
+  {
+    "nodeId": "3792",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3797"
+    ]
+  },
+  {
+    "nodeId": "3797",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3798",
+      "3800"
+    ]
+  },
+  {
+    "nodeId": "3798",
+    "role": "heading",
+    "name": "Participant confirmation",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "3799"
+    ]
+  },
+  {
+    "nodeId": "3800",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3801"
+    ]
+  },
+  {
+    "nodeId": "3801",
+    "role": "StaticText",
+    "name": "Share the approved project with participants, track their response, and resolve requested corrections before publication.",
+    "properties": [],
+    "childIds": [
+      "-1000003714",
+      "-1000003715"
+    ]
+  },
+  {
+    "nodeId": "3802",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3803"
+    ]
+  },
+  {
+    "nodeId": "3803",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3804"
+    ]
+  },
+  {
+    "nodeId": "3804",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3805",
+      "3808"
+    ]
+  },
+  {
+    "nodeId": "3805",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3806"
+    ]
+  },
+  {
+    "nodeId": "3806",
+    "role": "button",
+    "name": "Generate participant preview",
+    "properties": [
+      {
+        "name": "invalid",
+        "value": "false"
+      },
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3807"
+    ]
+  },
+  {
+    "nodeId": "3808",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3810"
+    ]
+  },
+  {
+    "nodeId": "3812",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3813"
+    ]
+  },
+  {
+    "nodeId": "3813",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3819"
+    ]
+  },
+  {
+    "nodeId": "3819",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3820",
+      "3822"
+    ]
+  },
+  {
+    "nodeId": "3820",
+    "role": "heading",
+    "name": "Showcase publishing",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "3821"
+    ]
+  },
+  {
+    "nodeId": "3822",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3823"
+    ]
+  },
+  {
+    "nodeId": "3823",
+    "role": "StaticText",
+    "name": "Review publication readiness, publish the project to the test showcase, or manage showcase removal.",
+    "properties": [],
+    "childIds": [
+      "-1000003719",
+      "-1000003720"
+    ]
+  },
+  {
+    "nodeId": "3824",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3825"
+    ]
+  },
+  {
+    "nodeId": "3825",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3826"
+    ]
+  },
+  {
+    "nodeId": "3826",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3827",
+      "3839",
+      "3867",
+      "3873"
+    ]
+  },
+  {
+    "nodeId": "3827",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3828",
+      "3830"
+    ]
+  },
+  {
+    "nodeId": "3828",
+    "role": "heading",
+    "name": "Publication readiness",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3829"
+    ]
+  },
+  {
+    "nodeId": "3830",
+    "role": "status",
+    "name": "",
+    "properties": [
+      {
+        "name": "live",
+        "value": "polite"
+      },
+      {
+        "name": "atomic",
+        "value": true
+      },
+      {
+        "name": "relevant",
+        "value": "additions text"
+      }
+    ],
+    "childIds": [
+      "3834"
+    ]
+  },
+  {
+    "nodeId": "3839",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3840",
+      "3842"
+    ]
+  },
+  {
+    "nodeId": "3840",
+    "role": "heading",
+    "name": "PUBLICATION REQUIREMENTS",
+    "properties": [
+      {
+        "name": "level",
+        "value": 5
+      }
+    ],
+    "childIds": [
+      "3841"
+    ]
+  },
+  {
+    "nodeId": "3842",
+    "role": "list",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3843",
+      "3851",
+      "3859"
+    ]
+  },
+  {
+    "nodeId": "3867",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3868",
+      "3870"
+    ]
+  },
+  {
+    "nodeId": "3868",
+    "role": "heading",
+    "name": "What is blocking publication",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3869"
+    ]
+  },
+  {
+    "nodeId": "3870",
+    "role": "list",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3871"
+    ]
+  },
+  {
+    "nodeId": "3873",
+    "role": "group",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3875",
+      "3878"
+    ]
+  },
+  {
+    "nodeId": "3891",
+    "role": "StaticText",
+    "name": "Technical details and history",
+    "properties": [],
+    "childIds": [
+      "-1000003822"
+    ]
+  },
+  {
+    "nodeId": "3893",
+    "role": "StaticText",
+    "name": "Review secondary configuration, record evidence, and the ordered administrative history without letting it dominate routine decisions.",
+    "properties": [],
+    "childIds": [
+      "-1000003735",
+      "-1000003736"
+    ]
+  },
+  {
+    "nodeId": "3897",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3903"
+    ]
+  },
+  {
+    "nodeId": "3903",
+    "role": "DisclosureTriangle",
+    "name": "Technical configuration and record details Showcase template configuration, cached validation counts, and record timestamps. Advanced",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      },
+      {
+        "name": "expanded",
+        "value": false
+      }
+    ],
+    "childIds": [
+      "3904",
+      "3920"
+    ]
+  },
+  {
+    "nodeId": "3900",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3976",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3977"
+    ]
+  },
+  {
+    "nodeId": "3977",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3982"
+    ]
+  },
+  {
+    "nodeId": "3982",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3983",
+      "3985"
+    ]
+  },
+  {
+    "nodeId": "3983",
+    "role": "heading",
+    "name": "Change history",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "3984"
+    ]
+  },
+  {
+    "nodeId": "3985",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3986"
+    ]
+  },
+  {
+    "nodeId": "3986",
+    "role": "StaticText",
+    "name": "Recorded administrative transitions, project information updates, and review notes.",
+    "properties": [],
+    "childIds": [
+      "-1000003741"
+    ]
+  },
+  {
+    "nodeId": "3987",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3988"
+    ]
+  },
+  {
+    "nodeId": "3988",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3989"
+    ]
+  },
+  {
+    "nodeId": "3993",
+    "role": "StaticText",
+    "name": "Project record",
+    "properties": [],
+    "childIds": [
+      "-1000003824"
+    ]
+  },
+  {
+    "nodeId": "3995",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3996",
+      "3998"
+    ]
+  },
+  {
+    "nodeId": "3996",
+    "role": "term",
+    "name": "STUDY PROGRAM CODE",
+    "properties": [],
+    "childIds": [
+      "3997"
+    ]
+  },
+  {
+    "nodeId": "3998",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3999"
+    ]
+  },
+  {
+    "nodeId": "4000",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4001",
+      "4003"
+    ]
+  },
+  {
+    "nodeId": "4001",
+    "role": "term",
+    "name": "SHOWCASE DISCIPLINES",
+    "properties": [],
+    "childIds": [
+      "4002"
+    ]
+  },
+  {
+    "nodeId": "4003",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4004"
+    ]
+  },
+  {
+    "nodeId": "4005",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4006",
+      "4008"
+    ]
+  },
+  {
+    "nodeId": "4006",
+    "role": "term",
+    "name": "INDUSTRY PARTNER",
+    "properties": [],
+    "childIds": [
+      "4007"
+    ]
+  },
+  {
+    "nodeId": "4008",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4009"
+    ]
+  },
+  {
+    "nodeId": "4010",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4011",
+      "4013"
+    ]
+  },
+  {
+    "nodeId": "4011",
+    "role": "term",
+    "name": "GROUP NAME",
+    "properties": [],
+    "childIds": [
+      "4012"
+    ]
+  },
+  {
+    "nodeId": "4013",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4014"
+    ]
+  },
+  {
+    "nodeId": "4015",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4016",
+      "4018"
+    ]
+  },
+  {
+    "nodeId": "4016",
+    "role": "term",
+    "name": "TEAM ROSTER",
+    "properties": [],
+    "childIds": [
+      "4017"
+    ]
+  },
+  {
+    "nodeId": "4018",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4019"
+    ]
+  },
+  {
+    "nodeId": "4024",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4025",
+      "4027"
+    ]
+  },
+  {
+    "nodeId": "4025",
+    "role": "term",
+    "name": "ACADEMIC SUPERVISOR",
+    "properties": [],
+    "childIds": [
+      "4026"
+    ]
+  },
+  {
+    "nodeId": "4027",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4028"
+    ]
+  },
+  {
+    "nodeId": "4029",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4030",
+      "4032"
+    ]
+  },
+  {
+    "nodeId": "4030",
+    "role": "term",
+    "name": "SHOWCASE PUBLISHING ELIGIBILITY",
+    "properties": [],
+    "childIds": [
+      "4031"
+    ]
+  },
+  {
+    "nodeId": "4032",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4033"
+    ]
+  },
+  {
+    "nodeId": "4041",
+    "role": "StaticText",
+    "name": "Import origin",
+    "properties": [],
+    "childIds": [
+      "-1000003759"
+    ]
+  },
+  {
+    "nodeId": "4043",
+    "role": "StaticText",
+    "name": "group2-aeromed-drone",
+    "properties": [],
+    "childIds": [
+      "-1000003840"
+    ]
+  },
+  {
+    "nodeId": "4045",
+    "role": "StaticText",
+    "name": "View import batch",
+    "properties": [],
+    "childIds": [
+      "-1000003761"
+    ]
+  },
+  {
+    "nodeId": "4052",
+    "role": "strong",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4053"
+    ]
+  },
+  {
+    "nodeId": "4054",
+    "role": "StaticText",
+    "name": " Changes here affect test data and test publishing only. The live public showcase is not changed.",
+    "properties": [],
+    "childIds": [
+      "-1000003763"
+    ]
+  },
+  {
+    "nodeId": "4215",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4216"
+    ]
+  },
+  {
+    "nodeId": "4216",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4218"
+    ]
+  },
+  {
+    "nodeId": "4218",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4219"
+    ]
+  },
+  {
+    "nodeId": "4128",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3330"
+    ]
+  },
+  {
+    "nodeId": "3330",
+    "role": "StaticText",
+    "name": "Projects",
+    "properties": [],
+    "childIds": [
+      "-1000003576"
+    ]
+  },
+  {
+    "nodeId": "4137",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3331"
+    ]
+  },
+  {
+    "nodeId": "3331",
+    "role": "StaticText",
+    "name": "Imports",
+    "properties": [],
+    "childIds": [
+      "-1000003577"
+    ]
+  },
+  {
+    "nodeId": "4143",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3332"
+    ]
+  },
+  {
+    "nodeId": "3332",
+    "role": "StaticText",
+    "name": "Publishing",
+    "properties": [],
+    "childIds": [
+      "-1000003578"
+    ]
+  },
+  {
+    "nodeId": "4150",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3333"
+    ]
+  },
+  {
+    "nodeId": "3333",
+    "role": "StaticText",
+    "name": "Staff access",
+    "properties": [],
+    "childIds": [
+      "-1000003579"
+    ]
+  },
+  {
+    "nodeId": "4163",
+    "role": "link",
+    "name": "Projects",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3334"
+    ]
+  },
+  {
+    "nodeId": "4167",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3335"
+    ]
+  },
+  {
+    "nodeId": "-1000003588",
+    "role": "InlineTextBox",
+    "name": "Back to projects",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003589",
+    "role": "InlineTextBox",
+    "name": "Smart Medical Drone Delivery",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3359",
+    "role": "StaticText",
+    "name": "Project ID",
+    "properties": [],
+    "childIds": [
+      "-1000003590"
+    ]
+  },
+  {
+    "nodeId": "3361",
+    "role": "StaticText",
+    "name": "2026-medical-drone",
+    "properties": [],
+    "childIds": [
+      "-1000003591"
+    ]
+  },
+  {
+    "nodeId": "3364",
+    "role": "StaticText",
+    "name": "Year",
+    "properties": [],
+    "childIds": [
+      "-1000003592"
+    ]
+  },
+  {
+    "nodeId": "3366",
+    "role": "StaticText",
+    "name": "2026",
+    "properties": [],
+    "childIds": [
+      "-1000003593"
+    ]
+  },
+  {
+    "nodeId": "3369",
+    "role": "StaticText",
+    "name": "Program",
+    "properties": [],
+    "childIds": [
+      "-1000003594"
+    ]
+  },
+  {
+    "nodeId": "3371",
+    "role": "StaticText",
+    "name": "Bachelor of Engineering",
+    "properties": [],
+    "childIds": [
+      "-1000003595"
+    ]
+  },
+  {
+    "nodeId": "3374",
+    "role": "StaticText",
+    "name": "Discipline",
+    "properties": [],
+    "childIds": [
+      "-1000003596"
+    ]
+  },
+  {
+    "nodeId": "3376",
+    "role": "StaticText",
+    "name": "Mechanical Engineering",
+    "properties": [],
+    "childIds": [
+      "-1000003597"
+    ]
+  },
+  {
+    "nodeId": "-1000003598",
+    "role": "InlineTextBox",
+    "name": "Approved",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003766",
+    "role": "InlineTextBox",
+    "name": "On this page",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3386",
+    "role": "link",
+    "name": "Review and edit",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3387"
+    ]
+  },
+  {
+    "nodeId": "3389",
+    "role": "link",
+    "name": "Content and media",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3390"
+    ]
+  },
+  {
+    "nodeId": "3392",
+    "role": "link",
+    "name": "Participant and publication",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3393"
+    ]
+  },
+  {
+    "nodeId": "3395",
+    "role": "link",
+    "name": "Technical details and history",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3396"
+    ]
+  },
+  {
+    "nodeId": "-1000003767",
+    "role": "InlineTextBox",
+    "name": "Review and edit",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003605",
+    "role": "InlineTextBox",
+    "name": "Understand the current workflow decision, resolve blockers, take the permitted action, and ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003606",
+    "role": "InlineTextBox",
+    "name": "update project information.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3411",
+    "role": "StaticText",
+    "name": "Review status: Approved",
+    "properties": [],
+    "childIds": [
+      "-1000003607"
+    ]
+  },
+  {
+    "nodeId": "-1000003608",
+    "role": "InlineTextBox",
+    "name": "Internal review is complete. The project is approved but is not published.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3418",
+    "role": "StaticText",
+    "name": "Create and share a participant preview so the participant can confirm their project before publication.",
+    "properties": [],
+    "childIds": [
+      "-1000003609",
+      "-1000003610"
+    ]
+  },
+  {
+    "nodeId": "3420",
+    "role": "StaticText",
+    "name": "Go to project information",
+    "properties": [],
+    "childIds": [
+      "-1000003611"
+    ]
+  },
+  {
+    "nodeId": "3425",
+    "role": "StaticText",
+    "name": "Compliance and validation",
+    "properties": [],
+    "childIds": [
+      "-1000003768"
+    ]
+  },
+  {
+    "nodeId": "-1000003613",
+    "role": "InlineTextBox",
+    "name": "Validation passed",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003614",
+    "role": "InlineTextBox",
+    "name": "This project has no blocking validation issues.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003615",
+    "role": "InlineTextBox",
+    "name": "Blocking issues (",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003616",
+    "role": "InlineTextBox",
+    "name": "0",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003617",
+    "role": "InlineTextBox",
+    "name": ")",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3448",
+    "role": "StaticText",
+    "name": "No blocking errors found.",
+    "properties": [],
+    "childIds": [
+      "-1000003769"
+    ]
+  },
+  {
+    "nodeId": "-1000003619",
+    "role": "InlineTextBox",
+    "name": "Quality warnings (",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003620",
+    "role": "InlineTextBox",
+    "name": "0",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003621",
+    "role": "InlineTextBox",
+    "name": ")",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3462",
+    "role": "StaticText",
+    "name": "No compliance warnings.",
+    "properties": [],
+    "childIds": [
+      "-1000003770"
+    ]
+  },
+  {
+    "nodeId": "3465",
+    "role": "StaticText",
+    "name": "Available actions",
+    "properties": [],
+    "childIds": [
+      "-1000003771"
+    ]
+  },
+  {
+    "nodeId": "3469",
+    "role": "StaticText",
+    "name": "Review comments",
+    "properties": [],
+    "childIds": [
+      "-1000003772"
+    ]
+  },
+  {
+    "nodeId": "3472",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3474",
+    "role": "generic",
+    "name": "",
+    "properties": [
+      {
+        "name": "editable",
+        "value": "plaintext"
+      }
+    ],
+    "childIds": []
+  },
+  {
+    "nodeId": "3478",
+    "role": "StaticText",
+    "name": "Request changes",
+    "properties": [],
+    "childIds": [
+      "-1000003625"
+    ]
+  },
+  {
+    "nodeId": "3480",
+    "role": "StaticText",
+    "name": "Archive project",
+    "properties": [],
+    "childIds": [
+      "-1000003626"
+    ]
+  },
+  {
+    "nodeId": "3482",
+    "role": "strong",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3483"
+    ]
+  },
+  {
+    "nodeId": "3484",
+    "role": "StaticText",
+    "name": " review actions update the project lifecycle status in the test environment. Published projects use the controlled local archive workflow. Hosted public feeds and external integrations remain disconnected.",
+    "properties": [],
+    "childIds": [
+      "-1000003774",
+      "-1000003775",
+      "-1000003776",
+      "-1000003777",
+      "-1000003778",
+      "-1000003779"
+    ]
+  },
+  {
+    "nodeId": "3495",
+    "role": "StaticText",
+    "name": "Assistive checks",
+    "properties": [],
+    "childIds": [
+      "-1000003633"
+    ]
+  },
+  {
+    "nodeId": "3497",
+    "role": "StaticText",
+    "name": "Non-blocking comparison between project metadata and document evidence to assist editorial review.",
+    "properties": [],
+    "childIds": [
+      "-1000003634",
+      "-1000003635"
+    ]
+  },
+  {
+    "nodeId": "3502",
+    "role": "StaticText",
+    "name": "Run checks",
+    "properties": [],
+    "childIds": [
+      "-1000003636"
+    ]
+  },
+  {
+    "nodeId": "3512",
+    "role": "StaticText",
+    "name": "No assistive checks run yet",
+    "properties": [],
+    "childIds": [
+      "-1000003637"
+    ]
+  },
+  {
+    "nodeId": "3514",
+    "role": "StaticText",
+    "name": "Run assistive checks to verify project title consistency and document formatting against uploaded poster evidence.",
+    "properties": [],
+    "childIds": [
+      "-1000003638",
+      "-1000003639"
+    ]
+  },
+  {
+    "nodeId": "3516",
+    "role": "button",
+    "name": "Run checks now",
+    "properties": [
+      {
+        "name": "invalid",
+        "value": "false"
+      },
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "3519"
+    ]
+  },
+  {
+    "nodeId": "3522",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3523",
+      "3528"
+    ]
+  },
+  {
+    "nodeId": "3523",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3524",
+      "3526"
+    ]
+  },
+  {
+    "nodeId": "3524",
+    "role": "heading",
+    "name": "Project information",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "3525"
+    ]
+  },
+  {
+    "nodeId": "3526",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3527"
+    ]
+  },
+  {
+    "nodeId": "3528",
+    "role": "status",
+    "name": "",
+    "properties": [
+      {
+        "name": "live",
+        "value": "polite"
+      },
+      {
+        "name": "atomic",
+        "value": true
+      },
+      {
+        "name": "relevant",
+        "value": "additions text"
+      }
+    ],
+    "childIds": [
+      "3529"
+    ]
+  },
+  {
+    "nodeId": "-1000003780",
+    "role": "InlineTextBox",
+    "name": "Content and media",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003647",
+    "role": "InlineTextBox",
+    "name": "Inspect the public-facing narrative, supporting links, poster and document assets, and their ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003648",
+    "role": "InlineTextBox",
+    "name": "accessibility evidence.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3547",
+    "role": "StaticText",
+    "name": "Public showcase content",
+    "properties": [],
+    "childIds": [
+      "-1000003649"
+    ]
+  },
+  {
+    "nodeId": "-1000003650",
+    "role": "InlineTextBox",
+    "name": "The written content that appears on the public project card and detail view.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3554",
+    "role": "StaticText",
+    "name": "Short summary",
+    "properties": [],
+    "childIds": [
+      "-1000003781"
+    ]
+  },
+  {
+    "nodeId": "3557",
+    "role": "StaticText",
+    "name": "Automating high-speed delivery of critical medical parcels in rural regions.",
+    "properties": [],
+    "childIds": [
+      "-1000003652"
+    ]
+  },
+  {
+    "nodeId": "3560",
+    "role": "StaticText",
+    "name": "Problem background",
+    "properties": [],
+    "childIds": [
+      "-1000003782"
+    ]
+  },
+  {
+    "nodeId": "3563",
+    "role": "StaticText",
+    "name": "Medical centers in mountainous areas experience prolonged wait times for vital cargo.",
+    "properties": [],
+    "childIds": [
+      "-1000003654"
+    ]
+  },
+  {
+    "nodeId": "3566",
+    "role": "StaticText",
+    "name": "Developed solution",
+    "properties": [],
+    "childIds": [
+      "-1000003783"
+    ]
+  },
+  {
+    "nodeId": "3569",
+    "role": "StaticText",
+    "name": "Designed an autonomous medical payload carrier utilizing static flight vectors.",
+    "properties": [],
+    "childIds": [
+      "-1000003656"
+    ]
+  },
+  {
+    "nodeId": "3572",
+    "role": "StaticText",
+    "name": "Accessibility description",
+    "properties": [],
+    "childIds": [
+      "-1000003784"
+    ]
+  },
+  {
+    "nodeId": "3575",
+    "role": "StaticText",
+    "name": "Infographic depicting drone models with insulated internal temperature chambers.",
+    "properties": [],
+    "childIds": [
+      "-1000003658"
+    ]
+  },
+  {
+    "nodeId": "3577",
+    "role": "StaticText",
+    "name": "Screen-reader description of the poster image, read from accessibility.txt.",
+    "properties": [],
+    "childIds": [
+      "-1000003659"
+    ]
+  },
+  {
+    "nodeId": "3581",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3587"
+    ]
+  },
+  {
+    "nodeId": "3587",
+    "role": "DisclosureTriangle",
+    "name": "Poster full text (46 characters)",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      },
+      {
+        "name": "focused",
+        "value": true
+      },
+      {
+        "name": "expanded",
+        "value": false
+      }
+    ],
+    "childIds": [
+      "3592",
+      "3594"
+    ]
+  },
+  {
+    "nodeId": "3584",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3601",
+    "role": "StaticText",
+    "name": "External citations",
+    "properties": [],
+    "childIds": [
+      "-1000003785"
+    ]
+  },
+  {
+    "nodeId": "3603",
+    "role": "StaticText",
+    "name": "None",
+    "properties": [],
+    "childIds": [
+      "-1000003786"
+    ]
+  },
+  {
+    "nodeId": "3606",
+    "role": "StaticText",
+    "name": "External web links",
+    "properties": [],
+    "childIds": [
+      "-1000003787"
+    ]
+  },
+  {
+    "nodeId": "3608",
+    "role": "StaticText",
+    "name": "None",
+    "properties": [],
+    "childIds": [
+      "-1000003788"
+    ]
+  },
+  {
+    "nodeId": "3618",
+    "role": "StaticText",
+    "name": "Media and accessibility",
+    "properties": [],
+    "childIds": [
+      "-1000003666"
+    ]
+  },
+  {
+    "nodeId": "-1000003667",
+    "role": "InlineTextBox",
+    "name": "Uploaded poster, document, and snapshot files, their text alternatives, and external ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003668",
+    "role": "InlineTextBox",
+    "name": "showcase links.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3627",
+    "role": "StaticText",
+    "name": "POSTER IMAGE",
+    "properties": [],
+    "childIds": [
+      "-1000003789"
+    ]
+  },
+  {
+    "nodeId": "3635",
+    "role": "StaticText",
+    "name": "TEXT ALTERNATIVE",
+    "properties": [],
+    "childIds": [
+      "-1000003790"
+    ]
+  },
+  {
+    "nodeId": "3637",
+    "role": "StaticText",
+    "name": "Infographic depicting drone models with insulated internal temperature chambers.",
+    "properties": [],
+    "childIds": [
+      "-1000003791",
+      "-1000003792",
+      "-1000003793"
+    ]
+  },
+  {
+    "nodeId": "3639",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3640",
+      "3642"
+    ]
+  },
+  {
+    "nodeId": "3640",
+    "role": "term",
+    "name": "File name:",
+    "properties": [],
+    "childIds": [
+      "3641"
+    ]
+  },
+  {
+    "nodeId": "3642",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3643"
+    ]
+  },
+  {
+    "nodeId": "3644",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3645",
+      "3647"
+    ]
+  },
+  {
+    "nodeId": "3645",
+    "role": "term",
+    "name": "MIME type:",
+    "properties": [],
+    "childIds": [
+      "3646"
+    ]
+  },
+  {
+    "nodeId": "3647",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3648"
+    ]
+  },
+  {
+    "nodeId": "3649",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3650",
+      "3652"
+    ]
+  },
+  {
+    "nodeId": "3650",
+    "role": "term",
+    "name": "File size:",
+    "properties": [],
+    "childIds": [
+      "3651"
+    ]
+  },
+  {
+    "nodeId": "3652",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3653"
+    ]
+  },
+  {
+    "nodeId": "3655",
+    "role": "heading",
+    "name": "ACCESSIBILITY REVIEW — POSTER IMAGE: poster.png",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3656",
+      "3658",
+      "3660",
+      "3662"
+    ]
+  },
+  {
+    "nodeId": "3663",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3664",
+      "3671"
+    ]
+  },
+  {
+    "nodeId": "3664",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3665"
+    ]
+  },
+  {
+    "nodeId": "3665",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3669"
+    ]
+  },
+  {
+    "nodeId": "3669",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3670"
+    ]
+  },
+  {
+    "nodeId": "3670",
+    "role": "StaticText",
+    "name": "Text alternative available",
+    "properties": [],
+    "childIds": [
+      "-1000003684"
+    ]
+  },
+  {
+    "nodeId": "3671",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3672",
+      "3678"
+    ]
+  },
+  {
+    "nodeId": "3672",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3676"
+    ]
+  },
+  {
+    "nodeId": "3676",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3677"
+    ]
+  },
+  {
+    "nodeId": "3677",
+    "role": "StaticText",
+    "name": "Full text available",
+    "properties": [],
+    "childIds": [
+      "-1000003685"
+    ]
+  },
+  {
+    "nodeId": "3678",
+    "role": "group",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3680",
+      "3683"
+    ]
+  },
+  {
+    "nodeId": "3694",
+    "role": "StaticText",
+    "name": "POSTER PDF",
+    "properties": [],
+    "childIds": [
+      "-1000003687"
+    ]
+  },
+  {
+    "nodeId": "3696",
+    "role": "StaticText",
+    "name": "Open PDF in a new tab",
+    "properties": [],
+    "childIds": [
+      "-1000003688"
+    ]
+  },
+  {
+    "nodeId": "-1000003800",
+    "role": "InlineTextBox",
+    "name": "For keyboard access or if the inline preview is unavailable, open ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003801",
+    "role": "InlineTextBox",
+    "name": "the PDF in a new tab.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3706",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3707",
+      "3709"
+    ]
+  },
+  {
+    "nodeId": "3707",
+    "role": "term",
+    "name": "File name:",
+    "properties": [],
+    "childIds": [
+      "3708"
+    ]
+  },
+  {
+    "nodeId": "3709",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3710"
+    ]
+  },
+  {
+    "nodeId": "3711",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3712",
+      "3714"
+    ]
+  },
+  {
+    "nodeId": "3712",
+    "role": "term",
+    "name": "MIME type:",
+    "properties": [],
+    "childIds": [
+      "3713"
+    ]
+  },
+  {
+    "nodeId": "3714",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3715"
+    ]
+  },
+  {
+    "nodeId": "3716",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3717",
+      "3719"
+    ]
+  },
+  {
+    "nodeId": "3717",
+    "role": "term",
+    "name": "File size:",
+    "properties": [],
+    "childIds": [
+      "3718"
+    ]
+  },
+  {
+    "nodeId": "3719",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3720"
+    ]
+  },
+  {
+    "nodeId": "3722",
+    "role": "heading",
+    "name": "ACCESSIBILITY REVIEW — POSTER PDF: poster.pdf",
+    "properties": [
+      {
+        "name": "level",
+        "value": 4
+      }
+    ],
+    "childIds": [
+      "3723",
+      "3725",
+      "3727",
+      "3729"
+    ]
+  },
+  {
+    "nodeId": "3730",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3731"
+    ]
+  },
+  {
+    "nodeId": "3731",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3732",
+      "3738"
+    ]
+  },
+  {
+    "nodeId": "3732",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3736"
+    ]
+  },
+  {
+    "nodeId": "3736",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3737"
+    ]
+  },
+  {
+    "nodeId": "3737",
+    "role": "StaticText",
+    "name": "Full text available",
+    "properties": [],
+    "childIds": [
+      "-1000003701"
+    ]
+  },
+  {
+    "nodeId": "3738",
+    "role": "group",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3740",
+      "3743"
+    ]
+  },
+  {
+    "nodeId": "3752",
+    "role": "StaticText",
+    "name": "External showcase links",
+    "properties": [],
+    "childIds": [
+      "-1000003808"
+    ]
+  },
+  {
+    "nodeId": "3754",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3755",
+      "3760"
+    ]
+  },
+  {
+    "nodeId": "3755",
+    "role": "term",
+    "name": "VIDEO SHOWCASE",
+    "properties": [],
+    "childIds": [
+      "3759"
+    ]
+  },
+  {
+    "nodeId": "3760",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3762"
+    ]
+  },
+  {
+    "nodeId": "3763",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3764",
+      "3770"
+    ]
+  },
+  {
+    "nodeId": "3764",
+    "role": "term",
+    "name": "INTERACTIVE DEMO",
+    "properties": [],
+    "childIds": [
+      "3769"
+    ]
+  },
+  {
+    "nodeId": "3770",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3772"
+    ]
+  },
+  {
+    "nodeId": "3773",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3774",
+      "3780"
+    ]
+  },
+  {
+    "nodeId": "3774",
+    "role": "term",
+    "name": "GIT REPOSITORY",
+    "properties": [],
+    "childIds": [
+      "3779"
+    ]
+  },
+  {
+    "nodeId": "3780",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3782"
+    ]
+  },
+  {
+    "nodeId": "-1000003812",
+    "role": "InlineTextBox",
+    "name": "Participant and publication",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003711",
+    "role": "InlineTextBox",
+    "name": "Follow the later confirmation and publication stages while each panel reports its own ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003712",
+    "role": "InlineTextBox",
+    "name": "authoritative availability and readiness.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3799",
+    "role": "StaticText",
+    "name": "Participant confirmation",
+    "properties": [],
+    "childIds": [
+      "-1000003713"
+    ]
+  },
+  {
+    "nodeId": "-1000003714",
+    "role": "InlineTextBox",
+    "name": "Share the approved project with participants, track their response, and resolve ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003715",
+    "role": "InlineTextBox",
+    "name": "requested corrections before publication.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3807",
+    "role": "StaticText",
+    "name": "Generate participant preview",
+    "properties": [],
+    "childIds": [
+      "-1000003716"
+    ]
+  },
+  {
+    "nodeId": "3810",
+    "role": "StaticText",
+    "name": "Email delivery is not enabled in this environment.",
+    "properties": [],
+    "childIds": [
+      "-1000003813"
+    ]
+  },
+  {
+    "nodeId": "3821",
+    "role": "StaticText",
+    "name": "Showcase publishing",
+    "properties": [],
+    "childIds": [
+      "-1000003718"
+    ]
+  },
+  {
+    "nodeId": "-1000003719",
+    "role": "InlineTextBox",
+    "name": "Review publication readiness, publish the project to the test showcase, or manage ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003720",
+    "role": "InlineTextBox",
+    "name": "showcase removal.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3829",
+    "role": "StaticText",
+    "name": "Publication readiness",
+    "properties": [],
+    "childIds": [
+      "-1000003814"
+    ]
+  },
+  {
+    "nodeId": "3834",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3835",
+      "3837"
+    ]
+  },
+  {
+    "nodeId": "3835",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3836"
+    ]
+  },
+  {
+    "nodeId": "3837",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "3838"
+    ]
+  },
+  {
+    "nodeId": "3841",
+    "role": "StaticText",
+    "name": "PUBLICATION REQUIREMENTS",
+    "properties": [],
+    "childIds": [
+      "-1000003817"
+    ]
+  },
+  {
+    "nodeId": "3843",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "3844",
+      "3849"
+    ]
+  },
+  {
+    "nodeId": "3851",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "3852",
+      "3857"
+    ]
+  },
+  {
+    "nodeId": "3859",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "3860",
+      "3865"
+    ]
+  },
+  {
+    "nodeId": "3869",
+    "role": "StaticText",
+    "name": "What is blocking publication",
+    "properties": [],
+    "childIds": [
+      "-1000003818"
+    ]
+  },
+  {
+    "nodeId": "3871",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "4067",
+      "3872"
+    ]
+  },
+  {
+    "nodeId": "3875",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3881"
+    ]
+  },
+  {
+    "nodeId": "3881",
+    "role": "DisclosureTriangle",
+    "name": "Technical details",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      },
+      {
+        "name": "expanded",
+        "value": false
+      }
+    ],
+    "childIds": [
+      "4068",
+      "3882"
+    ]
+  },
+  {
+    "nodeId": "3878",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003822",
+    "role": "InlineTextBox",
+    "name": "Technical details and history",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003735",
+    "role": "InlineTextBox",
+    "name": "Review secondary configuration, record evidence, and the ordered administrative history ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003736",
+    "role": "InlineTextBox",
+    "name": "without letting it dominate routine decisions.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3904",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3915"
+    ]
+  },
+  {
+    "nodeId": "3915",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3916",
+      "3918"
+    ]
+  },
+  {
+    "nodeId": "3916",
+    "role": "heading",
+    "name": "Technical configuration and record details",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "3917"
+    ]
+  },
+  {
+    "nodeId": "3918",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3919"
+    ]
+  },
+  {
+    "nodeId": "3919",
+    "role": "StaticText",
+    "name": "Showcase template configuration, cached validation counts, and record timestamps.",
+    "properties": [],
+    "childIds": [
+      "-1000003738"
+    ]
+  },
+  {
+    "nodeId": "3920",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3921"
+    ]
+  },
+  {
+    "nodeId": "3921",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3922"
+    ]
+  },
+  {
+    "nodeId": "3922",
+    "role": "StaticText",
+    "name": "Advanced",
+    "properties": [],
+    "childIds": [
+      "-1000003739"
+    ]
+  },
+  {
+    "nodeId": "3984",
+    "role": "StaticText",
+    "name": "Change history",
+    "properties": [],
+    "childIds": [
+      "-1000003740"
+    ]
+  },
+  {
+    "nodeId": "-1000003741",
+    "role": "InlineTextBox",
+    "name": "Recorded administrative transitions, project information updates, and review notes.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3989",
+    "role": "StaticText",
+    "name": "No recorded changes for this project yet.",
+    "properties": [],
+    "childIds": [
+      "-1000003823"
+    ]
+  },
+  {
+    "nodeId": "-1000003824",
+    "role": "InlineTextBox",
+    "name": "Project record",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3997",
+    "role": "StaticText",
+    "name": "STUDY PROGRAM CODE",
+    "properties": [],
+    "childIds": [
+      "-1000003825"
+    ]
+  },
+  {
+    "nodeId": "3999",
+    "role": "StaticText",
+    "name": "Bachelor of Engineering",
+    "properties": [],
+    "childIds": [
+      "-1000003826"
+    ]
+  },
+  {
+    "nodeId": "4002",
+    "role": "StaticText",
+    "name": "SHOWCASE DISCIPLINES",
+    "properties": [],
+    "childIds": [
+      "-1000003827"
+    ]
+  },
+  {
+    "nodeId": "4004",
+    "role": "StaticText",
+    "name": "Mechanical Engineering",
+    "properties": [],
+    "childIds": [
+      "-1000003828"
+    ]
+  },
+  {
+    "nodeId": "4007",
+    "role": "StaticText",
+    "name": "INDUSTRY PARTNER",
+    "properties": [],
+    "childIds": [
+      "-1000003829"
+    ]
+  },
+  {
+    "nodeId": "4009",
+    "role": "StaticText",
+    "name": "Mountain Med-Kit Corp (Synthetic) (Healthcare)",
+    "properties": [],
+    "childIds": [
+      "-1000003830"
+    ]
+  },
+  {
+    "nodeId": "4012",
+    "role": "StaticText",
+    "name": "GROUP NAME",
+    "properties": [],
+    "childIds": [
+      "-1000003831"
+    ]
+  },
+  {
+    "nodeId": "4014",
+    "role": "StaticText",
+    "name": "AeroMed Delivery (Synthetic)",
+    "properties": [],
+    "childIds": [
+      "-1000003832"
+    ]
+  },
+  {
+    "nodeId": "4017",
+    "role": "StaticText",
+    "name": "TEAM ROSTER",
+    "properties": [],
+    "childIds": [
+      "-1000003833"
+    ]
+  },
+  {
+    "nodeId": "4019",
+    "role": "list",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4020",
+      "4022"
+    ]
+  },
+  {
+    "nodeId": "4026",
+    "role": "StaticText",
+    "name": "ACADEMIC SUPERVISOR",
+    "properties": [],
+    "childIds": [
+      "-1000003836"
+    ]
+  },
+  {
+    "nodeId": "4028",
+    "role": "StaticText",
+    "name": "Dr. Academic Supervisor B (Synthetic)",
+    "properties": [],
+    "childIds": [
+      "-1000003837"
+    ]
+  },
+  {
+    "nodeId": "4031",
+    "role": "StaticText",
+    "name": "SHOWCASE PUBLISHING ELIGIBILITY",
+    "properties": [],
+    "childIds": [
+      "-1000003838"
+    ]
+  },
+  {
+    "nodeId": "4033",
+    "role": "StaticText",
+    "name": "Eligible by status",
+    "properties": [],
+    "childIds": [
+      "-1000003839"
+    ]
+  },
+  {
+    "nodeId": "-1000003759",
+    "role": "InlineTextBox",
+    "name": "Import origin",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003840",
+    "role": "InlineTextBox",
+    "name": "group2-aeromed-drone",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003761",
+    "role": "InlineTextBox",
+    "name": "View import batch",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4053",
+    "role": "StaticText",
+    "name": "Test environment.",
+    "properties": [],
+    "childIds": [
+      "-1000003762"
+    ]
+  },
+  {
+    "nodeId": "-1000003763",
+    "role": "InlineTextBox",
+    "name": " Changes here affect test data and test publishing only. The live public showcase is not changed.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4219",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "4220"
+    ]
+  },
+  {
+    "nodeId": "4220",
+    "role": "button",
+    "name": "Open Next.js Dev Tools",
+    "properties": [
+      {
+        "name": "invalid",
+        "value": "false"
+      },
+      {
+        "name": "focusable",
+        "value": true
+      },
+      {
+        "name": "hasPopup",
+        "value": "menu"
+      },
+      {
+        "name": "expanded",
+        "value": false
+      }
+    ],
+    "childIds": [
+      "4221"
+    ]
+  },
+  {
+    "nodeId": "-1000003576",
+    "role": "InlineTextBox",
+    "name": "Projects",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003577",
+    "role": "InlineTextBox",
+    "name": "Imports",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003578",
+    "role": "InlineTextBox",
+    "name": "Publishing",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003579",
+    "role": "InlineTextBox",
+    "name": "Staff access",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3334",
+    "role": "StaticText",
+    "name": "Projects",
+    "properties": [],
+    "childIds": [
+      "-1000003580"
+    ]
+  },
+  {
+    "nodeId": "3335",
+    "role": "StaticText",
+    "name": "Project details",
+    "properties": [],
+    "childIds": [
+      "-1000003581"
+    ]
+  },
+  {
+    "nodeId": "-1000003590",
+    "role": "InlineTextBox",
+    "name": "Project ID",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003591",
+    "role": "InlineTextBox",
+    "name": "2026-medical-drone",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003592",
+    "role": "InlineTextBox",
+    "name": "Year",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003593",
+    "role": "InlineTextBox",
+    "name": "2026",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003594",
+    "role": "InlineTextBox",
+    "name": "Program",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003595",
+    "role": "InlineTextBox",
+    "name": "Bachelor of Engineering",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003596",
+    "role": "InlineTextBox",
+    "name": "Discipline",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003597",
+    "role": "InlineTextBox",
+    "name": "Mechanical Engineering",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3387",
+    "role": "StaticText",
+    "name": "Review and edit",
+    "properties": [],
+    "childIds": [
+      "-1000003600"
+    ]
+  },
+  {
+    "nodeId": "3390",
+    "role": "StaticText",
+    "name": "Content and media",
+    "properties": [],
+    "childIds": [
+      "-1000003601"
+    ]
+  },
+  {
+    "nodeId": "3393",
+    "role": "StaticText",
+    "name": "Participant and publication",
+    "properties": [],
+    "childIds": [
+      "-1000003602"
+    ]
+  },
+  {
+    "nodeId": "3396",
+    "role": "StaticText",
+    "name": "Technical details and history",
+    "properties": [],
+    "childIds": [
+      "-1000003603"
+    ]
+  },
+  {
+    "nodeId": "-1000003607",
+    "role": "InlineTextBox",
+    "name": "Review status: Approved",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003609",
+    "role": "InlineTextBox",
+    "name": "Create and share a participant preview so the participant can confirm their project before ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003610",
+    "role": "InlineTextBox",
+    "name": "publication.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003611",
+    "role": "InlineTextBox",
+    "name": "Go to project information",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003768",
+    "role": "InlineTextBox",
+    "name": "Compliance and validation",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003769",
+    "role": "InlineTextBox",
+    "name": "No blocking errors found.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003770",
+    "role": "InlineTextBox",
+    "name": "No compliance warnings.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003771",
+    "role": "InlineTextBox",
+    "name": "Available actions",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003772",
+    "role": "InlineTextBox",
+    "name": "Review comments",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003625",
+    "role": "InlineTextBox",
+    "name": "Request changes",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003626",
+    "role": "InlineTextBox",
+    "name": "Archive project",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3483",
+    "role": "StaticText",
+    "name": "Review scope:",
+    "properties": [],
+    "childIds": [
+      "-1000003773"
+    ]
+  },
+  {
+    "nodeId": "-1000003774",
+    "role": "InlineTextBox",
+    "name": " review actions update the ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003775",
+    "role": "InlineTextBox",
+    "name": "project lifecycle status in the test ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003776",
+    "role": "InlineTextBox",
+    "name": "environment. Published projects use the ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003777",
+    "role": "InlineTextBox",
+    "name": "controlled local archive workflow. Hosted ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003778",
+    "role": "InlineTextBox",
+    "name": "public feeds and external integrations remain ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003779",
+    "role": "InlineTextBox",
+    "name": "disconnected.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003633",
+    "role": "InlineTextBox",
+    "name": "Assistive checks",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003634",
+    "role": "InlineTextBox",
+    "name": "Non-blocking comparison between project metadata and document evidence to assist ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003635",
+    "role": "InlineTextBox",
+    "name": "editorial review.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003636",
+    "role": "InlineTextBox",
+    "name": "Run checks",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003637",
+    "role": "InlineTextBox",
+    "name": "No assistive checks run yet",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003638",
+    "role": "InlineTextBox",
+    "name": "Run assistive checks to verify project title consistency and ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003639",
+    "role": "InlineTextBox",
+    "name": "document formatting against uploaded poster evidence.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3519",
+    "role": "StaticText",
+    "name": "Run checks now",
+    "properties": [],
+    "childIds": [
+      "-1000003640"
+    ]
+  },
+  {
+    "nodeId": "3525",
+    "role": "StaticText",
+    "name": "Project information",
+    "properties": [],
+    "childIds": [
+      "-1000003641"
+    ]
+  },
+  {
+    "nodeId": "3527",
+    "role": "StaticText",
+    "name": "Title, summary, background, solution, poster full text, accessibility text, year, program, disciplines and industry categories.",
+    "properties": [],
+    "childIds": [
+      "-1000003642",
+      "-1000003643"
+    ]
+  },
+  {
+    "nodeId": "3529",
+    "role": "StaticText",
+    "name": "This project is approved. Request changes before editing project information.",
+    "properties": [],
+    "childIds": [
+      "-1000003644",
+      "-1000003645"
+    ]
+  },
+  {
+    "nodeId": "-1000003649",
+    "role": "InlineTextBox",
+    "name": "Public showcase content",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003781",
+    "role": "InlineTextBox",
+    "name": "Short summary",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003652",
+    "role": "InlineTextBox",
+    "name": "Automating high-speed delivery of critical medical parcels in rural regions.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003782",
+    "role": "InlineTextBox",
+    "name": "Problem background",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003654",
+    "role": "InlineTextBox",
+    "name": "Medical centers in mountainous areas experience prolonged wait times for vital cargo.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003783",
+    "role": "InlineTextBox",
+    "name": "Developed solution",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003656",
+    "role": "InlineTextBox",
+    "name": "Designed an autonomous medical payload carrier utilizing static flight vectors.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003784",
+    "role": "InlineTextBox",
+    "name": "Accessibility description",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003658",
+    "role": "InlineTextBox",
+    "name": "Infographic depicting drone models with insulated internal temperature chambers.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003659",
+    "role": "InlineTextBox",
+    "name": "Screen-reader description of the poster image, read from accessibility.txt.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3592",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3593"
+    ]
+  },
+  {
+    "nodeId": "3593",
+    "role": "StaticText",
+    "name": "Poster full text",
+    "properties": [],
+    "childIds": [
+      "-1000003660"
+    ]
+  },
+  {
+    "nodeId": "3594",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3595"
+    ]
+  },
+  {
+    "nodeId": "3595",
+    "role": "StaticText",
+    "name": "(46 characters)",
+    "properties": [],
+    "childIds": [
+      "-1000003661"
+    ]
+  },
+  {
+    "nodeId": "-1000003785",
+    "role": "InlineTextBox",
+    "name": "External citations",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003786",
+    "role": "InlineTextBox",
+    "name": "None",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003787",
+    "role": "InlineTextBox",
+    "name": "External web links",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003788",
+    "role": "InlineTextBox",
+    "name": "None",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003666",
+    "role": "InlineTextBox",
+    "name": "Media and accessibility",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003789",
+    "role": "InlineTextBox",
+    "name": "POSTER IMAGE",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003790",
+    "role": "InlineTextBox",
+    "name": "TEXT ALTERNATIVE",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003791",
+    "role": "InlineTextBox",
+    "name": "Infographic depicting drone models with insulated internal",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003792",
+    "role": "InlineTextBox",
+    "name": " ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003793",
+    "role": "InlineTextBox",
+    "name": "temperature chambers.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3641",
+    "role": "StaticText",
+    "name": "File name:",
+    "properties": [],
+    "childIds": [
+      "-1000003674"
+    ]
+  },
+  {
+    "nodeId": "3643",
+    "role": "StaticText",
+    "name": "poster.png",
+    "properties": [],
+    "childIds": [
+      "-1000003675"
+    ]
+  },
+  {
+    "nodeId": "3646",
+    "role": "StaticText",
+    "name": "MIME type:",
+    "properties": [],
+    "childIds": [
+      "-1000003676"
+    ]
+  },
+  {
+    "nodeId": "3648",
+    "role": "StaticText",
+    "name": "image/png",
+    "properties": [],
+    "childIds": [
+      "-1000003677"
+    ]
+  },
+  {
+    "nodeId": "3651",
+    "role": "StaticText",
+    "name": "File size:",
+    "properties": [],
+    "childIds": [
+      "-1000003678"
+    ]
+  },
+  {
+    "nodeId": "3653",
+    "role": "StaticText",
+    "name": "70 B",
+    "properties": [],
+    "childIds": [
+      "-1000003679"
+    ]
+  },
+  {
+    "nodeId": "3656",
+    "role": "StaticText",
+    "name": "ACCESSIBILITY REVIEW — ",
+    "properties": [],
+    "childIds": [
+      "-1000003794"
+    ]
+  },
+  {
+    "nodeId": "3658",
+    "role": "StaticText",
+    "name": "POSTER IMAGE",
+    "properties": [],
+    "childIds": [
+      "-1000003795"
+    ]
+  },
+  {
+    "nodeId": "3660",
+    "role": "StaticText",
+    "name": ": ",
+    "properties": [],
+    "childIds": [
+      "-1000003796"
+    ]
+  },
+  {
+    "nodeId": "3662",
+    "role": "StaticText",
+    "name": "poster.png",
+    "properties": [],
+    "childIds": [
+      "-1000003797"
+    ]
+  },
+  {
+    "nodeId": "-1000003684",
+    "role": "InlineTextBox",
+    "name": "Text alternative available",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003685",
+    "role": "InlineTextBox",
+    "name": "Full text available",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3680",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3686"
+    ]
+  },
+  {
+    "nodeId": "3686",
+    "role": "DisclosureTriangle",
+    "name": "View full-text equivalent",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      },
+      {
+        "name": "expanded",
+        "value": false
+      }
+    ],
+    "childIds": [
+      "4065",
+      "3687"
+    ]
+  },
+  {
+    "nodeId": "3683",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003687",
+    "role": "InlineTextBox",
+    "name": "POSTER PDF",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003688",
+    "role": "InlineTextBox",
+    "name": "Open PDF in a new tab",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3708",
+    "role": "StaticText",
+    "name": "File name:",
+    "properties": [],
+    "childIds": [
+      "-1000003691"
+    ]
+  },
+  {
+    "nodeId": "3710",
+    "role": "StaticText",
+    "name": "poster.pdf",
+    "properties": [],
+    "childIds": [
+      "-1000003692"
+    ]
+  },
+  {
+    "nodeId": "3713",
+    "role": "StaticText",
+    "name": "MIME type:",
+    "properties": [],
+    "childIds": [
+      "-1000003693"
+    ]
+  },
+  {
+    "nodeId": "3715",
+    "role": "StaticText",
+    "name": "application/pdf",
+    "properties": [],
+    "childIds": [
+      "-1000003694"
+    ]
+  },
+  {
+    "nodeId": "3718",
+    "role": "StaticText",
+    "name": "File size:",
+    "properties": [],
+    "childIds": [
+      "-1000003695"
+    ]
+  },
+  {
+    "nodeId": "3720",
+    "role": "StaticText",
+    "name": "346 B",
+    "properties": [],
+    "childIds": [
+      "-1000003696"
+    ]
+  },
+  {
+    "nodeId": "3723",
+    "role": "StaticText",
+    "name": "ACCESSIBILITY REVIEW — ",
+    "properties": [],
+    "childIds": [
+      "-1000003802"
+    ]
+  },
+  {
+    "nodeId": "3725",
+    "role": "StaticText",
+    "name": "POSTER PDF",
+    "properties": [],
+    "childIds": [
+      "-1000003803"
+    ]
+  },
+  {
+    "nodeId": "3727",
+    "role": "StaticText",
+    "name": ": ",
+    "properties": [],
+    "childIds": [
+      "-1000003804"
+    ]
+  },
+  {
+    "nodeId": "3729",
+    "role": "StaticText",
+    "name": "poster.pdf",
+    "properties": [],
+    "childIds": [
+      "-1000003805"
+    ]
+  },
+  {
+    "nodeId": "-1000003701",
+    "role": "InlineTextBox",
+    "name": "Full text available",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3740",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3746"
+    ]
+  },
+  {
+    "nodeId": "3746",
+    "role": "DisclosureTriangle",
+    "name": "View full-text equivalent",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      },
+      {
+        "name": "expanded",
+        "value": false
+      }
+    ],
+    "childIds": [
+      "4066",
+      "3747"
+    ]
+  },
+  {
+    "nodeId": "3743",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003808",
+    "role": "InlineTextBox",
+    "name": "External showcase links",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3759",
+    "role": "StaticText",
+    "name": "VIDEO SHOWCASE",
+    "properties": [],
+    "childIds": [
+      "-1000003704"
+    ]
+  },
+  {
+    "nodeId": "3762",
+    "role": "StaticText",
+    "name": "Not provided",
+    "properties": [],
+    "childIds": [
+      "-1000003809"
+    ]
+  },
+  {
+    "nodeId": "3769",
+    "role": "StaticText",
+    "name": "INTERACTIVE DEMO",
+    "properties": [],
+    "childIds": [
+      "-1000003706"
+    ]
+  },
+  {
+    "nodeId": "3772",
+    "role": "StaticText",
+    "name": "Not provided",
+    "properties": [],
+    "childIds": [
+      "-1000003810"
+    ]
+  },
+  {
+    "nodeId": "3779",
+    "role": "StaticText",
+    "name": "GIT REPOSITORY",
+    "properties": [],
+    "childIds": [
+      "-1000003708"
+    ]
+  },
+  {
+    "nodeId": "3782",
+    "role": "StaticText",
+    "name": "Not provided",
+    "properties": [],
+    "childIds": [
+      "-1000003811"
+    ]
+  },
+  {
+    "nodeId": "-1000003713",
+    "role": "InlineTextBox",
+    "name": "Participant confirmation",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003716",
+    "role": "InlineTextBox",
+    "name": "Generate participant preview",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003813",
+    "role": "InlineTextBox",
+    "name": "Email delivery is not enabled in this environment.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003718",
+    "role": "InlineTextBox",
+    "name": "Showcase publishing",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003814",
+    "role": "InlineTextBox",
+    "name": "Publication readiness",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3836",
+    "role": "StaticText",
+    "name": "Participant preview required",
+    "properties": [],
+    "childIds": [
+      "-1000003815"
+    ]
+  },
+  {
+    "nodeId": "3838",
+    "role": "StaticText",
+    "name": "A participant preview must be created and shared before this project can be published.",
+    "properties": [],
+    "childIds": [
+      "-1000003816"
+    ]
+  },
+  {
+    "nodeId": "-1000003817",
+    "role": "InlineTextBox",
+    "name": "PUBLICATION REQUIREMENTS",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3844",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3847"
+    ]
+  },
+  {
+    "nodeId": "3847",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3848"
+    ]
+  },
+  {
+    "nodeId": "3848",
+    "role": "StaticText",
+    "name": "Project approved",
+    "properties": [],
+    "childIds": [
+      "-1000003725"
+    ]
+  },
+  {
+    "nodeId": "3849",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3850"
+    ]
+  },
+  {
+    "nodeId": "3850",
+    "role": "StaticText",
+    "name": "Passed",
+    "properties": [],
+    "childIds": [
+      "-1000003726"
+    ]
+  },
+  {
+    "nodeId": "3852",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3855"
+    ]
+  },
+  {
+    "nodeId": "3855",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3856"
+    ]
+  },
+  {
+    "nodeId": "3856",
+    "role": "StaticText",
+    "name": "Participant confirmation received",
+    "properties": [],
+    "childIds": [
+      "-1000003727"
+    ]
+  },
+  {
+    "nodeId": "3857",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3858"
+    ]
+  },
+  {
+    "nodeId": "3858",
+    "role": "StaticText",
+    "name": "Needs attention",
+    "properties": [],
+    "childIds": [
+      "-1000003728"
+    ]
+  },
+  {
+    "nodeId": "3860",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3863"
+    ]
+  },
+  {
+    "nodeId": "3863",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3864"
+    ]
+  },
+  {
+    "nodeId": "3864",
+    "role": "StaticText",
+    "name": "Project details and media match confirmation",
+    "properties": [],
+    "childIds": [
+      "-1000003729"
+    ]
+  },
+  {
+    "nodeId": "3865",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "3866"
+    ]
+  },
+  {
+    "nodeId": "3866",
+    "role": "StaticText",
+    "name": "Not yet verified",
+    "properties": [],
+    "childIds": [
+      "-1000003730"
+    ]
+  },
+  {
+    "nodeId": "-1000003818",
+    "role": "InlineTextBox",
+    "name": "What is blocking publication",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4067",
+    "role": "ListMarker",
+    "name": "• ",
+    "properties": [],
+    "childIds": [
+      "-1000003562"
+    ]
+  },
+  {
+    "nodeId": "3872",
+    "role": "StaticText",
+    "name": "Participant preview required",
+    "properties": [],
+    "childIds": [
+      "-1000003819"
+    ]
+  },
+  {
+    "nodeId": "4068",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "-1000003821"
+    ]
+  },
+  {
+    "nodeId": "-1000003821",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3882",
+    "role": "StaticText",
+    "name": "Technical details",
+    "properties": [],
+    "childIds": [
+      "-1000003820"
+    ]
+  },
+  {
+    "nodeId": "3917",
+    "role": "StaticText",
+    "name": "Technical configuration and record details",
+    "properties": [],
+    "childIds": [
+      "-1000003737"
+    ]
+  },
+  {
+    "nodeId": "-1000003738",
+    "role": "InlineTextBox",
+    "name": "Showcase template configuration, cached validation counts, and record timestamps.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003739",
+    "role": "InlineTextBox",
+    "name": "Advanced",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003740",
+    "role": "InlineTextBox",
+    "name": "Change history",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003823",
+    "role": "InlineTextBox",
+    "name": "No recorded changes for this project yet.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003825",
+    "role": "InlineTextBox",
+    "name": "STUDY PROGRAM CODE",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003826",
+    "role": "InlineTextBox",
+    "name": "Bachelor of Engineering",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003827",
+    "role": "InlineTextBox",
+    "name": "SHOWCASE DISCIPLINES",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003828",
+    "role": "InlineTextBox",
+    "name": "Mechanical Engineering",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003829",
+    "role": "InlineTextBox",
+    "name": "INDUSTRY PARTNER",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003830",
+    "role": "InlineTextBox",
+    "name": "Mountain Med-Kit Corp (Synthetic) (Healthcare)",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003831",
+    "role": "InlineTextBox",
+    "name": "GROUP NAME",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003832",
+    "role": "InlineTextBox",
+    "name": "AeroMed Delivery (Synthetic)",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003833",
+    "role": "InlineTextBox",
+    "name": "TEAM ROSTER",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4020",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "4021"
+    ]
+  },
+  {
+    "nodeId": "4022",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "4023"
+    ]
+  },
+  {
+    "nodeId": "-1000003836",
+    "role": "InlineTextBox",
+    "name": "ACADEMIC SUPERVISOR",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003837",
+    "role": "InlineTextBox",
+    "name": "Dr. Academic Supervisor B (Synthetic)",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003838",
+    "role": "InlineTextBox",
+    "name": "SHOWCASE PUBLISHING ELIGIBILITY",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003839",
+    "role": "InlineTextBox",
+    "name": "Eligible by status",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003762",
+    "role": "InlineTextBox",
+    "name": "Test environment.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4221",
+    "role": "image",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "4227",
+      "4228",
+      "4229",
+      "4231",
+      "4232"
+    ]
+  },
+  {
+    "nodeId": "-1000003580",
+    "role": "InlineTextBox",
+    "name": "Projects",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003581",
+    "role": "InlineTextBox",
+    "name": "Project details",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003600",
+    "role": "InlineTextBox",
+    "name": "Review and edit",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003601",
+    "role": "InlineTextBox",
+    "name": "Content and media",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003602",
+    "role": "InlineTextBox",
+    "name": "Participant and publication",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003603",
+    "role": "InlineTextBox",
+    "name": "Technical details and history",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003773",
+    "role": "InlineTextBox",
+    "name": "Review scope:",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003640",
+    "role": "InlineTextBox",
+    "name": "Run checks now",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003641",
+    "role": "InlineTextBox",
+    "name": "Project information",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003642",
+    "role": "InlineTextBox",
+    "name": "Title, summary, background, solution, poster full text, accessibility text, year, program, ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003643",
+    "role": "InlineTextBox",
+    "name": "disciplines and industry categories.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003644",
+    "role": "InlineTextBox",
+    "name": "This project is approved. Request changes ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003645",
+    "role": "InlineTextBox",
+    "name": "before editing project information.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003660",
+    "role": "InlineTextBox",
+    "name": "Poster full text",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003661",
+    "role": "InlineTextBox",
+    "name": "(46 characters)",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003674",
+    "role": "InlineTextBox",
+    "name": "File name:",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003675",
+    "role": "InlineTextBox",
+    "name": "poster.png",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003676",
+    "role": "InlineTextBox",
+    "name": "MIME type:",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003677",
+    "role": "InlineTextBox",
+    "name": "image/png",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003678",
+    "role": "InlineTextBox",
+    "name": "File size:",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003679",
+    "role": "InlineTextBox",
+    "name": "70 B",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003794",
+    "role": "InlineTextBox",
+    "name": "ACCESSIBILITY REVIEW — ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003795",
+    "role": "InlineTextBox",
+    "name": "POSTER IMAGE",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003796",
+    "role": "InlineTextBox",
+    "name": ": ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003797",
+    "role": "InlineTextBox",
+    "name": "poster.png",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4065",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "-1000003799"
+    ]
+  },
+  {
+    "nodeId": "-1000003799",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3687",
+    "role": "StaticText",
+    "name": "View full-text equivalent",
+    "properties": [],
+    "childIds": [
+      "-1000003798"
+    ]
+  },
+  {
+    "nodeId": "-1000003691",
+    "role": "InlineTextBox",
+    "name": "File name:",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003692",
+    "role": "InlineTextBox",
+    "name": "poster.pdf",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003693",
+    "role": "InlineTextBox",
+    "name": "MIME type:",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003694",
+    "role": "InlineTextBox",
+    "name": "application/pdf",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003695",
+    "role": "InlineTextBox",
+    "name": "File size:",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003696",
+    "role": "InlineTextBox",
+    "name": "346 B",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003802",
+    "role": "InlineTextBox",
+    "name": "ACCESSIBILITY REVIEW — ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003803",
+    "role": "InlineTextBox",
+    "name": "POSTER PDF",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003804",
+    "role": "InlineTextBox",
+    "name": ": ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003805",
+    "role": "InlineTextBox",
+    "name": "poster.pdf",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4066",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "-1000003807"
+    ]
+  },
+  {
+    "nodeId": "-1000003807",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "3747",
+    "role": "StaticText",
+    "name": "View full-text equivalent",
+    "properties": [],
+    "childIds": [
+      "-1000003806"
+    ]
+  },
+  {
+    "nodeId": "-1000003704",
+    "role": "InlineTextBox",
+    "name": "VIDEO SHOWCASE",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003809",
+    "role": "InlineTextBox",
+    "name": "Not provided",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003706",
+    "role": "InlineTextBox",
+    "name": "INTERACTIVE DEMO",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003810",
+    "role": "InlineTextBox",
+    "name": "Not provided",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003708",
+    "role": "InlineTextBox",
+    "name": "GIT REPOSITORY",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003811",
+    "role": "InlineTextBox",
+    "name": "Not provided",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003815",
+    "role": "InlineTextBox",
+    "name": "Participant preview required",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003816",
+    "role": "InlineTextBox",
+    "name": "A participant preview must be created and shared before this project can be published.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003725",
+    "role": "InlineTextBox",
+    "name": "Project approved",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003726",
+    "role": "InlineTextBox",
+    "name": "Passed",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003727",
+    "role": "InlineTextBox",
+    "name": "Participant confirmation received",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003728",
+    "role": "InlineTextBox",
+    "name": "Needs attention",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003729",
+    "role": "InlineTextBox",
+    "name": "Project details and media match confirmation",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003730",
+    "role": "InlineTextBox",
+    "name": "Not yet verified",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003562",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003819",
+    "role": "InlineTextBox",
+    "name": "Participant preview required",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003820",
+    "role": "InlineTextBox",
+    "name": "Technical details",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003737",
+    "role": "InlineTextBox",
+    "name": "Technical configuration and record details",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4021",
+    "role": "StaticText",
+    "name": "Synthetic Member 3",
+    "properties": [],
+    "childIds": [
+      "-1000003834"
+    ]
+  },
+  {
+    "nodeId": "4023",
+    "role": "StaticText",
+    "name": "Synthetic Member 4",
+    "properties": [],
+    "childIds": [
+      "-1000003835"
+    ]
+  },
+  {
+    "nodeId": "4227",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4228",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4229",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4231",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "4232",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003798",
+    "role": "InlineTextBox",
+    "name": "View full-text equivalent",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003806",
+    "role": "InlineTextBox",
+    "name": "View full-text equivalent",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003834",
+    "role": "InlineTextBox",
+    "name": "Synthetic Member 3",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000003835",
+    "role": "InlineTextBox",
+    "name": "Synthetic Member 4",
+    "properties": [],
+    "childIds": []
+  }
+]

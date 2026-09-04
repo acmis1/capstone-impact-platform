@@ -1,0 +1,2202 @@
+{
+  "analyzedAt": "2026-09-04T06:45:13.195Z",
+  "standard": "WCAG 2.2 SC 2.5.8 Target Size (Minimum), Level AA (24x24 CSS px threshold)",
+  "scope": "All active Admin and Participant surfaces: Projects, Import, Staff, Public Feed, Project Detail, Login",
+  "blanketComplianceClaimed": false,
+  "routes": [
+    {
+      "route": "Projects",
+      "url": "http://localhost:3000/admin",
+      "totalSampled": 66,
+      "directlyMeets24px": 28,
+      "effectiveLabelMeets24px": 0,
+      "hiddenOrNonPointer": 23,
+      "unresolved": 0,
+      "targets": [
+        {
+          "tag": "A",
+          "accessibleName": "Skip to main content",
+          "state": "visually-hidden-until-focus",
+          "rawHiddenDimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "displayedDimensions": {
+            "width": 122,
+            "height": 36
+          },
+          "meets24pxWhenInteractive": true,
+          "supportedException": "Not displayed / displayed only on keyboard focus: Expanding focusable skip link measures 122x36 CSS px when interactive under keyboard focus."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Projects",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Imports",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Publishing",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Staff access",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Open main navigation menu",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Open account menu for Local Synthetic Admin",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 183,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 183,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "New import",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 132,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 132,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Search by title, project ID, partner, or group...",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 790,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 790,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Search",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 128,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 128,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Filters",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "SELECT",
+          "accessibleName": "All statusesDraftSubmittedIn reviewChang",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 223,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 223,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "SELECT",
+          "accessibleName": "All years2026",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 223,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 223,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "SELECT",
+          "accessibleName": "All programsBachelor of Digital MediaBac",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 223,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 223,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "SELECT",
+          "accessibleName": "All disciplinesIoT SystemsMechanical Eng",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 223,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 223,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "SELECT",
+          "accessibleName": "102550",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 58,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 58,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Reset view",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 99,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 99,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select current page",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Columns5 of 5",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 157,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 157,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select current page",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 313,
+            "y": 866
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 40,
+          "closestNeighbor": {
+            "tag": "BUTTON",
+            "name": "Sort by Project ascending"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Sort by Project ascending",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 66,
+            "height": 20
+          },
+          "centerPoint": {
+            "x": 386,
+            "y": 869
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 65,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": "Select current page"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Sort by Status descending",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 61,
+            "height": 20
+          },
+          "centerPoint": {
+            "x": 591,
+            "y": 869
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 172,
+          "closestNeighbor": {
+            "tag": "BUTTON",
+            "name": "Sort by Project ascending"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Sort by Year ascending",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 49,
+            "height": 20
+          },
+          "centerPoint": {
+            "x": 850,
+            "y": 869
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 163,
+          "closestNeighbor": {
+            "tag": "BUTTON",
+            "name": "Sort by Updated ascending"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Sort by Updated ascending",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 77,
+            "height": 20
+          },
+          "centerPoint": {
+            "x": 1052,
+            "y": 869
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 73,
+          "closestNeighbor": {
+            "tag": "BUTTON",
+            "name": "Columns5 of 5"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Smart Medical Drone Delivery",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 313,
+            "y": 917
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 43,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": "Select current page"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select VR Rehabilitation Roster",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 313,
+            "y": 1061
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 116,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": "Select Agricultural IoT Hydration Roster"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Agricultural IoT Hydration Roster",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 313,
+            "y": 1185
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 116,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": "Select VR Rehabilitation Roster"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Dynamic Traffic Optimization Engine",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 313,
+            "y": 1328
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 136,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": "Select Agricultural IoT Hydration Roster"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 01",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 313,
+            "y": 1472
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 94,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": "Select Synthetic Pagination Project 02"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 02",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 313,
+            "y": 1573
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 94,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": "Select Synthetic Pagination Project 01"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 03",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 313,
+            "y": 1675
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 94,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": "Select Synthetic Pagination Project 02"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 04",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 313,
+            "y": 1776
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 94,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": "Select Synthetic Pagination Project 03"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 05",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 313,
+            "y": 1878
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 94,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": "Select Synthetic Pagination Project 04"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 06",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 313,
+            "y": 1979
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 94,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": "Select Synthetic Pagination Project 05"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 105,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Smart Medical Drone Delivery",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select VR Rehabilitation Roster",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Agricultural IoT Hydration Roster",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Dynamic Traffic Optimization Engine",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 01",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 02",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 03",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 04",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 05",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Select Synthetic Pagination Project 06",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View project",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Go to previous page",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 108,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 108,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Go to next page",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 84,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 84,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        }
+      ]
+    },
+    {
+      "route": "Import",
+      "url": "http://localhost:3000/admin/imports/new",
+      "totalSampled": 13,
+      "directlyMeets24px": 10,
+      "effectiveLabelMeets24px": 0,
+      "hiddenOrNonPointer": 2,
+      "unresolved": 0,
+      "targets": [
+        {
+          "tag": "A",
+          "accessibleName": "Skip to main content",
+          "state": "visually-hidden-until-focus",
+          "rawHiddenDimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "displayedDimensions": {
+            "width": 122,
+            "height": 36
+          },
+          "meets24pxWhenInteractive": true,
+          "supportedException": "Not displayed / displayed only on keyboard focus: Expanding focusable skip link measures 122x36 CSS px when interactive under keyboard focus."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Projects",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Imports",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Publishing",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Staff access",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Open main navigation menu",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Imports",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 41,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 300,
+            "y": 19
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 84,
+          "closestNeighbor": {
+            "tag": "A",
+            "name": "Projects"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Open account menu for Local Synthetic Admin",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 183,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 183,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "All imports",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 86,
+            "height": 32
+          },
+          "effectiveDimensions": {
+            "width": 86,
+            "height": 32
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Show folder and file preparation guide",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 100,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 100,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "admin-reference-file-input",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 910,
+            "height": 28
+          },
+          "effectiveDimensions": {
+            "width": 910,
+            "height": 28
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "Upload project directory",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Choose project folder",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 201,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 201,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        }
+      ]
+    },
+    {
+      "route": "Staff",
+      "url": "http://localhost:3000/admin/staff",
+      "totalSampled": 13,
+      "directlyMeets24px": 9,
+      "effectiveLabelMeets24px": 3,
+      "hiddenOrNonPointer": 1,
+      "unresolved": 0,
+      "targets": [
+        {
+          "tag": "A",
+          "accessibleName": "Skip to main content",
+          "state": "visually-hidden-until-focus",
+          "rawHiddenDimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "displayedDimensions": {
+            "width": 122,
+            "height": 36
+          },
+          "meets24pxWhenInteractive": true,
+          "supportedException": "Not displayed / displayed only on keyboard focus: Expanding focusable skip link measures 122x36 CSS px when interactive under keyboard focus."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Projects",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Imports",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Publishing",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Staff access",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Open main navigation menu",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Open account menu for Local Synthetic Admin",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 183,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 183,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "staff-full-name",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 718,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 718,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "staff-email",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 718,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 718,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "staff-role-admin",
+          "state": "enclosed-in-clickable-label",
+          "rawDimensions": {
+            "width": 20,
+            "height": 20
+          },
+          "clickableAncestor": {
+            "tag": "LABEL",
+            "selector": "label.flex",
+            "dimensions": {
+              "width": 718,
+              "height": 60
+            }
+          },
+          "effectiveDimensions": {
+            "width": 718,
+            "height": 60
+          },
+          "effectiveMeets24px": true,
+          "supportedException": "Effective Clickable Region: Native control is associated with or enclosed within a <label> ancestor whose hit region captures pointer clicks across at least 24x24 CSS px."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "staff-role-reviewer",
+          "state": "enclosed-in-clickable-label",
+          "rawDimensions": {
+            "width": 20,
+            "height": 20
+          },
+          "clickableAncestor": {
+            "tag": "LABEL",
+            "selector": "label.flex",
+            "dimensions": {
+              "width": 718,
+              "height": 60
+            }
+          },
+          "effectiveDimensions": {
+            "width": 718,
+            "height": 60
+          },
+          "effectiveMeets24px": true,
+          "supportedException": "Effective Clickable Region: Native control is associated with or enclosed within a <label> ancestor whose hit region captures pointer clicks across at least 24x24 CSS px."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "staff-role-editor",
+          "state": "enclosed-in-clickable-label",
+          "rawDimensions": {
+            "width": 20,
+            "height": 20
+          },
+          "clickableAncestor": {
+            "tag": "LABEL",
+            "selector": "label.flex",
+            "dimensions": {
+              "width": 718,
+              "height": 60
+            }
+          },
+          "effectiveDimensions": {
+            "width": 718,
+            "height": 60
+          },
+          "effectiveMeets24px": true,
+          "supportedException": "Effective Clickable Region: Native control is associated with or enclosed within a <label> ancestor whose hit region captures pointer clicks across at least 24x24 CSS px."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Send invitation",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 128,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 128,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        }
+      ]
+    },
+    {
+      "route": "Public Feed",
+      "url": "http://localhost:3000/admin/public-feed",
+      "totalSampled": 13,
+      "directlyMeets24px": 9,
+      "effectiveLabelMeets24px": 0,
+      "hiddenOrNonPointer": 1,
+      "unresolved": 0,
+      "targets": [
+        {
+          "tag": "A",
+          "accessibleName": "Skip to main content",
+          "state": "visually-hidden-until-focus",
+          "rawHiddenDimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "displayedDimensions": {
+            "width": 122,
+            "height": 36
+          },
+          "meets24pxWhenInteractive": true,
+          "supportedException": "Not displayed / displayed only on keyboard focus: Expanding focusable skip link measures 122x36 CSS px when interactive under keyboard focus."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Projects",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Imports",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Publishing",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Staff access",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Open main navigation menu",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Open account menu for Local Synthetic Admin",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 183,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 183,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Choose a project to publish",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 232,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 232,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "SUMMARY",
+          "accessibleName": "Advanced publishing details",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 926,
+            "height": 20
+          },
+          "centerPoint": {
+            "x": 768,
+            "y": 392
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 199,
+          "closestNeighbor": {
+            "tag": "SUMMARY",
+            "name": "Technical setup deta"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Set up showcase publishing",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 208,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 208,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "SUMMARY",
+          "accessibleName": "Technical setup details",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 918,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 768,
+            "y": 598
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 197,
+          "closestNeighbor": {
+            "tag": "SUMMARY",
+            "name": "Advanced publishing "
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "2026-traffic-engine",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 123,
+            "height": 19
+          },
+          "centerPoint": {
+            "x": 367,
+            "y": 1021
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 415,
+          "closestNeighbor": {
+            "tag": "SUMMARY",
+            "name": "Technical setup deta"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Repair showcase status",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 151,
+            "height": 32
+          },
+          "effectiveDimensions": {
+            "width": 151,
+            "height": 32
+          },
+          "meets24px": true,
+          "supportedException": null
+        }
+      ]
+    },
+    {
+      "route": "Project Detail",
+      "url": "http://localhost:3000/admin/projects/2026-medical-drone",
+      "totalSampled": 27,
+      "directlyMeets24px": 24,
+      "effectiveLabelMeets24px": 0,
+      "hiddenOrNonPointer": 1,
+      "unresolved": 0,
+      "targets": [
+        {
+          "tag": "A",
+          "accessibleName": "Skip to main content",
+          "state": "visually-hidden-until-focus",
+          "rawHiddenDimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "displayedDimensions": {
+            "width": 122,
+            "height": 36
+          },
+          "meets24pxWhenInteractive": true,
+          "supportedException": "Not displayed / displayed only on keyboard focus: Expanding focusable skip link measures 122x36 CSS px when interactive under keyboard focus."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Projects",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Imports",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Publishing",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Staff access",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 227,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Open main navigation menu",
+          "state": "hidden/non-interactive",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "isPointerTarget": false,
+          "supportedException": "Hidden / non-interactive node: Not an active pointer target in the evaluated state. Not evaluated as a target size defect."
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Projects",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 42,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 301,
+            "y": 19
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 84,
+          "closestNeighbor": {
+            "tag": "A",
+            "name": "Projects"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Open account menu for Local Synthetic Admin",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 183,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 183,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Back to projects",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 123,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 123,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Review project content",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 172,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 172,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Content and media",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 148,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 148,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Participant and publication",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 198,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 198,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Technical details and history",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 205,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 205,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Go to project information",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 163,
+            "height": 32
+          },
+          "effectiveDimensions": {
+            "width": 163,
+            "height": 32
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "TEXTAREA",
+          "accessibleName": "Add optional notes or instructions regarding this review decision…",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 307,
+            "height": 80
+          },
+          "effectiveDimensions": {
+            "width": 307,
+            "height": 80
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Request changes",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 307,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 307,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Archive project",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 307,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 307,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Run checks",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 109,
+            "height": 32
+          },
+          "effectiveDimensions": {
+            "width": 109,
+            "height": 32
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Run checks now",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 158,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 158,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "SUMMARY",
+          "accessibleName": "Poster full text(46 characters)",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 214,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 214,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "SUMMARY",
+          "accessibleName": "View full-text equivalent",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 143,
+            "height": 46
+          },
+          "effectiveDimensions": {
+            "width": 143,
+            "height": 46
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Open poster.pdf in a new tab",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 143,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 143,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "SUMMARY",
+          "accessibleName": "View full-text equivalent",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 143,
+            "height": 46
+          },
+          "effectiveDimensions": {
+            "width": 143,
+            "height": 46
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Generate participant preview",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 216,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 216,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "SUMMARY",
+          "accessibleName": "Technical details",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 538,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 582,
+            "y": 4497
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 211,
+          "closestNeighbor": {
+            "tag": "SUMMARY",
+            "name": "Technical configurat"
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "SUMMARY",
+          "accessibleName": "Technical configuration and record detai",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 586,
+            "height": 122
+          },
+          "effectiveDimensions": {
+            "width": 586,
+            "height": 122
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "View import batch",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 298,
+            "height": 32
+          },
+          "effectiveDimensions": {
+            "width": 298,
+            "height": 32
+          },
+          "meets24px": true,
+          "supportedException": null
+        }
+      ]
+    },
+    {
+      "route": "Login",
+      "url": "http://localhost:3000/login",
+      "totalSampled": 4,
+      "directlyMeets24px": 3,
+      "effectiveLabelMeets24px": 0,
+      "hiddenOrNonPointer": 0,
+      "unresolved": 0,
+      "targets": [
+        {
+          "tag": "INPUT",
+          "accessibleName": "staff@rmit.edu.au",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 422,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 422,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "A",
+          "accessibleName": "Forgot password?",
+          "state": "sub-24px-target",
+          "rawDimensions": {
+            "width": 101,
+            "height": 16
+          },
+          "centerPoint": {
+            "x": 1069,
+            "y": 392
+          },
+          "spacingCircle": {
+            "diameter": 24,
+            "radius": 12
+          },
+          "nearestNeighborDistance": 14,
+          "closestNeighbor": {
+            "tag": "INPUT",
+            "name": ""
+          },
+          "supportedException": "WCAG 2.2 SC 2.5.8 Spacing Exception: A 24 CSS px diameter circle centered on the target bounding box does not intersect any adjacent pointer target bounding box."
+        },
+        {
+          "tag": "INPUT",
+          "accessibleName": "••••••••",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 422,
+            "height": 40
+          },
+          "effectiveDimensions": {
+            "width": 422,
+            "height": 40
+          },
+          "meets24px": true,
+          "supportedException": null
+        },
+        {
+          "tag": "BUTTON",
+          "accessibleName": "Sign in",
+          "state": "displayed-pointer-target",
+          "rawDimensions": {
+            "width": 422,
+            "height": 44
+          },
+          "effectiveDimensions": {
+            "width": 422,
+            "height": 44
+          },
+          "meets24px": true,
+          "supportedException": null
+        }
+      ]
+    }
+  ]
+}

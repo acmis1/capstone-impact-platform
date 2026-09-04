@@ -1,0 +1,91 @@
+{
+  "recordedAt": "2026-09-04T07:45:21.482Z",
+  "scope": "Targeted final review correction on integrated PP1; existing browser evidence retained without recapture",
+  "focused": {
+    "command": "npm run test:run --workspace=apps/admin-cms src/components/admin-dashboard/BulkProjectReviewPanel.test.tsx",
+    "exitCode": 0,
+    "testFilesPassed": 1,
+    "testsPassed": 8
+  },
+  "typecheck": {
+    "command": "npm run typecheck:admin",
+    "exitCode": 0
+  },
+  "lint": {
+    "command": "npm run lint --workspace=apps/admin-cms",
+    "exitCode": 0,
+    "errors": 0,
+    "warnings": 6
+  },
+  "build": {
+    "command": "npm run build:admin",
+    "exitCode": 0,
+    "warnings": [
+      "Next.js inferred workspace root from multiple lockfiles.",
+      "Turbopack reported an unexpected file in the NFT trace."
+    ]
+  },
+  "evidenceGate": {
+    "command": "npm run verify:accessibility-uat-evidence",
+    "exitCode": 0,
+    "status": "PASS",
+    "filesScanned": 98,
+    "textFilesScanned": 49,
+    "screenshotCount": 48,
+    "uniqueHashCount": 48,
+    "findings": 0
+  },
+  "diffCheck": {
+    "command": "git diff --check origin/main --",
+    "exitCode": 0,
+    "status": "PASS",
+    "base": "39c7edce84fbad8da480d0ad713db78afb14ad0d",
+    "scope": "Full origin/main-to-correction working-tree diff, including the existing branch changes; origin/main is the merge base. Rechecked after final evidence edits.",
+    "postCommitAcceptanceCommand": "git diff --check origin/main...HEAD"
+  },
+  "lighthouseWhitespace": {
+    "linesNormalized": 2,
+    "semanticComparisonCommand": "git diff --ignore-space-at-eol --exit-code -- docs/accessibility-uat-evidence/2026-09-04/lighthouse-admin-final.html",
+    "exitCode": 0,
+    "semanticReportDataChanged": false
+  },
+  "localCleanup": {
+    "environment": "Local Docker Supabase and loopback Mailpit only",
+    "identity": "test-staff@capstone.test",
+    "ownershipProof": "One pending_activation request with Reviewer role; exact Auth/profile relationships and server-controlled provisioning marker matched. Only the role row and owned provisioning request referenced the profile.",
+    "before": {
+      "authUsers": 1,
+      "adminUsers": 1,
+      "staffProvisioningRequests": 1,
+      "roleRows": 1,
+      "mailpitOwnedMessages": 5
+    },
+    "after": {
+      "authUsers": 0,
+      "adminUsers": 0,
+      "staffProvisioningRequests": 0,
+      "roleRows": 0,
+      "paginationAccessibilityFixtures": 0,
+      "activeParticipantPreviews": 0,
+      "mailpitOwnedMessages": 0,
+      "mailpitTotalMessages": 0
+    },
+    "method": "Transactional exact-row deletion after ownership and FK-reference guards; Mailpit selective DELETE with the five exact message IDs, identified by synthetic recipient, subject and 2026-09-04 06:39–06:46 UTC run window. No broad mailbox clear.",
+    "baselinePreserved": {
+      "authUsers": 3,
+      "adminUsers": 3,
+      "roleRows": 3,
+      "roles": [
+        "admin",
+        "reviewer",
+        "editor"
+      ]
+    },
+    "unrelatedLocalDataPreserved": true
+  },
+  "evidenceHygiene": {
+    "ignoredVerificationLogsRemoved": 6,
+    "workingTreeAndCommittedInventoryExpectedEqual": true,
+    "screenshotsRecaptured": 0
+  }
+}

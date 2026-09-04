@@ -1,0 +1,166 @@
+{
+  "generatedAt": "2026-09-03T17:18:51.990Z",
+  "inspectionRule": "Each accepted screenshot was opened visually; context-only captures support no interaction claim.",
+  "entries": [
+    {
+      "filename": "contrast-after.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Current Projects page; New import has keyboard focus with a red ring and white offset."
+    },
+    {
+      "filename": "contrast-before.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Historical base Projects page; the New import button visibly uses dark text on red."
+    },
+    {
+      "filename": "heading-hierarchy-after.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Current Projects layout context; heading levels are proven by headings-after.json, not the pixels."
+    },
+    {
+      "filename": "heading-hierarchy-before.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Historical Projects layout context; heading levels are proven by headings-before.json, not the pixels."
+    },
+    {
+      "filename": "import-batch-detail-disclosure.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+    },
+    {
+      "filename": "import-workflow-controlled-failure.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "A long invalid synthetic filename is selected and a visible Check Failed message is present."
+    },
+    {
+      "filename": "import-workflow-mobile-375px.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Current Import mobile workflow at 375 x 812 CSS px; folder and file preparation guide disclosure has visible keyboard focus without horizontal page overflow or sticky header obstruction."
+    },
+    {
+      "filename": "import-workflow-new-keyboard.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+    },
+    {
+      "filename": "login-keyboard-focus.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+    },
+    {
+      "filename": "long-content-filename.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+    },
+    {
+      "filename": "long-content-summary.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Actual 950-character synthetic Short summary is visible across wrapped paragraphs; the fixture was restored."
+    },
+    {
+      "filename": "long-content-title.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Long synthetic project title wraps across multiple lines without covering the status or section navigation."
+    },
+    {
+      "filename": "multi-select-search-focus.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "The Disciplines popover is open and its Search disciplines input has a visible focus ring."
+    },
+    {
+      "filename": "participant-preview-browser-zoom-200.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview reflowed at genuine 200% Chrome host zoom; controls accessible without horizontal page overflow."
+    },
+    {
+      "filename": "participant-preview-controlled-failure.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Preview Unavailable boundary page is visible; no active preview behavior is claimed."
+    },
+    {
+      "filename": "participant-preview-mobile-375px.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview layout and touch targets at 375x812 CSS mobile viewport with zero horizontal overflow."
+    },
+    {
+      "filename": "participant-preview-reading-order.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview showing project evidence preceding response section in DOM reading order."
+    },
+    {
+      "filename": "participant-preview-validation-failure.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview with Request corrections disclosure open, empty comment field focused, and visible HTML5 constraint validation bubble ('Please fill out this field.')."
+    },
+    {
+      "filename": "project-detail-browser-zoom-200.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Project detail page reflowed at genuine 200% Chrome host zoom without unexpected horizontal overflow."
+    },
+    {
+      "filename": "project-detail-controlled-failure.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Project information shows its error summary plus the required-title field error."
+    },
+    {
+      "filename": "project-detail-dialog-focus-restore.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+    },
+    {
+      "filename": "project-detail-disclosure-focus.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Technical configuration disclosure is expanded and its summary has a visible focus ring."
+    },
+    {
+      "filename": "project-detail-mobile-375px.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+    },
+    {
+      "filename": "projects-index-200pct-zoom.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+    },
+    {
+      "filename": "projects-index-browser-zoom-200.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Projects dashboard reflowed at genuine 200% Chrome host zoom without unexpected horizontal overflow."
+    },
+    {
+      "filename": "projects-index-desktop-keyboard.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+    },
+    {
+      "filename": "projects-index-mobile-375px.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+    },
+    {
+      "filename": "public-feed-keyboard-focus.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+    },
+    {
+      "filename": "role-availability-admin-vs-reviewer.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Reviewer Projects page omits New import."
+    },
+    {
+      "filename": "role-denied-action-staff-ui.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Reviewer direct Staff access route displays Access denied."
+    },
+    {
+      "filename": "skip-link-after.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Current Projects page; the focused Skip to main content link is visible."
+    },
+    {
+      "filename": "staff-access-keyboard-focus.png",
+      "acceptanceUse": "context-only",
+      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+    }
+  ]
+}

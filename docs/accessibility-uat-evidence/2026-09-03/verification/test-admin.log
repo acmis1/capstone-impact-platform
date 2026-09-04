@@ -1,0 +1,44 @@
+
+> admin-cms@0.1.0 test:run
+> vitest run
+
+
+ RUN  v4.1.10 D:/IT RMIT/Capstone/.worktrees/accessibility-uat-final-evidence/apps/admin-cms
+
+ ❯ src/security/postgres17MaintainPrivilegeAlignmentMigration.test.ts (12 tests | 1 failed) 9487ms
+     × leaves every migration through 0048 byte-identical to its introduction baseline 8944ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+[Browser Import Preview API] unexpected_internal_error
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/security/postgres17MaintainPrivilegeAlignmentMigration.test.ts > PostgreSQL 17 MAINTAIN privilege alignment migration > leaves every migration through 0048 byte-identical to its introduction baseline
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/security/postgres17MaintainPrivilegeAlignmentMigration.test.ts:109:3
+    107|   });
+    108|
+    109|   it('leaves every migration through 0048 byte-identical to its introd…
+       |   ^
+    110|     const baseline = migrationIntroductionBaseline();
+    111|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 284 passed | 1 skipped (286)
+      Tests  1 failed | 4332 passed | 14 skipped (4347)
+   Start at  00:34:10
+   Duration  50.89s (transform 82.49s, setup 0ms, import 258.78s, tests 284.04s, environment 61.43s)
+
+npm error Lifecycle script `test:run` failed with error:
+npm error code 1
+npm error path D:\IT RMIT\Capstone\.worktrees\accessibility-uat-final-evidence\apps\admin-cms
+npm error workspace admin-cms@0.1.0
+npm error location D:\IT RMIT\Capstone\.worktrees\accessibility-uat-final-evidence\apps\admin-cms
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c vitest run

@@ -1,0 +1,2642 @@
+[
+  {
+    "nodeId": "6600",
+    "role": "RootWebArea",
+    "name": "Smart Medical Drone Delivery — Participant Preview",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "6601"
+    ]
+  },
+  {
+    "nodeId": "6601",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6609"
+    ]
+  },
+  {
+    "nodeId": "6609",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6610",
+      "6611",
+      "6615",
+      "6750"
+    ]
+  },
+  {
+    "nodeId": "6610",
+    "role": "link",
+    "name": "Skip to project review",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "6599"
+    ]
+  },
+  {
+    "nodeId": "6611",
+    "role": "banner",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6612"
+    ]
+  },
+  {
+    "nodeId": "6615",
+    "role": "main",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6616",
+      "6633"
+    ]
+  },
+  {
+    "nodeId": "6750",
+    "role": "contentinfo",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6751"
+    ]
+  },
+  {
+    "nodeId": "6599",
+    "role": "StaticText",
+    "name": "Skip to project review",
+    "properties": [],
+    "childIds": [
+      "-1000004959"
+    ]
+  },
+  {
+    "nodeId": "6612",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6613",
+      "6614"
+    ]
+  },
+  {
+    "nodeId": "6613",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6536"
+    ]
+  },
+  {
+    "nodeId": "6614",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6537"
+    ]
+  },
+  {
+    "nodeId": "6616",
+    "role": "sectionheader",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6617",
+      "6618",
+      "6619",
+      "6629",
+      "6630"
+    ]
+  },
+  {
+    "nodeId": "6633",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6634",
+      "6726"
+    ]
+  },
+  {
+    "nodeId": "6634",
+    "role": "article",
+    "name": "Project information to review",
+    "properties": [],
+    "childIds": [
+      "6635",
+      "6649",
+      "6669",
+      "6681",
+      "6715"
+    ]
+  },
+  {
+    "nodeId": "6726",
+    "role": "complementary",
+    "name": "Your Response",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "6727"
+    ]
+  },
+  {
+    "nodeId": "6751",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6598"
+    ]
+  },
+  {
+    "nodeId": "-1000004959",
+    "role": "InlineTextBox",
+    "name": "Skip to project review",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6536",
+    "role": "StaticText",
+    "name": "Capstone project review",
+    "properties": [],
+    "childIds": [
+      "-1000004884"
+    ]
+  },
+  {
+    "nodeId": "6537",
+    "role": "StaticText",
+    "name": "Private participant preview",
+    "properties": [],
+    "childIds": [
+      "-1000005469"
+    ]
+  },
+  {
+    "nodeId": "6617",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6518"
+    ]
+  },
+  {
+    "nodeId": "6618",
+    "role": "heading",
+    "name": "Smart Medical Drone Delivery",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "6538"
+    ]
+  },
+  {
+    "nodeId": "6619",
+    "role": "DescriptionList",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6620",
+      "6623",
+      "6626"
+    ]
+  },
+  {
+    "nodeId": "6629",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6542"
+    ]
+  },
+  {
+    "nodeId": "6630",
+    "role": "note",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6631",
+      "6632"
+    ]
+  },
+  {
+    "nodeId": "6635",
+    "role": "region",
+    "name": "Project overview",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "6636",
+      "6639"
+    ]
+  },
+  {
+    "nodeId": "6649",
+    "role": "region",
+    "name": "Project media",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "6650",
+      "6654",
+      "6662"
+    ]
+  },
+  {
+    "nodeId": "6669",
+    "role": "region",
+    "name": "Poster content in text",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "6670",
+      "6674"
+    ]
+  },
+  {
+    "nodeId": "6681",
+    "role": "region",
+    "name": "Project and team details",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "6682",
+      "6685"
+    ]
+  },
+  {
+    "nodeId": "6715",
+    "role": "region",
+    "name": "References and links",
+    "properties": [
+      {
+        "name": "labelledby"
+      }
+    ],
+    "childIds": [
+      "6716",
+      "6719"
+    ]
+  },
+  {
+    "nodeId": "6727",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6728",
+      "6729",
+      "6730",
+      "6731",
+      "6736",
+      "6749"
+    ]
+  },
+  {
+    "nodeId": "6598",
+    "role": "StaticText",
+    "name": "This private preview is provided for project review only. Contact your project coordinator if you need help.",
+    "properties": [],
+    "childIds": [
+      "-1000005518"
+    ]
+  },
+  {
+    "nodeId": "-1000004884",
+    "role": "InlineTextBox",
+    "name": "Capstone project review",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005469",
+    "role": "InlineTextBox",
+    "name": "Private participant preview",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6518",
+    "role": "StaticText",
+    "name": "REVIEW THIS PROJECT",
+    "properties": [],
+    "childIds": [
+      "-1000005470"
+    ]
+  },
+  {
+    "nodeId": "6538",
+    "role": "StaticText",
+    "name": "Smart Medical Drone Delivery",
+    "properties": [],
+    "childIds": [
+      "-1000005471"
+    ]
+  },
+  {
+    "nodeId": "6620",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6621",
+      "6622"
+    ]
+  },
+  {
+    "nodeId": "6621",
+    "role": "term",
+    "name": "YEAR",
+    "properties": [],
+    "childIds": [
+      "6519"
+    ]
+  },
+  {
+    "nodeId": "6622",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6539"
+    ]
+  },
+  {
+    "nodeId": "6623",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6624",
+      "6625"
+    ]
+  },
+  {
+    "nodeId": "6624",
+    "role": "term",
+    "name": "PROGRAM",
+    "properties": [],
+    "childIds": [
+      "6520"
+    ]
+  },
+  {
+    "nodeId": "6625",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6540"
+    ]
+  },
+  {
+    "nodeId": "6626",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6627",
+      "6628"
+    ]
+  },
+  {
+    "nodeId": "6627",
+    "role": "term",
+    "name": "DISCIPLINE",
+    "properties": [],
+    "childIds": [
+      "6521"
+    ]
+  },
+  {
+    "nodeId": "6628",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6541"
+    ]
+  },
+  {
+    "nodeId": "6542",
+    "role": "StaticText",
+    "name": "Please check the project information, media and accessible text below. Your response applies only to this exact preview version.",
+    "properties": [],
+    "childIds": [
+      "-1000005474",
+      "-1000005475"
+    ]
+  },
+  {
+    "nodeId": "6631",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6543"
+    ]
+  },
+  {
+    "nodeId": "6632",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6544"
+    ]
+  },
+  {
+    "nodeId": "6636",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6637",
+      "6638"
+    ]
+  },
+  {
+    "nodeId": "6637",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6522"
+    ]
+  },
+  {
+    "nodeId": "6638",
+    "role": "heading",
+    "name": "Project overview",
+    "properties": [
+      {
+        "name": "level",
+        "value": 2
+      }
+    ],
+    "childIds": [
+      "6558"
+    ]
+  },
+  {
+    "nodeId": "6639",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6640",
+      "6643",
+      "6646"
+    ]
+  },
+  {
+    "nodeId": "6640",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6641",
+      "6642"
+    ]
+  },
+  {
+    "nodeId": "6643",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6644",
+      "6645"
+    ]
+  },
+  {
+    "nodeId": "6646",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6647",
+      "6648"
+    ]
+  },
+  {
+    "nodeId": "6650",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6651",
+      "6652",
+      "6653"
+    ]
+  },
+  {
+    "nodeId": "6651",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6523"
+    ]
+  },
+  {
+    "nodeId": "6652",
+    "role": "heading",
+    "name": "Project media",
+    "properties": [
+      {
+        "name": "level",
+        "value": 2
+      }
+    ],
+    "childIds": [
+      "6565"
+    ]
+  },
+  {
+    "nodeId": "6653",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6566"
+    ]
+  },
+  {
+    "nodeId": "6654",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6655"
+    ]
+  },
+  {
+    "nodeId": "6655",
+    "role": "figure",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6656",
+      "6661"
+    ]
+  },
+  {
+    "nodeId": "6662",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6663",
+      "6664"
+    ]
+  },
+  {
+    "nodeId": "6663",
+    "role": "heading",
+    "name": "Project documents",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6569"
+    ]
+  },
+  {
+    "nodeId": "6664",
+    "role": "list",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6665"
+    ]
+  },
+  {
+    "nodeId": "6670",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6671",
+      "6672",
+      "6673"
+    ]
+  },
+  {
+    "nodeId": "6671",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6524"
+    ]
+  },
+  {
+    "nodeId": "6672",
+    "role": "heading",
+    "name": "Poster content in text",
+    "properties": [
+      {
+        "name": "level",
+        "value": 2
+      }
+    ],
+    "childIds": [
+      "6572"
+    ]
+  },
+  {
+    "nodeId": "6673",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6573"
+    ]
+  },
+  {
+    "nodeId": "6674",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6675",
+      "6678"
+    ]
+  },
+  {
+    "nodeId": "6675",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6676",
+      "6677"
+    ]
+  },
+  {
+    "nodeId": "6678",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6679",
+      "6680"
+    ]
+  },
+  {
+    "nodeId": "6682",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6683",
+      "6684"
+    ]
+  },
+  {
+    "nodeId": "6683",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6525"
+    ]
+  },
+  {
+    "nodeId": "6684",
+    "role": "heading",
+    "name": "Project and team details",
+    "properties": [
+      {
+        "name": "level",
+        "value": 2
+      }
+    ],
+    "childIds": [
+      "6578"
+    ]
+  },
+  {
+    "nodeId": "6685",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6686",
+      "6697",
+      "6708"
+    ]
+  },
+  {
+    "nodeId": "6686",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6687",
+      "6688"
+    ]
+  },
+  {
+    "nodeId": "6697",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6698",
+      "6699"
+    ]
+  },
+  {
+    "nodeId": "6708",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6709",
+      "6710",
+      "6712"
+    ]
+  },
+  {
+    "nodeId": "6716",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6717",
+      "6718"
+    ]
+  },
+  {
+    "nodeId": "6717",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6531"
+    ]
+  },
+  {
+    "nodeId": "6718",
+    "role": "heading",
+    "name": "References and links",
+    "properties": [
+      {
+        "name": "level",
+        "value": 2
+      }
+    ],
+    "childIds": [
+      "6593"
+    ]
+  },
+  {
+    "nodeId": "6719",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6720",
+      "6723"
+    ]
+  },
+  {
+    "nodeId": "6720",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6721",
+      "6722"
+    ]
+  },
+  {
+    "nodeId": "6723",
+    "role": "generic",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6724",
+      "6725"
+    ]
+  },
+  {
+    "nodeId": "6728",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6532"
+    ]
+  },
+  {
+    "nodeId": "6729",
+    "role": "heading",
+    "name": "Your Response",
+    "properties": [
+      {
+        "name": "level",
+        "value": 2
+      }
+    ],
+    "childIds": [
+      "6545"
+    ]
+  },
+  {
+    "nodeId": "6730",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6546"
+    ]
+  },
+  {
+    "nodeId": "6731",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6732",
+      "6733",
+      "6533"
+    ]
+  },
+  {
+    "nodeId": "6732",
+    "role": "heading",
+    "name": "Everything is correct",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6547"
+    ]
+  },
+  {
+    "nodeId": "6733",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6548"
+    ]
+  },
+  {
+    "nodeId": "6533",
+    "role": "form",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6735"
+    ]
+  },
+  {
+    "nodeId": "6736",
+    "role": "group",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6737",
+      "6739"
+    ]
+  },
+  {
+    "nodeId": "6749",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6557"
+    ]
+  },
+  {
+    "nodeId": "-1000005518",
+    "role": "InlineTextBox",
+    "name": "This private preview is provided for project review only. Contact your project coordinator if you need help.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005470",
+    "role": "InlineTextBox",
+    "name": "REVIEW THIS PROJECT",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005471",
+    "role": "InlineTextBox",
+    "name": "Smart Medical Drone Delivery",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6519",
+    "role": "StaticText",
+    "name": "YEAR",
+    "properties": [],
+    "childIds": [
+      "-1000005472"
+    ]
+  },
+  {
+    "nodeId": "6539",
+    "role": "StaticText",
+    "name": "2026",
+    "properties": [],
+    "childIds": [
+      "-1000005473"
+    ]
+  },
+  {
+    "nodeId": "6520",
+    "role": "StaticText",
+    "name": "PROGRAM",
+    "properties": [],
+    "childIds": [
+      "-1000005403"
+    ]
+  },
+  {
+    "nodeId": "6540",
+    "role": "StaticText",
+    "name": "Bachelor of Engineering",
+    "properties": [],
+    "childIds": [
+      "-1000005404"
+    ]
+  },
+  {
+    "nodeId": "6521",
+    "role": "StaticText",
+    "name": "DISCIPLINE",
+    "properties": [],
+    "childIds": [
+      "-1000005405"
+    ]
+  },
+  {
+    "nodeId": "6541",
+    "role": "StaticText",
+    "name": "Mechanical Engineering",
+    "properties": [],
+    "childIds": [
+      "-1000005406"
+    ]
+  },
+  {
+    "nodeId": "-1000005474",
+    "role": "InlineTextBox",
+    "name": "Please check the project information, media and accessible text below. Your response ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005475",
+    "role": "InlineTextBox",
+    "name": "applies only to this exact preview version.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6543",
+    "role": "StaticText",
+    "name": "This is a private preview prepared for the project team.",
+    "properties": [],
+    "childIds": [
+      "-1000005476"
+    ]
+  },
+  {
+    "nodeId": "6544",
+    "role": "StaticText",
+    "name": "It is not publicly listed or searchable. Confirmation does not publish the project.",
+    "properties": [],
+    "childIds": [
+      "-1000005477"
+    ]
+  },
+  {
+    "nodeId": "6522",
+    "role": "StaticText",
+    "name": "PROJECT EVIDENCE",
+    "properties": [],
+    "childIds": [
+      "-1000005423"
+    ]
+  },
+  {
+    "nodeId": "6558",
+    "role": "StaticText",
+    "name": "Project overview",
+    "properties": [],
+    "childIds": [
+      "-1000005484"
+    ]
+  },
+  {
+    "nodeId": "6641",
+    "role": "heading",
+    "name": "Summary",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6559"
+    ]
+  },
+  {
+    "nodeId": "6642",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6560"
+    ]
+  },
+  {
+    "nodeId": "6644",
+    "role": "heading",
+    "name": "Background",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6561"
+    ]
+  },
+  {
+    "nodeId": "6645",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6562"
+    ]
+  },
+  {
+    "nodeId": "6647",
+    "role": "heading",
+    "name": "Solution",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6563"
+    ]
+  },
+  {
+    "nodeId": "6648",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6564"
+    ]
+  },
+  {
+    "nodeId": "6523",
+    "role": "StaticText",
+    "name": "VISUAL AND DOCUMENT EVIDENCE",
+    "properties": [],
+    "childIds": [
+      "-1000005431"
+    ]
+  },
+  {
+    "nodeId": "6565",
+    "role": "StaticText",
+    "name": "Project media",
+    "properties": [],
+    "childIds": [
+      "-1000005489"
+    ]
+  },
+  {
+    "nodeId": "6566",
+    "role": "StaticText",
+    "name": "Review the poster, supporting images and documents as part of this exact private preview.",
+    "properties": [],
+    "childIds": [
+      "-1000005433",
+      "-1000005434"
+    ]
+  },
+  {
+    "nodeId": "6656",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6657"
+    ]
+  },
+  {
+    "nodeId": "6657",
+    "role": "image",
+    "name": "Infographic depicting drone models with insulated internal temperature chambers.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6661",
+    "role": "Figcaption",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6568"
+    ]
+  },
+  {
+    "nodeId": "6569",
+    "role": "StaticText",
+    "name": "Project documents",
+    "properties": [],
+    "childIds": [
+      "-1000005490"
+    ]
+  },
+  {
+    "nodeId": "6665",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "6666"
+    ]
+  },
+  {
+    "nodeId": "6524",
+    "role": "StaticText",
+    "name": "ACCESSIBLE REVIEW EVIDENCE",
+    "properties": [],
+    "childIds": [
+      "-1000005438"
+    ]
+  },
+  {
+    "nodeId": "6572",
+    "role": "StaticText",
+    "name": "Poster content in text",
+    "properties": [],
+    "childIds": [
+      "-1000005491"
+    ]
+  },
+  {
+    "nodeId": "6573",
+    "role": "StaticText",
+    "name": "These text versions are part of the exact preview you are reviewing and confirming.",
+    "properties": [],
+    "childIds": [
+      "-1000005440"
+    ]
+  },
+  {
+    "nodeId": "6676",
+    "role": "heading",
+    "name": "Poster Full Text",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6574"
+    ]
+  },
+  {
+    "nodeId": "6677",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6575"
+    ]
+  },
+  {
+    "nodeId": "6679",
+    "role": "heading",
+    "name": "Accessibility Description",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6576"
+    ]
+  },
+  {
+    "nodeId": "6680",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6577"
+    ]
+  },
+  {
+    "nodeId": "6525",
+    "role": "StaticText",
+    "name": "PEOPLE AND CONTEXT",
+    "properties": [],
+    "childIds": [
+      "-1000005445"
+    ]
+  },
+  {
+    "nodeId": "6578",
+    "role": "StaticText",
+    "name": "Project and team details",
+    "properties": [],
+    "childIds": [
+      "-1000005497"
+    ]
+  },
+  {
+    "nodeId": "6687",
+    "role": "heading",
+    "name": "Academic context",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6579"
+    ]
+  },
+  {
+    "nodeId": "6688",
+    "role": "DescriptionList",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6689",
+      "6692"
+    ]
+  },
+  {
+    "nodeId": "6698",
+    "role": "heading",
+    "name": "Industry context",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6583"
+    ]
+  },
+  {
+    "nodeId": "6699",
+    "role": "DescriptionList",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6700",
+      "6703"
+    ]
+  },
+  {
+    "nodeId": "6709",
+    "role": "heading",
+    "name": "Project team",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6587"
+    ]
+  },
+  {
+    "nodeId": "6710",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6711",
+      "6588"
+    ]
+  },
+  {
+    "nodeId": "6711",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6530"
+    ]
+  },
+  {
+    "nodeId": "6530",
+    "role": "StaticText",
+    "name": "GROUP",
+    "properties": [],
+    "childIds": [
+      "-1000005499"
+    ]
+  },
+  {
+    "nodeId": "6588",
+    "role": "StaticText",
+    "name": "AeroMed Delivery (Synthetic)",
+    "properties": [],
+    "childIds": [
+      "-1000005500"
+    ]
+  },
+  {
+    "nodeId": "6712",
+    "role": "list",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6713",
+      "6714"
+    ]
+  },
+  {
+    "nodeId": "6531",
+    "role": "StaticText",
+    "name": "SOURCES AND FURTHER READING",
+    "properties": [],
+    "childIds": [
+      "-1000005462"
+    ]
+  },
+  {
+    "nodeId": "6593",
+    "role": "StaticText",
+    "name": "References and links",
+    "properties": [],
+    "childIds": [
+      "-1000005513"
+    ]
+  },
+  {
+    "nodeId": "6721",
+    "role": "heading",
+    "name": "Citations",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6594"
+    ]
+  },
+  {
+    "nodeId": "6722",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6595"
+    ]
+  },
+  {
+    "nodeId": "6724",
+    "role": "heading",
+    "name": "External links",
+    "properties": [
+      {
+        "name": "level",
+        "value": 3
+      }
+    ],
+    "childIds": [
+      "6596"
+    ]
+  },
+  {
+    "nodeId": "6725",
+    "role": "paragraph",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6597"
+    ]
+  },
+  {
+    "nodeId": "6532",
+    "role": "StaticText",
+    "name": "DECISION",
+    "properties": [],
+    "childIds": [
+      "-1000005411"
+    ]
+  },
+  {
+    "nodeId": "6545",
+    "role": "StaticText",
+    "name": "Your Response",
+    "properties": [],
+    "childIds": [
+      "-1000005478"
+    ]
+  },
+  {
+    "nodeId": "6546",
+    "role": "StaticText",
+    "name": "Review all project information and media above before choosing a response.",
+    "properties": [],
+    "childIds": [
+      "-1000005413",
+      "-1000005414"
+    ]
+  },
+  {
+    "nodeId": "6547",
+    "role": "StaticText",
+    "name": "Everything is correct",
+    "properties": [],
+    "childIds": [
+      "-1000005479"
+    ]
+  },
+  {
+    "nodeId": "6548",
+    "role": "StaticText",
+    "name": "Confirm that the information in this exact preview is ready for staff to continue reviewing.",
+    "properties": [],
+    "childIds": [
+      "-1000005480",
+      "-1000005481",
+      "-1000005482"
+    ]
+  },
+  {
+    "nodeId": "6735",
+    "role": "button",
+    "name": "Confirm project details",
+    "properties": [
+      {
+        "name": "invalid",
+        "value": "false"
+      },
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "6549"
+    ]
+  },
+  {
+    "nodeId": "6737",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6741"
+    ]
+  },
+  {
+    "nodeId": "6741",
+    "role": "DisclosureTriangle",
+    "name": "Request corrections",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      },
+      {
+        "name": "expanded",
+        "value": false
+      }
+    ],
+    "childIds": [
+      "6550",
+      "6551"
+    ]
+  },
+  {
+    "nodeId": "6739",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6557",
+    "role": "StaticText",
+    "name": "Neither response publishes the project. Staff manage publication separately.",
+    "properties": [],
+    "childIds": [
+      "-1000005421",
+      "-1000005422"
+    ]
+  },
+  {
+    "nodeId": "-1000005472",
+    "role": "InlineTextBox",
+    "name": "YEAR",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005473",
+    "role": "InlineTextBox",
+    "name": "2026",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005403",
+    "role": "InlineTextBox",
+    "name": "PROGRAM",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005404",
+    "role": "InlineTextBox",
+    "name": "Bachelor of Engineering",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005405",
+    "role": "InlineTextBox",
+    "name": "DISCIPLINE",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005406",
+    "role": "InlineTextBox",
+    "name": "Mechanical Engineering",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005476",
+    "role": "InlineTextBox",
+    "name": "This is a private preview prepared for the project team.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005477",
+    "role": "InlineTextBox",
+    "name": "It is not publicly listed or searchable. Confirmation does not publish the project.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005423",
+    "role": "InlineTextBox",
+    "name": "PROJECT EVIDENCE",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005484",
+    "role": "InlineTextBox",
+    "name": "Project overview",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6559",
+    "role": "StaticText",
+    "name": "Summary",
+    "properties": [],
+    "childIds": [
+      "-1000005425"
+    ]
+  },
+  {
+    "nodeId": "6560",
+    "role": "StaticText",
+    "name": "Automating high-speed delivery of critical medical parcels in rural regions.",
+    "properties": [],
+    "childIds": [
+      "-1000005485"
+    ]
+  },
+  {
+    "nodeId": "6561",
+    "role": "StaticText",
+    "name": "Background",
+    "properties": [],
+    "childIds": [
+      "-1000005427"
+    ]
+  },
+  {
+    "nodeId": "6562",
+    "role": "StaticText",
+    "name": "Medical centers in mountainous areas experience prolonged wait times for vital cargo.",
+    "properties": [],
+    "childIds": [
+      "-1000005486",
+      "-1000005487"
+    ]
+  },
+  {
+    "nodeId": "6563",
+    "role": "StaticText",
+    "name": "Solution",
+    "properties": [],
+    "childIds": [
+      "-1000005429"
+    ]
+  },
+  {
+    "nodeId": "6564",
+    "role": "StaticText",
+    "name": "Designed an autonomous medical payload carrier utilizing static flight vectors.",
+    "properties": [],
+    "childIds": [
+      "-1000005488"
+    ]
+  },
+  {
+    "nodeId": "-1000005431",
+    "role": "InlineTextBox",
+    "name": "VISUAL AND DOCUMENT EVIDENCE",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005489",
+    "role": "InlineTextBox",
+    "name": "Project media",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005433",
+    "role": "InlineTextBox",
+    "name": "Review the poster, supporting images and documents as part of this exact private ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005434",
+    "role": "InlineTextBox",
+    "name": "preview.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6568",
+    "role": "StaticText",
+    "name": "Project poster",
+    "properties": [],
+    "childIds": [
+      "-1000005435"
+    ]
+  },
+  {
+    "nodeId": "-1000005490",
+    "role": "InlineTextBox",
+    "name": "Project documents",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6666",
+    "role": "link",
+    "name": "poster.pdf Open document in a new tab",
+    "properties": [
+      {
+        "name": "focusable",
+        "value": true
+      }
+    ],
+    "childIds": [
+      "6667",
+      "6668"
+    ]
+  },
+  {
+    "nodeId": "-1000005438",
+    "role": "InlineTextBox",
+    "name": "ACCESSIBLE REVIEW EVIDENCE",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005491",
+    "role": "InlineTextBox",
+    "name": "Poster content in text",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005440",
+    "role": "InlineTextBox",
+    "name": "These text versions are part of the exact preview you are reviewing and confirming.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6574",
+    "role": "StaticText",
+    "name": "Poster Full Text",
+    "properties": [],
+    "childIds": [
+      "-1000005492"
+    ]
+  },
+  {
+    "nodeId": "6575",
+    "role": "StaticText",
+    "name": "AeroMed Cargo Delivery. Safe mountain routing.",
+    "properties": [],
+    "childIds": [
+      "-1000005493"
+    ]
+  },
+  {
+    "nodeId": "6576",
+    "role": "StaticText",
+    "name": "Accessibility Description",
+    "properties": [],
+    "childIds": [
+      "-1000005494"
+    ]
+  },
+  {
+    "nodeId": "6577",
+    "role": "StaticText",
+    "name": "Infographic depicting drone models with insulated internal temperature chambers.",
+    "properties": [],
+    "childIds": [
+      "-1000005495",
+      "-1000005496"
+    ]
+  },
+  {
+    "nodeId": "-1000005445",
+    "role": "InlineTextBox",
+    "name": "PEOPLE AND CONTEXT",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005497",
+    "role": "InlineTextBox",
+    "name": "Project and team details",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6579",
+    "role": "StaticText",
+    "name": "Academic context",
+    "properties": [],
+    "childIds": [
+      "-1000005503"
+    ]
+  },
+  {
+    "nodeId": "6689",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6690",
+      "6691"
+    ]
+  },
+  {
+    "nodeId": "6690",
+    "role": "term",
+    "name": "ACADEMIC SUPERVISOR",
+    "properties": [],
+    "childIds": [
+      "6526"
+    ]
+  },
+  {
+    "nodeId": "6691",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6580"
+    ]
+  },
+  {
+    "nodeId": "6692",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6693",
+      "6694"
+    ]
+  },
+  {
+    "nodeId": "6693",
+    "role": "term",
+    "name": "DISCIPLINES",
+    "properties": [],
+    "childIds": [
+      "6527"
+    ]
+  },
+  {
+    "nodeId": "6694",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6695"
+    ]
+  },
+  {
+    "nodeId": "6583",
+    "role": "StaticText",
+    "name": "Industry context",
+    "properties": [],
+    "childIds": [
+      "-1000005508"
+    ]
+  },
+  {
+    "nodeId": "6700",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6701",
+      "6702"
+    ]
+  },
+  {
+    "nodeId": "6701",
+    "role": "term",
+    "name": "INDUSTRY PARTNER",
+    "properties": [],
+    "childIds": [
+      "6528"
+    ]
+  },
+  {
+    "nodeId": "6702",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6584"
+    ]
+  },
+  {
+    "nodeId": "6703",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6704",
+      "6705"
+    ]
+  },
+  {
+    "nodeId": "6704",
+    "role": "term",
+    "name": "INDUSTRY CATEGORIES",
+    "properties": [],
+    "childIds": [
+      "6529"
+    ]
+  },
+  {
+    "nodeId": "6705",
+    "role": "definition",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6706"
+    ]
+  },
+  {
+    "nodeId": "6587",
+    "role": "StaticText",
+    "name": "Project team",
+    "properties": [],
+    "childIds": [
+      "-1000005498"
+    ]
+  },
+  {
+    "nodeId": "-1000005499",
+    "role": "InlineTextBox",
+    "name": "GROUP",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005500",
+    "role": "InlineTextBox",
+    "name": "AeroMed Delivery (Synthetic)",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6713",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "6589",
+      "6590"
+    ]
+  },
+  {
+    "nodeId": "6714",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "6591",
+      "6592"
+    ]
+  },
+  {
+    "nodeId": "-1000005462",
+    "role": "InlineTextBox",
+    "name": "SOURCES AND FURTHER READING",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005513",
+    "role": "InlineTextBox",
+    "name": "References and links",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6594",
+    "role": "StaticText",
+    "name": "Citations",
+    "properties": [],
+    "childIds": [
+      "-1000005514"
+    ]
+  },
+  {
+    "nodeId": "6595",
+    "role": "StaticText",
+    "name": "None listed.",
+    "properties": [],
+    "childIds": [
+      "-1000005515"
+    ]
+  },
+  {
+    "nodeId": "6596",
+    "role": "StaticText",
+    "name": "External links",
+    "properties": [],
+    "childIds": [
+      "-1000005516"
+    ]
+  },
+  {
+    "nodeId": "6597",
+    "role": "StaticText",
+    "name": "None listed.",
+    "properties": [],
+    "childIds": [
+      "-1000005517"
+    ]
+  },
+  {
+    "nodeId": "-1000005411",
+    "role": "InlineTextBox",
+    "name": "DECISION",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005478",
+    "role": "InlineTextBox",
+    "name": "Your Response",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005413",
+    "role": "InlineTextBox",
+    "name": "Review all project information and media ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005414",
+    "role": "InlineTextBox",
+    "name": "above before choosing a response.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005479",
+    "role": "InlineTextBox",
+    "name": "Everything is correct",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005480",
+    "role": "InlineTextBox",
+    "name": "Confirm that the information in this ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005481",
+    "role": "InlineTextBox",
+    "name": "exact preview is ready for staff to ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005482",
+    "role": "InlineTextBox",
+    "name": "continue reviewing.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6549",
+    "role": "StaticText",
+    "name": "Confirm project details",
+    "properties": [],
+    "childIds": [
+      "-1000005483"
+    ]
+  },
+  {
+    "nodeId": "6550",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "-1000005388"
+    ]
+  },
+  {
+    "nodeId": "-1000005388",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6551",
+    "role": "StaticText",
+    "name": "Request corrections",
+    "properties": [],
+    "childIds": [
+      "-1000005420"
+    ]
+  },
+  {
+    "nodeId": "-1000005421",
+    "role": "InlineTextBox",
+    "name": "Neither response publishes the project. Staff ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005422",
+    "role": "InlineTextBox",
+    "name": "manage publication separately.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005425",
+    "role": "InlineTextBox",
+    "name": "Summary",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005485",
+    "role": "InlineTextBox",
+    "name": "Automating high-speed delivery of critical medical parcels in rural regions.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005427",
+    "role": "InlineTextBox",
+    "name": "Background",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005486",
+    "role": "InlineTextBox",
+    "name": "Medical centers in mountainous areas experience prolonged wait times for vital ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005487",
+    "role": "InlineTextBox",
+    "name": "cargo.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005429",
+    "role": "InlineTextBox",
+    "name": "Solution",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005488",
+    "role": "InlineTextBox",
+    "name": "Designed an autonomous medical payload carrier utilizing static flight vectors.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005435",
+    "role": "InlineTextBox",
+    "name": "Project poster",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6667",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6570"
+    ]
+  },
+  {
+    "nodeId": "6570",
+    "role": "StaticText",
+    "name": "poster.pdf",
+    "properties": [],
+    "childIds": [
+      "-1000004925"
+    ]
+  },
+  {
+    "nodeId": "6668",
+    "role": "none",
+    "properties": [],
+    "childIds": [
+      "6571"
+    ]
+  },
+  {
+    "nodeId": "6571",
+    "role": "StaticText",
+    "name": "Open document in a new tab",
+    "properties": [],
+    "childIds": [
+      "-1000005437"
+    ]
+  },
+  {
+    "nodeId": "-1000005492",
+    "role": "InlineTextBox",
+    "name": "Poster Full Text",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005493",
+    "role": "InlineTextBox",
+    "name": "AeroMed Cargo Delivery. Safe mountain routing.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005494",
+    "role": "InlineTextBox",
+    "name": "Accessibility Description",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005495",
+    "role": "InlineTextBox",
+    "name": "Infographic depicting drone models with insulated internal temperature ",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005496",
+    "role": "InlineTextBox",
+    "name": "chambers.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005503",
+    "role": "InlineTextBox",
+    "name": "Academic context",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6526",
+    "role": "StaticText",
+    "name": "ACADEMIC SUPERVISOR",
+    "properties": [],
+    "childIds": [
+      "-1000005504"
+    ]
+  },
+  {
+    "nodeId": "6580",
+    "role": "StaticText",
+    "name": "Dr. Academic Supervisor B (Synthetic)",
+    "properties": [],
+    "childIds": [
+      "-1000005505"
+    ]
+  },
+  {
+    "nodeId": "6527",
+    "role": "StaticText",
+    "name": "DISCIPLINES",
+    "properties": [],
+    "childIds": [
+      "-1000005506"
+    ]
+  },
+  {
+    "nodeId": "6695",
+    "role": "list",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6696"
+    ]
+  },
+  {
+    "nodeId": "-1000005508",
+    "role": "InlineTextBox",
+    "name": "Industry context",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6528",
+    "role": "StaticText",
+    "name": "INDUSTRY PARTNER",
+    "properties": [],
+    "childIds": [
+      "-1000005509"
+    ]
+  },
+  {
+    "nodeId": "6584",
+    "role": "StaticText",
+    "name": "Mountain Med-Kit Corp (Synthetic)",
+    "properties": [],
+    "childIds": [
+      "-1000005510"
+    ]
+  },
+  {
+    "nodeId": "6529",
+    "role": "StaticText",
+    "name": "INDUSTRY CATEGORIES",
+    "properties": [],
+    "childIds": [
+      "-1000005511"
+    ]
+  },
+  {
+    "nodeId": "6706",
+    "role": "list",
+    "name": "",
+    "properties": [],
+    "childIds": [
+      "6707"
+    ]
+  },
+  {
+    "nodeId": "-1000005498",
+    "role": "InlineTextBox",
+    "name": "Project team",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6589",
+    "role": "ListMarker",
+    "name": "• ",
+    "properties": [],
+    "childIds": [
+      "-1000005384"
+    ]
+  },
+  {
+    "nodeId": "6590",
+    "role": "StaticText",
+    "name": "Synthetic Member 3",
+    "properties": [],
+    "childIds": [
+      "-1000005501"
+    ]
+  },
+  {
+    "nodeId": "6591",
+    "role": "ListMarker",
+    "name": "• ",
+    "properties": [],
+    "childIds": [
+      "-1000005386"
+    ]
+  },
+  {
+    "nodeId": "6592",
+    "role": "StaticText",
+    "name": "Synthetic Member 4",
+    "properties": [],
+    "childIds": [
+      "-1000005502"
+    ]
+  },
+  {
+    "nodeId": "-1000005514",
+    "role": "InlineTextBox",
+    "name": "Citations",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005515",
+    "role": "InlineTextBox",
+    "name": "None listed.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005516",
+    "role": "InlineTextBox",
+    "name": "External links",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005517",
+    "role": "InlineTextBox",
+    "name": "None listed.",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005483",
+    "role": "InlineTextBox",
+    "name": "Confirm project details",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005420",
+    "role": "InlineTextBox",
+    "name": "Request corrections",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000004925",
+    "role": "InlineTextBox",
+    "name": "poster.pdf",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005437",
+    "role": "InlineTextBox",
+    "name": "Open document in a new tab",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005504",
+    "role": "InlineTextBox",
+    "name": "ACADEMIC SUPERVISOR",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005505",
+    "role": "InlineTextBox",
+    "name": "Dr. Academic Supervisor B (Synthetic)",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005506",
+    "role": "InlineTextBox",
+    "name": "DISCIPLINES",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6696",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "6581",
+      "6582"
+    ]
+  },
+  {
+    "nodeId": "-1000005509",
+    "role": "InlineTextBox",
+    "name": "INDUSTRY PARTNER",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005510",
+    "role": "InlineTextBox",
+    "name": "Mountain Med-Kit Corp (Synthetic)",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005511",
+    "role": "InlineTextBox",
+    "name": "INDUSTRY CATEGORIES",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6707",
+    "role": "listitem",
+    "name": "",
+    "properties": [
+      {
+        "name": "level",
+        "value": 1
+      }
+    ],
+    "childIds": [
+      "6585",
+      "6586"
+    ]
+  },
+  {
+    "nodeId": "-1000005384",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005501",
+    "role": "InlineTextBox",
+    "name": "Synthetic Member 3",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005386",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005502",
+    "role": "InlineTextBox",
+    "name": "Synthetic Member 4",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "6581",
+    "role": "ListMarker",
+    "name": "• ",
+    "properties": [],
+    "childIds": [
+      "-1000005380"
+    ]
+  },
+  {
+    "nodeId": "6582",
+    "role": "StaticText",
+    "name": "Mechanical Engineering",
+    "properties": [],
+    "childIds": [
+      "-1000005507"
+    ]
+  },
+  {
+    "nodeId": "6585",
+    "role": "ListMarker",
+    "name": "• ",
+    "properties": [],
+    "childIds": [
+      "-1000005382"
+    ]
+  },
+  {
+    "nodeId": "6586",
+    "role": "StaticText",
+    "name": "Healthcare",
+    "properties": [],
+    "childIds": [
+      "-1000005512"
+    ]
+  },
+  {
+    "nodeId": "-1000005380",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005507",
+    "role": "InlineTextBox",
+    "name": "Mechanical Engineering",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005382",
+    "role": "none",
+    "properties": [],
+    "childIds": []
+  },
+  {
+    "nodeId": "-1000005512",
+    "role": "InlineTextBox",
+    "name": "Healthcare",
+    "properties": [],
+    "childIds": []
+  }
+]

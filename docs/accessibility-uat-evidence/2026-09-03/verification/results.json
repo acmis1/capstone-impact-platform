@@ -1,0 +1,74 @@
+{
+  "recordedAt": "2026-09-03T17:41:20.770Z",
+  "focused": {
+    "command": "npm run test:run --workspace=apps/admin-cms -- src/lib/designTokenContrast.test.ts src/components/admin-shell/AdminShellClient.test.tsx src/components/ui/__tests__/multi-select.test.tsx src/scripts/verifyAccessibilityUatEvidence.test.ts src/components/admin-dashboard/projectIndexStates.test.tsx src/components/admin-dashboard/BulkProjectReviewPanel.test.tsx src/components/imports/__tests__/BrowserImportPreviewClient.test.tsx",
+    "exitCode": 0,
+    "testFilesPassed": 7,
+    "testsPassed": 118
+  },
+  "typecheck": {
+    "command": "npm run typecheck:admin",
+    "exitCode": 0
+  },
+  "lint": {
+    "command": "npm run lint --workspace=apps/admin-cms",
+    "exitCode": 0,
+    "errors": 0,
+    "warnings": 6
+  },
+  "build": {
+    "command": "npm run build:admin",
+    "exitCode": 0
+  },
+  "fullSuite": {
+    "command": "npm run test:run --workspace=apps/admin-cms",
+    "exitCode": 1,
+    "status": "FAIL",
+    "testFiles": {
+      "failed": 1,
+      "passed": 284,
+      "skipped": 1,
+      "total": 286
+    },
+    "tests": {
+      "failed": 1,
+      "passed": 4332,
+      "skipped": 14,
+      "total": 4347
+    },
+    "durationSeconds": 50.89,
+    "unresolved": "5000ms migration-introduction-baseline timeout. Same timeout reproduced on clean origin/main."
+  },
+  "isolatedFailures": {
+    "exitCode": 0,
+    "testFilesPassed": 4,
+    "testsPassed": 102
+  },
+  "priorAttempts": [
+    {
+      "log": "test-admin-attempt1.log",
+      "status": "INTERRUPTED",
+      "reason": "After more than ten minutes with no new output and an idle worker, the task-owned worker was terminated. Result is not PASS; the apparent process exit zero came from termination."
+    },
+    {
+      "log": "focused-expanded-attempt.log",
+      "status": "INTERRUPTED",
+      "reason": "Expanded focused run stalled with the browser-global import probe. Task-owned worker was terminated. Narrower relevant focused run passed; the probe was not changed."
+    }
+  ],
+  "evidenceGate": {
+    "command": "npm run verify:accessibility-uat-evidence",
+    "exitCode": 0,
+    "status": "PASS",
+    "filesScanned": 67,
+    "textFilesScanned": 35,
+    "pngCount": 31,
+    "uniquePngHashes": 30,
+    "findings": 0
+  },
+  "diffCheck": {
+    "command": "git diff --check",
+    "exitCode": 0,
+    "status": "PASS"
+  }
+}

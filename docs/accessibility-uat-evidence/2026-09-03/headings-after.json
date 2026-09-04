@@ -1,0 +1,47 @@
+[
+  {
+    "tag": "H1",
+    "text": "Projects",
+    "id": null
+  },
+  {
+    "tag": "H2",
+    "text": "Project record summary",
+    "id": "project-metrics-heading"
+  },
+  {
+    "tag": "H2",
+    "text": "Find projects",
+    "id": "project-discovery-heading"
+  },
+  {
+    "tag": "H2",
+    "text": "Project results",
+    "id": "project-results-heading"
+  },
+  {
+    "tag": "H3",
+    "text": "Project cards",
+    "id": null
+  },
+  {
+    "tag": "H4",
+    "text": "Agricultural IoT Hydration Roster",
+    "id": null
+  },
+  {
+    "tag": "H4",
+    "text": "Smart Medical Drone Delivery",
+    "id": null
+  },
+  {
+    "tag": "H4",
+    "text": "Dynamic Traffic Optimization Engine",
+    "id": null
+  },
+  {
+    "tag": "H4",
+    "text": "VR Rehabilitation Roster",
+    "id": null
+  }
+]

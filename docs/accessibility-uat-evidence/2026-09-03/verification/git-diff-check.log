@@ -1,0 +1,10 @@
+warning: in the working copy of '.gitattributes', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'ACCESSIBILITY_UAT_CHECKLIST.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/admin-cms/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/admin-cms/src/components/admin-shell/AdminShellClient.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/admin-cms/src/lib/designTokenContrast.test.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/accessibility-uat-evidence/2026-09-03/README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/accessibility-uat-evidence/2026-09-03/contrast-after.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/accessibility-uat-evidence/2026-09-03/contrast-before.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/accessibility-uat-evidence/2026-09-03/headings-before.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it

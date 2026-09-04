@@ -97,6 +97,16 @@ describe('MultiSelect accessible structure', () => {
     expect(group.contains(search)).toBe(false);
   });
 
+  it('gives the search field the design-system focus-visible contract', () => {
+    renderMultiSelect();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Disciplines:/ }));
+    const search = screen.getByLabelText('Search disciplines');
+
+    expect(search.className).toContain('focus-visible:ring-2');
+    expect(search.className).toContain('focus-visible:ring-ring');
+  });
+
   it('names the selected chips and their removal buttons', () => {
     renderMultiSelect({ value: ['disc-1', 'disc-2'] });
 

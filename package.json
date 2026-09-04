@@ -15,6 +15,7 @@
     "dev:admin": "npm run dev --workspace=apps/admin-cms",
     "build:admin": "npm run build --workspace=apps/admin-cms",
     "typecheck:admin": "npm run typecheck --workspace=apps/admin-cms",
+    "verify:accessibility-uat-evidence": "npm run --silent verify:accessibility-uat-evidence --workspace=apps/admin-cms --",
     "check:feed": "npm run check:sample-feed --workspace=apps/admin-cms",
     "benchmark:projects": "npm run benchmark:projects --workspace=apps/admin-cms --",
     "validate:synthetic-imports": "npm run validate:synthetic-imports --workspace=apps/admin-cms --",

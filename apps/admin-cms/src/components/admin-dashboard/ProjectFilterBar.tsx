@@ -261,9 +261,9 @@ export function ProjectFilterBar({
       aria-labelledby="project-discovery-heading"
       className={`${STRUCTURAL_SURFACE_CLASS_NAME} overflow-hidden`}
     >
-      <h3 id="project-discovery-heading" className="sr-only">
+      <h2 id="project-discovery-heading" className="sr-only">
         Find projects
-      </h3>
+      </h2>
 
       <div className="flex flex-col gap-4 p-4">
         <form onSubmit={handleSearchSubmit} className="flex flex-col gap-2">
@@ -384,9 +384,9 @@ export function ProjectFilterBar({
 
         {hasActiveFilters && (
           <div className="flex flex-col gap-2 border-t border-border pt-4">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Active filters
-            </h4>
+            </h3>
             <div className="flex flex-wrap items-center gap-2">
               {query.search && (
                 <FilterToken
