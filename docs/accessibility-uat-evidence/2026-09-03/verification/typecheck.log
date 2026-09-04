@@ -1,0 +1,8 @@
+
+> typecheck:admin
+> npm run typecheck --workspace=apps/admin-cms
+
+
+> admin-cms@0.1.0 typecheck
+> tsc --noEmit
+

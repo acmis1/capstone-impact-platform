@@ -1,0 +1,9 @@
+{
+  "status": 403,
+  "statusText": "Forbidden",
+  "data": {
+    "success": false,
+    "code": "PERMISSION_DENIED",
+    "error": "Access denied."
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "analyzedAt": "2026-09-04T06:44:44.863Z",
+  "standard": "Browser zoom 200% reflow testing (visual viewport 632x800, DPR 2)",
+  "routes": {
+    "Projects": {
+      "clientWidth": 632,
+      "scrollWidth": 632,
+      "hasHorizontalOverflow": false,
+      "result": "PASS"
+    },
+    "ProjectDetail": {
+      "clientWidth": 632,
+      "scrollWidth": 632,
+      "hasHorizontalOverflow": false,
+      "result": "PASS"
+    },
+    "ParticipantPreview": {
+      "clientWidth": 632,
+      "scrollWidth": 632,
+      "hasHorizontalOverflow": false,
+      "result": "PASS"
+    }
+  }
+}

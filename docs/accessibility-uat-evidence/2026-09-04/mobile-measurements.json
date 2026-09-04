@@ -1,0 +1,30 @@
+{
+  "analyzedAt": "2026-09-04T06:44:44.863Z",
+  "standard": "Mobile viewport testing at 375 x 812 CSS px",
+  "routes": {
+    "Projects": {
+      "clientWidth": 375,
+      "scrollWidth": 375,
+      "hasHorizontalOverflow": false,
+      "result": "PASS"
+    },
+    "Import": {
+      "clientWidth": 375,
+      "scrollWidth": 375,
+      "hasHorizontalOverflow": false,
+      "result": "PASS"
+    },
+    "ProjectDetail": {
+      "clientWidth": 375,
+      "scrollWidth": 375,
+      "hasHorizontalOverflow": false,
+      "result": "PASS"
+    },
+    "ParticipantPreview": {
+      "clientWidth": 375,
+      "scrollWidth": 375,
+      "hasHorizontalOverflow": false,
+      "result": "PASS"
+    }
+  }
+}

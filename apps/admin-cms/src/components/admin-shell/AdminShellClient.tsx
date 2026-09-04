@@ -27,7 +27,7 @@ export function AdminShellClient({
       {/* Skip to main content link */}
       <a
         href="#admin-main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-background focus:text-primary focus:outline-none focus:ring-2 focus:ring-ring focus:shadow-md rounded-md font-semibold text-sm"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-background focus:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:shadow-md rounded-md font-semibold text-sm"
       >
         Skip to main content
       </a>

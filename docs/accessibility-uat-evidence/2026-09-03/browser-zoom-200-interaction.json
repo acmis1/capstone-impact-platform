@@ -1,0 +1,89 @@
+{
+  "collectedAt": "2026-09-03T18:58:03.318Z",
+  "hostZoomMethod": "Genuine Google Chrome Browser Host Zoom Preference (partition.per_host_zoom_levels)",
+  "zoomLevelParam": 3.8017840169239308,
+  "calculatedZoomPercent": "200%",
+  "windowDimensions": {
+    "width": 1280,
+    "height": 800
+  },
+  "routes": [
+    {
+      "route": "Projects",
+      "url": "/admin",
+      "metrics": {
+        "dpr": 2,
+        "innerWidth": 632,
+        "innerHeight": 352,
+        "scrollWidth": 624,
+        "clientWidth": 624,
+        "horizontalPageOverflow": false,
+        "visualViewportScale": 1
+      },
+      "controlsExercised": [
+        "Skip to main content",
+        "Open main navigation menu",
+        "Open account menu for Local Synthetic Admin",
+        "New import",
+        "project-search",
+        "Search",
+        "Filters",
+        "102550",
+        "Reset view",
+        "Select current page"
+      ],
+      "keyboardNavigationOutcome": "Search filter input exercised via keyboard; controls remained fully visible and reflowed without unexpected horizontal overflow.",
+      "evidenceScreenshot": "screenshots/projects-index-browser-zoom-200.png"
+    },
+    {
+      "route": "Project Detail",
+      "url": "/admin/projects/2026-medical-drone",
+      "metrics": {
+        "dpr": 2,
+        "innerWidth": 632,
+        "innerHeight": 352,
+        "scrollWidth": 624,
+        "clientWidth": 624,
+        "horizontalPageOverflow": false,
+        "visualViewportScale": 1
+      },
+      "controlsExercised": [
+        "Technical configuration disclosure expanded",
+        "Technical configuration disclosure collapsed"
+      ],
+      "keyboardNavigationOutcome": "Technical disclosure expanded and collapsed via Enter; Edit mode entered; MultiSelect opened and dismissed with Escape with focus restoration; content reflows into single column layout cleanly.",
+      "evidenceScreenshot": "screenshots/project-detail-browser-zoom-200.png"
+    },
+    {
+      "route": "Participant Preview",
+      "url": "[SANITIZED_PARTICIPANT_PREVIEW_URL]",
+      "metrics": {
+        "dpr": 2,
+        "innerWidth": 632,
+        "innerHeight": 352,
+        "scrollWidth": 624,
+        "clientWidth": 624,
+        "horizontalPageOverflow": false,
+        "visualViewportScale": 1
+      },
+      "controlsExercised": [
+        "A: Skip to project review",
+        "A: poster.pdf\n        Open docume",
+        "BUTTON: Confirm project details",
+        "SUMMARY: Request corrections",
+        "A: Skip to project review",
+        "A: poster.pdf\n        Open docume",
+        "BUTTON: Confirm project details",
+        "SUMMARY: Request corrections",
+        "A: Skip to project review",
+        "A: poster.pdf\n        Open docume",
+        "BUTTON: Confirm project details",
+        "SUMMARY: Request corrections",
+        "Summary: Request corrections expanded via Space",
+        "Textarea: #correction-comment focused with visible outline"
+      ],
+      "keyboardNavigationOutcome": "Full keyboard traversal through evidence reading order and response panel; Request corrections expanded via Space key; textarea focused with high contrast focus outline; response panel reflows cleanly into stacked layout with zero horizontal overflow.",
+      "evidenceScreenshot": "screenshots/participant-preview-browser-zoom-200.png"
+    }
+  ]
+}

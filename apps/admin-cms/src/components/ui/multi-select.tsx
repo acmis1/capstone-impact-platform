@@ -169,7 +169,7 @@ export function MultiSelect({
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder={`Search ${lowerLabel}…`}
-                  className="h-7 w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  className="h-7 w-full rounded-sm bg-transparent px-1.5 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                 />
                 {searchQuery && (
                   <button

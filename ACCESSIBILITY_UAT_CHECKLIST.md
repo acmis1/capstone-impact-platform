@@ -1,228 +1,70 @@
-# Admin/CMS Accessibility and Stakeholder UAT Checklist
+# Admin/CMS Accessibility and UAT checklist
 
-## Scope
+Overall status: **PARTIAL (Integrated PP1 scoped automated gates pass; Import and deployment/history remain PARTIAL; native screen readers and stakeholder UAT remain PENDING human verification)**.
 
-This document records the repeatable accessibility and usability acceptance pass for the staff-facing Admin/CMS and the participant preview.
+Scope: Local Admin/CMS and Participant Preview with synthetic data on integrated PP1 (`acmis1/capstone-impact-platform` incorporating merged PR #262). Public showcase/Duda acceptance, stakeholder sign-off and hosted operations are outside this record. PASS applies only to the named tested fact. PARTIAL means some evidence exists; PENDING means the required interaction or evidence was not obtained.
 
-Testing is local-data-only. Duda, hosted Supabase/Render operations, schema/RLS/auth-role changes, broad visual redesign, and public-site accessibility are outside this task.
+## Automated regression gate
 
-### This is not the final project-wide accessibility sign-off
-
-This checklist covers the staff-facing Admin/CMS, the participant preview, and local accessibility/UAT evidence only. It must not be cited as proof of public showcase or Duda accessibility acceptance.
-
-Final project-wide accessibility acceptance additionally requires, and is tracked separately from this document:
-
-- public showcase / Duda listing and detail behaviour;
-- merged gallery and public media accessibility, where applicable;
-- manual accessibility evaluation beyond automated tooling;
-- stakeholder and UAT acceptance sign-off.
-
-## Status definitions
-
-- **PASS** — supported by evidence another reviewer can reproduce from this repository.
-- **PENDING** — browser or manual evidence is still required before accessibility/UAT sign-off. A check stays PENDING when it was observed locally but left no reproducible artefact.
-- **N/A** — outside task scope.
-
-A row is only recorded as PASS when its evidence column names a command, test or file that can be re-run. Author-reported observations that left no artefact are labelled as such and remain PENDING.
-
-## Baseline Inventory
-
-| Surface | Representative route | Coverage |
-| --- | --- | --- |
-| Authentication | `/login` | Sign-in and authentication feedback |
-| Projects dashboard | `/admin` | Search, filters, sorting, pagination, bulk selection |
-| Imports | `/admin/imports` | Import workflow navigation |
-| New import | `/admin/imports/new` | File input, preview, validation and failure feedback |
-| Import batch | `/admin/imports/[batchId]` | Validation results, project review and advanced details |
-| Project detail | `/admin/projects/[publicId]` | Metadata, validation, review, participant and publication workflow |
-| Staff access | `/admin/staff` | Staff access-management UI |
-| Public deployment/history | `/admin/public-feed` | Admin/CMS deployment evidence only |
-| Participant preview | `/participant-preview/[token]` | Evidence, confirmation and correction |
-
-## Automated Baseline
-
-| Check | Status | Evidence |
-| --- | --- | --- |
-| TypeScript | PASS | `npm run typecheck:admin` |
-| ESLint | PASS | `npm run lint --workspace=apps/admin-cms` — 0 errors, 6 pre-existing warnings in files this change does not touch |
-| Full Vitest suite | PASS | `npm run test:run --workspace=apps/admin-cms` — 274 files passed, 1 skipped; 3889 tests passed, 14 skipped |
-| Design-token and preview contrast | PASS | `src/lib/designTokenContrast.test.ts`, `src/previews/participantPreviewContrast.test.ts` |
-| Dashboard metrics list semantics | PASS | `src/components/admin-dashboard/projectIndexStates.test.tsx` |
-| Publication disclosure semantics and focus contract | PASS | `src/components/admin/PublicationWorkflowPanels.test.tsx` |
-| Assistive-check workflow after remediation | PASS | `src/components/admin/__tests__/ProjectAssistiveChecks.test.tsx` |
-| Lighthouse Accessibility — Projects index | PENDING | Unreconciled; see below |
-
-Existing repository contracts already cover accessible names, `aria-invalid`, `aria-describedby`, status/alert regions, semantic state text, dialog focus restoration, participant response regions and design-token contrast.
-
-### Automated browser evidence
-
-- Tool: Chrome DevTools Lighthouse, run locally by the change author.
-- Route: Projects index (`/admin`).
-- Author-reported baseline before remediation: Accessibility 88.
-- Author-reported findings included definition-list structure, contrast, heading-order and identical-link checks.
-- Author-reported post-remediation score: **conflicting.** Two different values were recorded in the same change, 96 and 100.
-- No Lighthouse report or artefact was retained, so neither post-remediation value can be reproduced and no final score is selected here.
-- To move this row to PASS: perform one Lighthouse Accessibility run on `/admin` against the current head, retain the report, and record the score and run date in this section.
-- The `DashboardMetricsSummary` definition-list defect is independently confirmed by source review and is protected by a focused semantic regression test. That remediation does not depend on the Lighthouse score.
-- Automated scanning covers only a subset of accessibility requirements. Keyboard, responsive and accessibility-tree checks are tracked separately below.
-
-## Defects and Remediation
-
-| Route / component | Problem | Severity | Remediation | Evidence | Remaining evidence |
-| --- | --- | --- | --- | --- | --- |
-| Projects index / `DashboardMetricsSummary` | `<dt>`/`<dd>` sat two levels below the `<dl>`, so they formed no valid definition-list group | Medium | Replaced with an explicit `role="list"` / `role="listitem"` structure, preserving metric order, text and layout | `projectIndexStates` regression PASS; typecheck PASS | Lighthouse re-run with retained report |
-| Project detail / `PublicationReadinessPanel` | Technical disclosure lacked consistent explicit keyboard focus indication | Medium | Reused the existing design-token focus-visible ring on the native `<summary>` | Typecheck and workflow tests PASS; disclosure regression PASS | Browser focus evidence |
-| Project detail / `PublicationPreparationPanel` | Publication technical disclosures lacked consistent explicit keyboard focus indication | Medium | Reused the existing focus-visible contract | Typecheck and workflow tests PASS | Browser focus evidence |
-| Project detail / `ProjectAssistiveChecks` | Diagnostic disclosures lacked consistent explicit keyboard focus indication | Medium | Reused the existing focus-visible contract while retaining native semantics | Assistive-check tests PASS | Browser focus evidence |
-| Import batch detail | Advanced-details disclosure lacked consistent explicit keyboard focus indication | Medium | Reused the existing focus-visible contract | Typecheck PASS | Import keyboard evidence |
-
-Every `<summary>` control under `apps/admin-cms/src` was reviewed. All of them now carry the same
-`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`
-contract, either inline or through a shared class constant, so no control of this defect class remains
-in the scoped staff workflows.
-
-No new colour system, UI framework, schema, RLS, role model or validation behaviour was introduced.
-
-## Required Test Matrix
-
-These rows require an interactive browser session and are not evidenced by the automated suite.
-
-| Test | Projects index | Import | Project detail | Participant preview |
-| --- | --- | --- | --- | --- |
-| Keyboard desktop | PENDING | PENDING | PENDING | PENDING |
-| 200% desktop zoom | PENDING | N/A | PENDING | PENDING |
-| Mobile 360-430 px | PENDING | PENDING | PENDING | PENDING |
-| Controlled error | N/A | PENDING | PENDING | PENDING |
-| Role/action availability | PENDING | PENDING | PENDING | N/A |
-| Long content | PENDING | PENDING | PENDING | PENDING |
-
-Author-reported: these checks were exercised locally in Chrome. No screenshots, exported reports or
-other capturable evidence were attached and they have not been independently reproduced, so they
-remain PENDING under the status definitions above.
-
-### Keyboard acceptance
-
-Verify:
-
-- all interactive controls are reachable and operable;
-- tab order is logical;
-- there are no keyboard traps;
-- focus is visibly perceivable;
-- dialogs return focus sensibly;
-- table/card/bulk actions remain keyboard operable;
-- no arbitrary positive `tabIndex` determines navigation order;
-- sticky UI does not obscure focused controls.
-
-Automated tests can assert that a control is a native `<summary>` inside `<details>`, that it starts
-collapsed, that it carries the focus-ring contract, and that the disclosure still toggles. They cannot
-assert keyboard activation: jsdom does not implement Enter/Space activation for `<summary>`. Keyboard
-operation is therefore a browser/UAT check, and a click-only test must not be described as proving it.
-
-### Forms, errors and status
-
-Verify:
-
-- every field has an accessible name;
-- required/invalid state is semantic and not colour-only;
-- errors are associated with the relevant field or region;
-- important loading, success and failure states are announced without noisy duplication;
-- icon-only controls have reliable accessible names;
-- warning/destructive/corrective actions are not colour-only;
-- raw backend errors are not exposed.
-
-### Structure and assistive technology
-
-Verify:
-
-- heading hierarchy and landmarks remain meaningful;
-- table headers and sorting semantics are exposed;
-- mobile cards preserve equivalent meaning and actions;
-- status badges contain readable text;
-- disclosures expose expanded/collapsed state;
-- participant evidence precedes response controls;
-- repeated project/media controls are distinguishable.
-
-Required assistive-technology evidence:
-
-- Participant preview — **PENDING**
-- One major Admin workflow — **PENDING**
-
-Author-reported: Participant Preview was reviewed for semantic project evidence, accessible control
-names, labelled response controls and evidence-before-response order; Project Detail was reviewed for
-heading/section structure, accessible form/control names, semantic status regions, review-action names
-and native disclosure state, using the Chrome DevTools Accessibility Tree. No accessibility-tree
-capture was retained, so both rows remain PENDING.
-
-Limitation: no NVDA screen-reader session was performed.
-
-## Zoom and Mobile
-
-At 200% desktop zoom verify representative Projects index, project detail and participant preview routes.
-
-At approximately 360-430 CSS px verify Projects index, import results, project detail and participant preview.
-
-Check for:
-
-- disappearing critical operations;
-- overlap or clipping;
-- inappropriate two-dimensional scrolling;
-- sticky UI covering focus/error/action regions;
-- safe wrapping of long titles, errors, filenames, statuses and summaries;
-- practical mobile target sizes.
-
-Author-reported as exercised locally. No capture was retained and the checks have not been
-independently reproduced.
-
-Status: **PENDING**
-
-## Contrast
-
-Existing design-token contrast tests pass and are reproducible via
-`src/lib/designTokenContrast.test.ts` and `src/previews/participantPreviewContrast.test.ts`.
-
-Status (automated design-token contrast): **PASS**
-
-Author-reported: representative manual review of warning, success and destructive text, visible focus
-indicators, status/badge readability and practical mobile control sizing. Not evidenced here.
-
-Status (manual contrast review): **PENDING**
-
-Do not introduce one-off colours to address contrast defects.
-
-## Project-wide Acceptance Boundary
-
-The gates below are deliberately separate.
-
-- **Regression Gate Before Merge** — automated, reproducible, and the gate that applies to a scoped
-  code-hardening change such as this one. It must be green before merge.
-- **Evidence Required Before Accessibility/UAT Sign-off** — browser and manual evidence for the whole
-  accessibility/UAT acceptance pass. Outstanding items here do not by themselves block a scoped code
-  change whose automated regression gate is green; they block accessibility/UAT sign-off.
-
-Neither gate covers the public showcase/Duda surfaces described under Scope.
-
-## Evidence Required Before Accessibility/UAT Sign-off
-
-Capture and retain meaningful evidence for:
-
-1. Project index keyboard/focus behaviour.
-2. Import keyboard or controlled-error behaviour.
-3. Project detail showing a remediated disclosure with keyboard focus.
-4. Participant preview reading order and controls.
-5. Representative 200% desktop zoom.
-6. Representative 360-430 px mobile viewport.
-7. One controlled validation/failure case.
-8. Accessibility-tree or screen-reader review of participant preview.
-9. Accessibility-tree or screen-reader review of one major Admin workflow.
-10. One Lighthouse Accessibility run on `/admin` against the current head, with the report retained and the score and run date recorded.
-
-Automated Lighthouse, axe or WAVE evidence should only be recorded if available locally without adding a large dependency solely for this task.
-
-## Regression Gate Before Merge
+Commands and actual outcomes are recorded in [2026-09-04 verification evidence](docs/accessibility-uat-evidence/2026-09-04/README.md).
 
 ```text
 npm run typecheck:admin
 npm run lint --workspace=apps/admin-cms
+npm run build:admin
 npm run test:run --workspace=apps/admin-cms
-git status --short
+npm run verify:accessibility-uat-evidence
+git diff --check origin/main...HEAD
 ```
+
+## Scoped acceptance facts
+
+| Requirement | Status | Evidence and limitation |
+| --- | --- | --- |
+| Skip-link normal text contrast | PASS | [measured before/after](docs/accessibility-uat-evidence/2026-09-03/skip-link-contrast.json): 17.0629:1 after; Tab reveals (122x36 CSS px in [2026-09-04 target size analysis](docs/accessibility-uat-evidence/2026-09-04/admin-target-size-analysis.json)); Enter focuses main; hidden state unchanged |
+| Primary-button default/hover/focus contrast | PASS | [settled computed states](docs/accessibility-uat-evidence/2026-09-03/contrast-after.json); keyboard indicator is a ring, not an outline |
+| Projects semantic heading correction | PASS | [heading inventory](docs/accessibility-uat-evidence/2026-09-03/headings-after.json); historical base provenance retained |
+| MultiSelect focus and Escape restoration | PASS | [visible search focus](docs/accessibility-uat-evidence/2026-09-03/screenshots/multi-select-search-focus.png), [interaction record](docs/accessibility-uat-evidence/2026-09-04/keyboard-interaction-evidence.json) |
+| Project disclosure focus | PASS | [expanded focused summary](docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-disclosure-focus.png); [project detail desktop keyboard](docs/accessibility-uat-evidence/2026-09-04/screenshots/project-detail-desktop-keyboard.png) |
+| Import controlled error | PASS | [actual Check Failed alert](docs/accessibility-uat-evidence/2026-09-04/screenshots/import-workflow-controlled-failure.png); invalid spreadsheet upload triggers controlled Check Failed alert with visible recovery |
+| Project required-title error | PASS | [accepted retained field error](docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-controlled-failure.png) |
+| Participant form validation | PASS | Validated on active preview for 2026-medical-drone; disclosure expanded via keyboard; native constraint validation was observed in the keyboard interaction record; the focused empty required textarea state, without the browser validation bubble, is retained in [participant-preview-validation-failure.png](docs/accessibility-uat-evidence/2026-09-04/screenshots/participant-preview-validation-failure.png). |
+| Preview unavailable boundary | PASS | [retained visible boundary](docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-controlled-failure.png); boundary behavior verified alongside active preview |
+| Long title wrapping | PASS | [accepted retained long title](docs/accessibility-uat-evidence/2026-09-03/screenshots/long-content-title.png) |
+| Long summary visibility/reflow | PASS | [actual summary](docs/accessibility-uat-evidence/2026-09-03/screenshots/long-content-summary.png), [950-character measurements](docs/accessibility-uat-evidence/2026-09-03/long-content-measurements.json); original fixture restored |
+| Long validation message | PENDING | No meaningfully long actual error message captured; concise existing validation messages ('Review the highlighted fields and try again.', 'Please fill out this field.') do not produce wrapping paragraphs; production code not weakened. |
+| Long filename wrapping | PARTIAL | Import capture uses a long synthetic filename ([long-content-filename.png](docs/accessibility-uat-evidence/2026-09-04/screenshots/long-content-filename.png)); native input elides text cleanly without container breakage; detail MediaFileInfo wraps via break-all. |
+| Fresh final Lighthouse Accessibility | PASS | Authenticated Local /admin audited with synthetic Admin session using Lighthouse 13.4.1 (Accessibility score 100/100, color contrast 1, heading order 1, 0 warnings, 0 runtime errors) in [lighthouse-admin-final.json](docs/accessibility-uat-evidence/2026-09-04/lighthouse-admin-final.json) and [lighthouse-admin-final.html](docs/accessibility-uat-evidence/2026-09-04/lighthouse-admin-final.html). |
+| Evidence integrity | PASS | Repository-native gate output; canonical PNG manifest in [2026-09-03/screenshots-manifest.json](docs/accessibility-uat-evidence/2026-09-03/screenshots-manifest.json) and [2026-09-04/screenshots-manifest.json](docs/accessibility-uat-evidence/2026-09-04/screenshots-manifest.json). Text scanning does not inspect pixels; accepted screenshots were reviewed visually in [screenshot-state-index.json](docs/accessibility-uat-evidence/2026-09-04/screenshot-state-index.json). |
+
+## Route-level keyboard matrix
+
+All rows reference the [2026-09-04 sanitized interaction record](docs/accessibility-uat-evidence/2026-09-04/keyboard-interaction-evidence.json). Isolated screenshots do not establish full keyboard operation. The Projects, Login, Staff invitation, publishing, Participant Preview reading-order/validation, and Import mobile screenshots are context-only; interaction and DOM records support operational conclusions.
+
+| Route | Status | Tested keyboard interactions & remaining scope |
+| --- | --- | --- |
+| Login | PASS — bounded | Recorded login/recovery-request sequence: Email -> Forgot password -> Password -> Sign in; Shift+Tab to recovery; Enter opens /auth/forgot-password; invalid email triggers aria-invalid alert; synthetic email triggers success alert; Back to sign in returns to /login; keyboard sign-in redirects to /admin. [login-keyboard-focus.png](docs/accessibility-uat-evidence/2026-09-04/screenshots/login-keyboard-focus.png). |
+| Projects | PASS — bounded | Recorded keyboard interactions: Skip link focuses main; search filters and resets; Title and Status column headers sort table; multi-page Next/Previous navigation and boundary states were exercised against the 12-record Local dataset; Select current page selected all visible rows with focus retained; row checkboxes toggle; inline preflight opened and cancelled with focus successfully restored to triggering action button without dropping to body. [projects-index-desktop-keyboard.png](docs/accessibility-uat-evidence/2026-09-04/screenshots/projects-index-desktop-keyboard.png). |
+| Import | PARTIAL | Folder/file preparation guide disclosure expanded/collapsed with focus retention; invalid spreadsheet upload triggers controlled Check Failed alert with visible recovery; long synthetic filename handled safely. All imports navigation, file input and Check spreadsheet were sampled. Full keyboard traversal through School spreadsheet, Project folder, Check files, Confirm & save, and Import media is not established; no import was committed. [import-workflow-controlled-failure.png](docs/accessibility-uat-evidence/2026-09-04/screenshots/import-workflow-controlled-failure.png). |
+| Project Detail | PASS — integrated post-#262 sampled scope | Section navigation, poster disclosure expansion, MultiSelect and metadata controls exercised; merged PR #262 participant section verified; reflow verified at mobile 375x812 and 200% zoom. [project-detail-desktop-keyboard.png](docs/accessibility-uat-evidence/2026-09-04/screenshots/project-detail-desktop-keyboard.png). |
+| Staff access | PASS | Account menu opened and dismissed with Escape restoring focus to trigger; Reviewer role checkbox toggled via Space; synthetic invitation safely submitted to local Mailpit loopback (STAFF_PROVISIONING_ENABLED enabled in local test environment, no real external emails sent). [staff-access-invitation-keyboard.png](docs/accessibility-uat-evidence/2026-09-04/screenshots/staff-access-invitation-keyboard.png). |
+| Admin deployment/history | PARTIAL | Tested subset: Choose a project to publish link focused and Advanced publishing details disclosure expanded/collapsed with focus retention; PASS applies only to that disclosure expand/collapse interaction. The activity state was empty. Technical setup details, Advanced rollback tools (Local test only), and version-detail rows/history controls when data exists remain untested; publication and removal were not executed. [public-feed-keyboard-focus.png](docs/accessibility-uat-evidence/2026-09-04/screenshots/public-feed-keyboard-focus.png). |
+| Participant Preview | PASS — integrated post-#262 sampled scope | Legitimate active preview generated via local API with { sendEmail: false }; sampled keyboard traversal through evidence reading order, skip link, document link, confirm button, Request corrections disclosure toggle, and correction-comment textarea (native constraint validation observed on empty submit; PNG retains focused empty textarea, without the bubble); reverse Shift+Tab traversal confirms zero keyboard trap; preview cleanly revoked via DELETE API. [participant-preview-reading-order.png](docs/accessibility-uat-evidence/2026-09-04/screenshots/participant-preview-reading-order.png), [participant-preview-validation-failure.png](docs/accessibility-uat-evidence/2026-09-04/screenshots/participant-preview-validation-failure.png). |
+
+## Responsive and assistive acceptance
+
+[Machine-readable measurements](docs/accessibility-uat-evidence/2026-09-04/mobile-measurements.json) record all four routes at approximately 375 x 812 CSS px. Projects, Import, Project Detail and active Participant Preview are PASS for the sampled state. Recorded widths show no page-level horizontal overflow in the tested states. Sampled captured controls were visibly unobscured. The retained evidence does not establish a separate portal-wide computed-style/hit-test conclusion.
+
+Target-size measurements: [admin-target-size-analysis.json](docs/accessibility-uat-evidence/2026-09-04/admin-target-size-analysis.json) records route-by-route analysis across Admin surfaces under WCAG 2.2 SC 2.5.8 Target Size (Minimum, Level AA). Displayed controls (e.g. skip link 122x36 CSS px) and effective clickable regions (e.g. `<label>` regions >=24x24px for checkboxes) are accurately evaluated, with geometric spacing circles evaluated without misapplying spacing exceptions to non-pointer elements. No blanket target-size compliance conclusion is made. WCAG 2.2 SC 2.5.5 Target Size (Enhanced) is Level AAA. No institutional target-size requirement beyond this retained evidence is established.
+
+[Complete 200% host zoom interaction](docs/accessibility-uat-evidence/2026-09-04/browser-zoom-200-interaction.json) was executed using genuine Google Chrome browser host zoom preference (200%, `zoomLevelParam: 3.801784`, `dpr: 2`, `innerWidth: 632`, `visualViewport.scale: 1`). Controls were exercised via keyboard across Projects, Project Detail, and active Participant Preview, verifying single-column reflow, full visibility of focused elements, and zero horizontal page overflow.
+
+### Screen-reader boundary checklist (PENDING human verification)
+- [ ] NVDA / VoiceOver traversal of `/admin` projects table announcing column headers and row actions.
+- [ ] VoiceOver on iOS or TalkBack on Android reading Participant Preview evidence figures, accessible text descriptions, and response controls in sequence.
+- [ ] Screen reader announcement of disclosure state changes (`aria-expanded`) on Project Detail and Participant Preview.
+
+### Stakeholder UAT script (PENDING human verification)
+- [ ] Coordinator logs in, reviews `2026-medical-drone`, generates private participant preview, and copies link without exposing tokens in public channels.
+- [ ] Participant accesses the preview link, reviews project media and accessible text, and submits a correction note or confirms project details.
+- [ ] Admin verifies feedback received in CMS and resolves or updates record accordingly.

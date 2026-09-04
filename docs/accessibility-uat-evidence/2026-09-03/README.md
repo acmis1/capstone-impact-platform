@@ -1,0 +1,79 @@
+# Local Accessibility/UAT correction evidence
+
+Overall acceptance: **PARTIAL**. This directory retains the 2026-09-03 correction measurements and captures. The [2026-09-04 final route scope](../2026-09-04/README.md#final-route-scope) supersedes these dated route summaries; Import and Admin deployment/history remain PARTIAL in the final matrix. It is not a WCAG-compliance or project-wide UAT sign-off. Testing used synthetic Local data. The UI's “Staging” label is not a hosted-environment claim: the application connection was checked as loopback before browser work.
+
+## Reproduce the publication gate
+
+From the repository root, using the pinned Node/npm toolchain and installed dependencies:
+
+```text
+npm run verify:accessibility-uat-evidence
+npm run --silent verify:accessibility-uat-evidence -- --manifest
+npm run verify:accessibility-uat-evidence -- --committed
+```
+
+The first command scans the entire working evidence tree and the root checklist. The last reads all committed evidence and the checklist directly from HEAD. Neither command writes files or contacts services. The middle command emits the canonical PNG manifest; save its stdout to [screenshots-manifest.json](./screenshots-manifest.json) when captures change. It calculates dimensions, byte lengths, SHA-256 values and duplicate groups from file bytes. Do not hand-edit these measurements.
+
+The verifier handles Markdown, JSON, HTML, text and UTF-8/UTF-16 logs. It checks token paths, signed URLs, credentials, session data and prohibited UUIDs, optionally checking the ignored local synthetic credential store without printing values. Failure output contains categories and locations only. It parses Lighthouse Accessibility data and checks local evidence references. Focused fixtures cover safe input, forbidden input without value disclosure, encoded paths, UTF-16, broken references and duplicate images.
+
+The scanner does not prove screenshot meaning or detect secrets in pixels. All screenshots used for acceptance were opened visually. [screenshot-state-index.json](./screenshot-state-index.json) states the accepted visible facts. Context-only images are not interaction evidence. The duplicate Projects zoom captures show the same state and are not assigned incompatible claims. The pre-correction skip-link capture is a source JPEG, [skip-link-before.jpg](./screenshots/skip-link-before.jpg); the generated PNG manifest does not count it.
+
+## Code and settled browser measurements
+
+- The skip link now uses the existing foreground token on the background token. [skip-link-contrast.json](./skip-link-contrast.json) records 4.3788:1 before and 17.0629:1 after. Its 1px clipped hidden state is unchanged. Tab reveals it; Enter focuses main. [Focused skip link](./screenshots/skip-link-after.png).
+- The valid layered anchor reset, primary-button hover correction, section-heading changes and MultiSelect ring are retained.
+- [contrast-after.json](./contrast-after.json) records settled default, hover and keyboard-focus states of New import. White text on opaque primary red measures at least 4.5:1 in each state. Hover has the larger shadow. Keyboard focus uses a red box-shadow ring with a white offset; outline-style is none. [Focused primary button](./screenshots/contrast-after.png).
+- [headings-after.json](./headings-after.json) is the retained heading inventory. A screenshot alone cannot prove semantic heading levels.
+
+## Six rejected screenshot claims
+
+| Rejected claim | Current disposition | Retained proof |
+| --- | --- | --- |
+| MultiSelect image showed navigation drawer | FIXED: visible Search disciplines input with focus ring; typing filters options; Escape restores trigger focus | [capture](./screenshots/multi-select-search-focus.png), [interaction record](./keyboard-interaction-evidence.json) |
+| Import image showed only selected filename | FIXED: actual Check Failed alert is visible after Check spreadsheet | [capture](./screenshots/import-workflow-controlled-failure.png) |
+| Project disclosure had no visible focus | FIXED: keyboard-expanded summary visibly has a red focus ring | [capture](./screenshots/project-detail-disclosure-focus.png) |
+| Participant correction field had no validation message | FIXED: active participant preview legitimately generated on `localhost:3000`; disclosure expanded via keyboard; native HTML5 constraint validation message visibly captured with focused textarea outline | [capture](./screenshots/participant-preview-validation-failure.png), [interaction record](./keyboard-interaction-evidence.json) |
+| Long validation image showed a title | PENDING: no meaningfully long actual validation message is produced by current application validation paths without modifying production code; limitation documented | [long-content record](./long-content-measurements.json) |
+| Long summary image did not show summary | FIXED: actual 950-character synthetic summary is visible, with equal content scroll/client widths; original summary restored | [capture](./screenshots/long-content-summary.png), [measurements](./long-content-measurements.json) |
+
+The accepted [Project Detail error](./screenshots/project-detail-controlled-failure.png) was inspected and retained. It visibly shows the error summary and required-title error. The historical [Preview Unavailable](./screenshots/participant-preview-controlled-failure.png) remains boundary evidence only. A long filename was selected in the new import-error capture, but the native file input elides it; long-filename wrapping remains PARTIAL. The accepted [long title](./screenshots/long-content-title.png) remains unchanged.
+
+## Keyboard and responsive coverage
+
+[keyboard-interaction-evidence.json](./keyboard-interaction-evidence.json) records all seven required route labels, roles, actual sequences, activation results, focus restoration and limitations. Login, Projects, Participant Preview, and Admin deployment/history (bounded non-consequential scope) are PASS; Import and Staff access retain PARTIAL status with specific legitimate environment and parallel-safe limitations documented (Import package replacement deferred to post-#262 integrated pass; Staff invitation controls paused in local configuration).
+
+[mobile-measurements.json](./mobile-measurements.json) records all four routes at approximately 375 x 812 CSS px. Route coverage is: Projects — PASS sampled state; Import — PASS sampled state (focused folder/file preparation guide disclosure captured without overflow or sticky header obstruction in [import-workflow-mobile-375px.png](./screenshots/import-workflow-mobile-375px.png)); Project Detail — PASS sampled state; active Participant Preview — PASS sampled state. Recorded widths show no page-level horizontal overflow in the tested states. Sampled captured controls were visibly unobscured. The retained evidence does not establish a separate portal-wide computed-style/hit-test conclusion.
+
+Target-size measurements are descriptive only: [admin-target-size-analysis.json](./admin-target-size-analysis.json) records route-by-route analysis across Admin surfaces under WCAG 2.2 SC 2.5.8 Target Size (Minimum, Level AA). Sub-24px elements (such as visually hidden skip links expanding to 122x36 on focus, or checkboxes enclosed within larger clickable label ancestors) are analyzed against WCAG exemptions, effective clickable bounds, and 24px spacing circles. No blanket target-size compliance conclusion is claimed. WCAG 2.2 SC 2.5.5 Target Size (Enhanced) is Level AAA. No institutional target-size requirement beyond this retained evidence is established.
+
+[browser-zoom-200-interaction.json](./browser-zoom-200-interaction.json) records a complete interaction pass executed under genuine Google Chrome browser host zoom preference (200%, `zoomLevelParam: 3.801784`, `dpr: 2`, `innerWidth: 632`, `visualViewport.scale: 1`). Controls were exercised via keyboard across Projects, Project Detail, and active Participant Preview, verifying single-column reflow, full visibility of focused elements, and zero horizontal page overflow. Screenshots are retained in [projects-index-browser-zoom-200.png](./screenshots/projects-index-browser-zoom-200.png), [project-detail-browser-zoom-200.png](./screenshots/project-detail-browser-zoom-200.png), and [participant-preview-browser-zoom-200.png](./screenshots/participant-preview-browser-zoom-200.png).
+
+The retained [participant accessibility tree](./a11y-tree-participant-preview.json) and [project accessibility tree](./a11y-tree-project-detail.json) are sanitized historical inventories, not screen-reader testing. Native screen-reader testing and stakeholder UAT remain PENDING human verification with checklists provided in [ACCESSIBILITY_UAT_CHECKLIST.md](../../../ACCESSIBILITY_UAT_CHECKLIST.md).
+
+## Lighthouse report boundary
+
+A fresh final authenticated audit of Local `/admin` was performed using Lighthouse 13.4.1 connected via remote debugging port 9222 with an active synthetic Admin session. Retained reports:
+- [lighthouse-admin-final.json](./lighthouse-admin-final.json)
+- [lighthouse-admin-final.html](./lighthouse-admin-final.html)
+
+Audit findings:
+- Score: 100/100 (Accessibility category)
+- Color contrast: 1 (PASS)
+- Heading order: 1 (PASS)
+- Emulation: mobile (412 x 823 CSS px, DPR 1.75)
+- Runtime error: none; Run warnings: 0
+- Historical audit from 2026-09-03T13:17:09.774Z remains available in [historical JSON](./lighthouse-admin.json) and [historical HTML](./lighthouse-admin.html). Score of 100 is an automated accessibility baseline, not full WCAG compliance.
+
+## Verification evidence
+
+The raw final command outputs are retained in [typecheck](./verification/typecheck.log), [lint](./verification/lint.log), [build](./verification/build.log), [full Vitest](./verification/test-admin.log), [focused tests](./verification/focused-tests.log), [evidence gate](./verification/evidence-verifier.log) and [diff check](./verification/git-diff-check.log). See [verification results](./verification/results.json) for actual exits and totals. No success summary is appended to a failing log.
+
+The full suite was started after the task's browser tabs and two dev servers were closed. Existing unrelated browser/process instances were left intact. Any failed canonical run remains a failed run even if the affected files pass in isolation. [skip-link-regression-before.log](./verification/skip-link-regression-before.log) retains the genuine failing pre-fix contrast regression.
+
+### Actual verification outcomes
+
+Typecheck and build exited 0. Lint exited 0 with 0 errors and 6 warnings. Final focused checks passed 7 files / 118 tests. The genuine final canonical suite exited 1: 1 failed, 284 passed, 1 skipped test files (286 total); 1 failed, 4332 passed, 14 skipped tests (4347 total). The migration baseline timed out at 5000ms. The four diagnostic files passed in isolation (102 tests).
+
+The [clean-main raw run](./verification/test-main-comparison.log) also timed out in the migration-baseline comparison and a table-preference test; [provenance](./verification/main-comparison-provenance.json) records its base and conditions. This establishes that the migration timeout also occurs without this branch. It does not establish full-suite acceptance. No timeout values or unrelated tests were changed.
+
+The [first canonical attempt](./verification/test-admin-attempt1.log) and [expanded focused attempt](./verification/focused-expanded-attempt.log) stalled and were interrupted. Their worker-exit errors are retained exactly and are not application failures or passing runs. The scoped Git attribute for this verification log directory preserves raw trailing whitespace and final blank lines without changing command output.

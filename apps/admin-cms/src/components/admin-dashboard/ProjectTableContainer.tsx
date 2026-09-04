@@ -454,9 +454,9 @@ export function ProjectTableContainer({ query, result, canSubmitBulk = false, ca
 
   return (
     <section aria-labelledby="project-results-heading" className="flex flex-col gap-3">
-      <h3 id="project-results-heading" className="sr-only">
+      <h2 id="project-results-heading" className="sr-only">
         Project results
-      </h3>
+      </h2>
 
       {/* Result range and secondary view settings */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -589,7 +589,9 @@ export function ProjectTableContainer({ query, result, canSubmitBulk = false, ca
       </div>
 
       {/* Mobile Card List Fallback */}
-      <ul className="flex list-none flex-col gap-3 md:hidden">
+      <div className="flex flex-col gap-2 md:hidden">
+        <h3 className="sr-only">Project cards</h3>
+        <ul className="flex list-none flex-col gap-3">
         {result.rows.map((row) => {
           const href = getProjectDetailHref(row.publicId);
           const secondary = supportingContext(row);
@@ -664,6 +666,7 @@ export function ProjectTableContainer({ query, result, canSubmitBulk = false, ca
           );
         })}
       </ul>
+      </div>
 
       {/* Pagination Bar */}
       <nav

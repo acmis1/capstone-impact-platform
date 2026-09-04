@@ -1,0 +1,62 @@
+
+> admin-cms@0.1.0 test:run
+> vitest run
+
+
+ RUN  v4.1.10 D:/IT RMIT/Capstone/.worktrees/accessibility-uat-main-suite/apps/admin-cms
+
+[Browser Import Preview API] unexpected_internal_error
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+error: daemon terminated
+error: daemon terminated
+ ❯ src/security/postgres17MaintainPrivilegeAlignmentMigration.test.ts (12 tests | 1 failed) 8911ms
+     × leaves every migration through 0048 byte-identical to its introduction baseline 8108ms
+ ❯ src/components/admin-dashboard/ProjectTableContainer.integration.test.tsx (32 tests | 1 failed) 25538ms
+     × persists desktop column visibility through the column settings menu and preserves mandatory columns 5164ms
+error: daemon terminated
+Not implemented: navigation to another Document
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/security/postgres17MaintainPrivilegeAlignmentMigration.test.ts > PostgreSQL 17 MAINTAIN privilege alignment migration > leaves every migration through 0048 byte-identical to its introduction baseline
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/security/postgres17MaintainPrivilegeAlignmentMigration.test.ts:109:3
+    107|   });
+    108|
+    109|   it('leaves every migration through 0048 byte-identical to its introd…
+       |   ^
+    110|     const baseline = migrationIntroductionBaseline();
+    111|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/components/admin-dashboard/ProjectTableContainer.integration.test.tsx > ProjectTableContainer preference integration > persists desktop column visibility through the column settings menu and preserves mandatory columns
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/components/admin-dashboard/ProjectTableContainer.integration.test.tsx:81:3
+     79|   afterEach(cleanup);
+     80|
+     81|   it('persists desktop column visibility through the column settings m…
+       |   ^
+     82|     renderTable();
+     83|     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeT…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 282 passed | 1 skipped (285)
+      Tests  2 failed | 4314 passed | 14 skipped (4330)
+   Start at  00:36:19
+   Duration  57.17s (transform 115.97s, setup 0ms, import 309.65s, tests 293.41s, environment 63.83s)
+
+npm error Lifecycle script `test:run` failed with error:
+npm error code 1
+npm error path D:\IT RMIT\Capstone\.worktrees\accessibility-uat-main-suite\apps\admin-cms
+npm error workspace admin-cms@0.1.0
+npm error location D:\IT RMIT\Capstone\.worktrees\accessibility-uat-main-suite\apps\admin-cms
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c vitest run

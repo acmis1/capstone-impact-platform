@@ -1,0 +1,14 @@
+
+> admin-cms@0.1.0 test:run
+> vitest run src/lib/designTokenContrast.test.ts src/components/admin-shell/AdminShellClient.test.tsx src/components/ui/__tests__/multi-select.test.tsx src/scripts/verifyAccessibilityUatEvidence.test.ts src/components/admin-dashboard/projectIndexStates.test.tsx src/components/admin-dashboard/BulkProjectReviewPanel.test.tsx src/components/imports/__tests__/BrowserImportPreviewClient.test.tsx
+
+
+ RUN  v4.1.10 D:/IT RMIT/Capstone/.worktrees/accessibility-uat-final-evidence/apps/admin-cms
+
+Not implemented: navigation to another Document
+
+ Test Files  7 passed (7)
+      Tests  118 passed (118)
+   Start at  00:39:53
+   Duration  5.55s (transform 1.39s, setup 0ms, import 6.19s, tests 4.45s, environment 6.59s)
+

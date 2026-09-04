@@ -1,0 +1,25 @@
+
+> admin-cms@0.1.0 lint
+> eslint
+
+
+D:\IT RMIT\Capstone\.worktrees\accessibility-uat-final-evidence\apps\admin-cms\src\import\__tests__\adminReferenceClientBoundary.test.ts
+  8:3  warning  'adminReferenceFieldMappingSchema' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\IT RMIT\Capstone\.worktrees\accessibility-uat-final-evidence\apps\admin-cms\src\scripts\checkOnboardingDocs.ts
+  6:7  warning  'require' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\IT RMIT\Capstone\.worktrees\accessibility-uat-final-evidence\apps\admin-cms\src\scripts\provisionLocalSupabaseUsers.ts
+  18:12  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\IT RMIT\Capstone\.worktrees\accessibility-uat-final-evidence\apps\admin-cms\src\scripts\publishStagingFeed.ts
+  5:45  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\IT RMIT\Capstone\.worktrees\accessibility-uat-final-evidence\apps\admin-cms\src\scripts\setupLocal.ts
+  29:7  warning  'TRANSIENT_RESET_FAILURES' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\IT RMIT\Capstone\.worktrees\accessibility-uat-final-evidence\apps\admin-cms\src\scripts\writeLocalSupabaseEnv.ts
+  21:12  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 6 problems (0 errors, 6 warnings)
+

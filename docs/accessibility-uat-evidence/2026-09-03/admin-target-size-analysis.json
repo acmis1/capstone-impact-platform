@@ -1,0 +1,478 @@
+{
+  "analyzedAt": "2026-09-04T05:16:08.188Z",
+  "standard": "WCAG 2.2 SC 2.5.8 Target Size (Minimum), Level AA (24x24 CSS px threshold)",
+  "scope": "Admin-only routes (Projects, Import, Staff, Public Feed, Login). Participant Preview and Project Detail deferred.",
+  "blanketComplianceClaimed": false,
+  "routes": [
+    {
+      "route": "Projects",
+      "url": "http://127.0.0.1:3000/admin",
+      "totalSampled": 42,
+      "meets24pxDirectly": 21,
+      "sub24Targets": [
+        {
+          "tag": "A",
+          "identifier": "Skip to main content",
+          "rawDimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "effectiveDimensions": {
+            "width": 122,
+            "height": 36
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Exemption: Target not displayed / displayed only on keyboard focus (1x1 visually hidden offscreen until Tab focus expands it to 122x36 px)"
+        },
+        {
+          "tag": "BUTTON",
+          "identifier": "Open main navigation menu",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "BUTTON",
+          "identifier": "Filters",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "INPUT",
+          "identifier": "Select current page",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "INPUT",
+          "identifier": "Select current page",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "effectiveDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "BUTTON",
+          "identifier": "Project",
+          "rawDimensions": {
+            "width": 66,
+            "height": 20
+          },
+          "effectiveDimensions": {
+            "width": 66,
+            "height": 20
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "BUTTON",
+          "identifier": "Status",
+          "rawDimensions": {
+            "width": 61,
+            "height": 20
+          },
+          "effectiveDimensions": {
+            "width": 61,
+            "height": 20
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "BUTTON",
+          "identifier": "Year",
+          "rawDimensions": {
+            "width": 49,
+            "height": 20
+          },
+          "effectiveDimensions": {
+            "width": 49,
+            "height": 20
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "BUTTON",
+          "identifier": "Updated",
+          "rawDimensions": {
+            "width": 77,
+            "height": 20
+          },
+          "effectiveDimensions": {
+            "width": 77,
+            "height": 20
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "INPUT",
+          "identifier": "Select Smart Medical Drone Delivery",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "effectiveDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "INPUT",
+          "identifier": "Select VR Rehabilitation Roster",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "effectiveDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "INPUT",
+          "identifier": "Select Agricultural IoT Hydration Roster",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "effectiveDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "INPUT",
+          "identifier": "Select Dynamic Traffic Optimization Engine",
+          "rawDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "effectiveDimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "INPUT",
+          "identifier": "Select Smart Medical Drone Delivery",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "A",
+          "identifier": "View project",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "INPUT",
+          "identifier": "Select VR Rehabilitation Roster",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "A",
+          "identifier": "View project",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "INPUT",
+          "identifier": "Select Agricultural IoT Hydration Roster",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "A",
+          "identifier": "View project",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "INPUT",
+          "identifier": "Select Dynamic Traffic Optimization Engine",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "A",
+          "identifier": "View project",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        }
+      ]
+    },
+    {
+      "route": "Import",
+      "url": "http://127.0.0.1:3000/admin/imports/new",
+      "totalSampled": 13,
+      "meets24pxDirectly": 9,
+      "sub24Targets": [
+        {
+          "tag": "A",
+          "identifier": "Skip to main content",
+          "rawDimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "effectiveDimensions": {
+            "width": 122,
+            "height": 36
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Exemption: Target not displayed / displayed only on keyboard focus (1x1 visually hidden offscreen until Tab focus expands it to 122x36 px)"
+        },
+        {
+          "tag": "BUTTON",
+          "identifier": "Open main navigation menu",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "A",
+          "identifier": "Imports",
+          "rawDimensions": {
+            "width": 41,
+            "height": 16
+          },
+          "effectiveDimensions": {
+            "width": 41,
+            "height": 16
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "INPUT",
+          "identifier": "Upload project directory",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        }
+      ]
+    },
+    {
+      "route": "Staff",
+      "url": "http://127.0.0.1:3000/admin/staff",
+      "totalSampled": 7,
+      "meets24pxDirectly": 5,
+      "sub24Targets": [
+        {
+          "tag": "A",
+          "identifier": "Skip to main content",
+          "rawDimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "effectiveDimensions": {
+            "width": 122,
+            "height": 36
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Exemption: Target not displayed / displayed only on keyboard focus (1x1 visually hidden offscreen until Tab focus expands it to 122x36 px)"
+        },
+        {
+          "tag": "BUTTON",
+          "identifier": "Open main navigation menu",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        }
+      ]
+    },
+    {
+      "route": "Public Feed",
+      "url": "http://127.0.0.1:3000/admin/public-feed",
+      "totalSampled": 13,
+      "meets24pxDirectly": 8,
+      "sub24Targets": [
+        {
+          "tag": "A",
+          "identifier": "Skip to main content",
+          "rawDimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "effectiveDimensions": {
+            "width": 122,
+            "height": 36
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Exemption: Target not displayed / displayed only on keyboard focus (1x1 visually hidden offscreen until Tab focus expands it to 122x36 px)"
+        },
+        {
+          "tag": "BUTTON",
+          "identifier": "Open main navigation menu",
+          "rawDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "effectiveDimensions": {
+            "width": 0,
+            "height": 0
+          },
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
+        },
+        {
+          "tag": "SUMMARY",
+          "identifier": "Advanced publishing details",
+          "rawDimensions": {
+            "width": 926,
+            "height": 20
+          },
+          "effectiveDimensions": {
+            "width": 926,
+            "height": 20
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "SUMMARY",
+          "identifier": "Technical setup details",
+          "rawDimensions": {
+            "width": 918,
+            "height": 16
+          },
+          "effectiveDimensions": {
+            "width": 918,
+            "height": 16
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        },
+        {
+          "tag": "A",
+          "identifier": "2026-traffic-engine",
+          "rawDimensions": {
+            "width": 123,
+            "height": 19
+          },
+          "effectiveDimensions": {
+            "width": 123,
+            "height": 19
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        }
+      ]
+    },
+    {
+      "route": "Login",
+      "url": "http://127.0.0.1:3000/login",
+      "totalSampled": 4,
+      "meets24pxDirectly": 3,
+      "sub24Targets": [
+        {
+          "tag": "A",
+          "identifier": "Forgot password?",
+          "rawDimensions": {
+            "width": 101,
+            "height": 16
+          },
+          "effectiveDimensions": {
+            "width": 101,
+            "height": 16
+          },
+          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+        }
+      ]
+    }
+  ],
+  "retractionNotice": "HISTORICAL EVIDENCE CORRECTION: Previous claims of Spacing Exception applied to 0x0 dimensions in sub24Targets were invalid because non-rendered / zero-size nodes are not pointer targets under WCAG 2.2 SC 2.5.8. For valid SC 2.5.8 evaluation distinguishing hidden nodes from rendered interactive targets with effective label regions and verified geometric spacing circles, see docs/accessibility-uat-evidence/2026-09-04/admin-target-size-analysis.json."
+}

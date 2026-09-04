@@ -1,0 +1,14 @@
+{
+  "baseCommit": "6125bb56a2c71c16a45cce44851696e8b09a3b4c",
+  "worktree": "Temporary detached historical-base worktree",
+  "actualGitRevParseHead": "6125bb56a2c71c16a45cce44851696e8b09a3b4c",
+  "localPort": 3101,
+  "captureTimestamp": "2026-09-03T17:08:00.0246024Z",
+  "evidenceFiles": [
+    "contrast-before.json",
+    "headings-before.json",
+    "screenshots/contrast-before.png"
+  ],
+  "note": "Captured from the historical base with existing local synthetic data. Environment values were passed only in memory; no credentials retained.",
+  "temporaryWorktreeRemoved": true
+}

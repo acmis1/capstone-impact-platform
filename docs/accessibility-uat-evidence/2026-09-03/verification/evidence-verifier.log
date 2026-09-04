@@ -1,0 +1,22 @@
+
+> verify:accessibility-uat-evidence
+> npm run --silent verify:accessibility-uat-evidence --workspace=apps/admin-cms --
+
+{
+  "mode": "working-tree",
+  "filesScanned": 67,
+  "textFilesScanned": 35,
+  "findings": [],
+  "screenshotCount": 31,
+  "uniqueHashCount": 30,
+  "duplicateGroups": [
+    {
+      "sha256": "3b8d7d5414adaad68b48876440d0987da17165528597495e2aad82219290a357",
+      "filenames": [
+        "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-200pct-zoom.png",
+        "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-browser-zoom-200.png"
+      ]
+    }
+  ],
+  "result": "PASS"
+}
