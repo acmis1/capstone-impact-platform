@@ -80,10 +80,26 @@ export interface BrowserImportServerAnalysis {
   packages: BrowserImportServerPackage[];
 }
 
+/** Server-only observation; never included in the preview or commit contract. */
+export interface BrowserImportAnalysisDiagnostics {
+  now: () => number;
+  onAdminReconciliationDuration: (milliseconds: number) => void;
+}
+
+function readDiagnosticClock(diagnostics?: BrowserImportAnalysisDiagnostics): number | undefined {
+  try {
+    return diagnostics?.now();
+  } catch {
+    // Optional instrumentation must not affect import decisions or failures.
+    return undefined;
+  }
+}
+
 export async function analyzeBrowserImportServer(
   manifestOrPreflight: unknown | ManifestPreflightSuccess,
   uploadedMetadataFiles: Map<string, Buffer>,
-  adminReferenceOptions?: AdminReferenceAnalysisOptions
+  adminReferenceOptions?: AdminReferenceAnalysisOptions,
+  diagnostics?: BrowserImportAnalysisDiagnostics,
 ): Promise<BrowserImportServerAnalysis> {
   let preflight: ManifestPreflightSuccess;
 
@@ -620,14 +636,24 @@ export async function analyzeBrowserImportServer(
     const refFingerprint = computeAdminReferenceWorkbookFingerprint(referenceFileBuffer);
     const parsedRefRows = await parseAdminReferenceWorksheet(referenceFileBuffer, mapping);
 
-    const reconRes = reconcilePackagesAgainstAdminReference({
+    const reconciliationInput = {
       packages: serverPackages.map((sp) => ({
         packagePath: sp.packagePath,
         manifest: sp.manifest || {},
       })),
       referenceRows: parsedRefRows,
       mapping,
-    });
+    };
+    const reconciliationStarted = readDiagnosticClock(diagnostics);
+    const reconRes = reconcilePackagesAgainstAdminReference(reconciliationInput);
+    const reconciliationFinished = readDiagnosticClock(diagnostics);
+    if (diagnostics && reconciliationStarted !== undefined && reconciliationFinished !== undefined) {
+      try {
+        diagnostics.onAdminReconciliationDuration(reconciliationFinished - reconciliationStarted);
+      } catch {
+        // Diagnostics receive only a duration and cannot change reconciliation output.
+      }
+    }
 
     batchIssues.push(...reconRes.batchIssues);
 

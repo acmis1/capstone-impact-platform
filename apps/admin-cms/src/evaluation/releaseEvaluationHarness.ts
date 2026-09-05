@@ -427,7 +427,10 @@ async function stageAcceptedBatch(
   timing?: TimingContext,
 ): Promise<void> {
   const analysisStarted = timing?.now();
-  const analysis = await analyzeBrowserImportServer(batch.materialized.selectionManifest, batch.materialized.uploadedMetadataFiles, batch.adminReferenceOptions);
+  const analysis = await analyzeBrowserImportServer(batch.materialized.selectionManifest, batch.materialized.uploadedMetadataFiles, batch.adminReferenceOptions, timing ? {
+    now: timing.now,
+    onAdminReconciliationDuration: (elapsed) => addTiming(timing.timings, 'adminReconciliation', elapsed),
+  } : undefined);
   if (timing && analysisStarted !== undefined) {
     const elapsed = timing.now() - analysisStarted;
     addTiming(timing.timings, 'importAnalysis', elapsed);
@@ -500,7 +503,10 @@ async function inspectAndStageSpecialBatch(
   timing?: TimingContext,
 ): Promise<void> {
   const analysisStarted = timing?.now();
-  const analysis = await analyzeBrowserImportServer(batch.materialized.selectionManifest, batch.materialized.uploadedMetadataFiles, batch.adminReferenceOptions);
+  const analysis = await analyzeBrowserImportServer(batch.materialized.selectionManifest, batch.materialized.uploadedMetadataFiles, batch.adminReferenceOptions, timing ? {
+    now: timing.now,
+    onAdminReconciliationDuration: (elapsed) => addTiming(timing.timings, 'adminReconciliation', elapsed),
+  } : undefined);
   if (timing && analysisStarted !== undefined) {
     const elapsed = timing.now() - analysisStarted;
     addTiming(timing.timings, 'importAnalysis', elapsed);

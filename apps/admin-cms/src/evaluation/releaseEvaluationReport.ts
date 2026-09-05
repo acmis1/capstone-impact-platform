@@ -583,6 +583,7 @@ export function renderReleaseEvaluationMarkdown(report: ReleaseEvaluationReport)
     '',
     '## N. Timings',
     '',
+    'Milliseconds; adminReconciliation observes the actual reconciliation call within importAnalysis (alias packageParsingValidationAndReconciliation), excluding reference worksheet parsing. Parent/child timings overlap: do not sum them. Evidence-mode totals include the operator pause.',
     ...timingLines,
     ...Object.entries(report.timingSummary).map(([stage, summary]) => `- ${stage}: min ${summary.minimum} ms, median ${summary.median} ms, max ${summary.maximum} ms.`),
     '',
