@@ -1183,6 +1183,10 @@ function applicationProbeTimeout(): ApplicationHttpProbeResult {
   return { response: null, failure: 'TIMEOUT' };
 }
 
+function applicationProbeNoResponse(): ApplicationHttpProbeResult {
+  return { response: null, failure: 'NO_RESPONSE' };
+}
+
 function applicationSmokeHarness(
   probes: Record<string, ApplicationHttpProbeResult[]>,
   exitAfterProbe?: number,
@@ -1211,7 +1215,7 @@ function applicationSmokeHarness(
     const route = new URL(url).pathname;
     const result = queues[route]?.shift() ?? applicationProbeTimeout();
     probeCount += 1;
-    if (!result.response) now += timeoutMs;
+    if (result.failure === 'TIMEOUT') now += timeoutMs;
     if (probeCount === exitAfterProbe) exitCode = 1;
     return result;
   });
@@ -1272,8 +1276,10 @@ describe('restored application smoke startup', () => {
     expect(harness.kill).toHaveBeenCalledWith('SIGTERM');
   });
 
-  it('fails when login never responds and keeps retries bounded', async () => {
-    const harness = applicationSmokeHarness(validSmokeProbes({ '/login': [] }));
+  it('fails when login repeatedly times out and keeps retries bounded', async () => {
+    const harness = applicationSmokeHarness(validSmokeProbes({
+      '/login': Array.from({ length: 24 }, () => applicationProbeTimeout()),
+    }));
 
     const result = await runApplicationSmoke(repositoryRoot, smokeStackEnv, 3_017, harness.runtime);
 
@@ -1282,7 +1288,51 @@ describe('restored application smoke startup', () => {
     expect(result.loginProbe.outcome).toBe('DEADLINE_EXCEEDED');
     expect(result.loginProbe.attempts).toBeGreaterThan(1);
     expect(result.loginProbe.attempts).toBeLessThanOrEqual(24);
+    expect(result.loginProbe.timeouts).toBe(result.loginProbe.attempts);
+    expect(result.loginProbe.noResponses).toBe(0);
     expect(harness.probe).toHaveBeenCalledTimes(result.loginProbe.attempts + 2);
+    expect(harness.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('recovers from a transient first login no-response and always cleans up the app', async () => {
+    const harness = applicationSmokeHarness(validSmokeProbes({
+      '/login': [
+        applicationProbeNoResponse(),
+        applicationProbeResponse(200, '<h1>Capstone Impact</h1>'),
+      ],
+    }));
+
+    const result = await runApplicationSmoke(repositoryRoot, smokeStackEnv, 3_017, harness.runtime);
+
+    expect(applicationSmokeMatchesRecoveryContract(result)).toBe(true);
+    expect(result.loginProbe).toEqual({
+      attempts: 2,
+      timeouts: 0,
+      noResponses: 1,
+      outcome: 'RESPONSE',
+    });
+    expect(result.processExitedBeforeCleanup).toBe(false);
+    expect(harness.kill).toHaveBeenCalledTimes(1);
+    expect(harness.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('fails when login repeatedly returns no response and keeps retries bounded', async () => {
+    const harness = applicationSmokeHarness(validSmokeProbes({
+      '/login': Array.from({ length: 240 }, () => applicationProbeNoResponse()),
+    }));
+
+    const result = await runApplicationSmoke(repositoryRoot, smokeStackEnv, 3_017, harness.runtime);
+
+    expect(applicationSmokeMatchesRecoveryContract(result)).toBe(false);
+    expect(result.loginStatus).toBeNull();
+    expect(result.loginProbe).toEqual({
+      attempts: 240,
+      timeouts: 0,
+      noResponses: 240,
+      outcome: 'DEADLINE_EXCEEDED',
+    });
+    expect(harness.probe).toHaveBeenCalledTimes(242);
+    expect(harness.kill).toHaveBeenCalledTimes(1);
     expect(harness.kill).toHaveBeenCalledWith('SIGTERM');
   });
 
