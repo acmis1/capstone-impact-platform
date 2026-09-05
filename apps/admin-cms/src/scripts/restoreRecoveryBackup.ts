@@ -71,6 +71,12 @@ export function parseRestoreArgs(args: readonly string[]): CliOptions {
   };
 }
 
+function formatProbeDiagnostics(
+  probe: RestoreVerificationResult['applicationSmoke']['healthProbe'],
+): string {
+  return `${probe.outcome}; attempts=${probe.attempts}; timeouts=${probe.timeouts}; no_responses=${probe.noResponses}`;
+}
+
 export function formatRestoreSummary(result: RestoreVerificationResult, bundlePreserved: boolean): string {
   const gate4Expected = result.gate4?.expectedStats;
   const lines = [
@@ -121,8 +127,17 @@ export function formatRestoreSummary(result: RestoreVerificationResult, bundlePr
     `ZERO_COST_ISOLATED_RESTORE_DURATION_MS = ${result.restoreDurationMs}`,
     `FULL_RECOVERY_VERIFICATION_DURATION_MS = ${result.verificationDurationMs}`,
     `APPLICATION_SMOKE_HEALTH = ${result.applicationSmoke.healthStatus ?? 'NOT_RUN'}`,
+    `APPLICATION_SMOKE_HEALTH_PROBE = ${formatProbeDiagnostics(result.applicationSmoke.healthProbe)}`,
     `APPLICATION_SMOKE_LOGIN = ${result.applicationSmoke.loginStatus ?? 'NOT_RUN'}`,
+    `APPLICATION_SMOKE_LOGIN_MARKER = ${result.applicationSmoke.markerPresent ? 'PRESENT' : 'MISSING'}`,
+    `APPLICATION_SMOKE_LOGIN_PROBE = ${formatProbeDiagnostics(result.applicationSmoke.loginProbe)}`,
+    `APPLICATION_SMOKE_READINESS_STATUS = ${result.applicationSmoke.readinessStatus ?? 'NOT_RUN'}`,
     `APPLICATION_SMOKE_READINESS = ${result.applicationSmoke.readinessClassification ?? 'NOT_RUN'}`,
+    `APPLICATION_SMOKE_READINESS_PROBE = ${formatProbeDiagnostics(result.applicationSmoke.readinessProbe)}`,
+    `APPLICATION_SMOKE_STAGING_IDENTITY = ${result.applicationSmoke.stagingIdentityClaimed ? 'CLAIMED' : 'NOT_CLAIMED'}`,
+    `APPLICATION_SMOKE_PROCESS_EXITED_EARLY = ${result.applicationSmoke.processExitedBeforeCleanup ? 'YES' : 'NO'}`,
+    `APPLICATION_SMOKE_PROCESS_EXIT_CODE = ${result.applicationSmoke.processExitCode ?? 'NONE'}`,
+    `APPLICATION_SMOKE_PROCESS_SIGNAL = ${result.applicationSmoke.processSignal ?? 'NONE'}`,
     `DISPOSABLE_RESIDUE_ABSENT = ${result.residueAbsent ? 'YES' : 'NO'}`,
     `SUCCESSFUL_BUNDLE_PRESERVED = ${bundlePreserved ? 'YES' : 'NO'}`,
   ];

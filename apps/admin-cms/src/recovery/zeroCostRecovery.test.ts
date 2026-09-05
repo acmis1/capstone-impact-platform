@@ -34,8 +34,12 @@ import {
   applicationSmokeMatchesRecoveryContract,
   assertBundlePreserved,
   classifyRestoreFailure,
+  runApplicationSmoke,
   runRestoreVerification,
+  type ApplicationHttpProbeResult,
+  type ApplicationSmokeProcess,
   type ApplicationSmokeResult,
+  type ApplicationSmokeRuntime,
   type RestoreVerificationResult,
 } from './restoreRecoveryRehearsal';
 import { assertSafeObjectKey } from './storageTransfer';
@@ -1171,6 +1175,202 @@ describe('Storage and failure classifications', () => {
   });
 });
 
+function applicationProbeResponse(status: number, body: string): ApplicationHttpProbeResult {
+  return { response: { status, body }, failure: null };
+}
+
+function applicationProbeTimeout(): ApplicationHttpProbeResult {
+  return { response: null, failure: 'TIMEOUT' };
+}
+
+function applicationSmokeHarness(
+  probes: Record<string, ApplicationHttpProbeResult[]>,
+  exitAfterProbe?: number,
+): {
+  runtime: ApplicationSmokeRuntime;
+  kill: ReturnType<typeof vi.fn>;
+  probe: ReturnType<typeof vi.fn>;
+} {
+  const queues = Object.fromEntries(
+    Object.entries(probes).map(([route, results]) => [route, [...results]]),
+  );
+  let now = 0;
+  let probeCount = 0;
+  let exitCode: number | null = null;
+  let signalCode: NodeJS.Signals | null = null;
+  const kill = vi.fn((signal?: number | NodeJS.Signals): boolean => {
+    signalCode = typeof signal === 'string' ? signal : 'SIGTERM';
+    return true;
+  });
+  const child = {
+    get exitCode() { return exitCode; },
+    get signalCode() { return signalCode; },
+    kill,
+  } as ApplicationSmokeProcess;
+  const probe = vi.fn(async (url: string, timeoutMs: number) => {
+    const route = new URL(url).pathname;
+    const result = queues[route]?.shift() ?? applicationProbeTimeout();
+    probeCount += 1;
+    if (!result.response) now += timeoutMs;
+    if (probeCount === exitAfterProbe) exitCode = 1;
+    return result;
+  });
+  return {
+    runtime: {
+      startApplication: vi.fn(() => child),
+      probe,
+      now: () => now,
+      wait: async (milliseconds) => { now += milliseconds; },
+    },
+    kill,
+    probe,
+  };
+}
+
+const smokeStackEnv = {
+  apiUrl: 'http://127.0.0.1:54321',
+  serviceRoleKey: 'synthetic-service-role-key',
+  anonKey: 'synthetic-anon-key',
+};
+
+function validSmokeProbes(
+  overrides: Record<string, ApplicationHttpProbeResult[]> = {},
+): Record<string, ApplicationHttpProbeResult[]> {
+  return {
+    '/api/health': [applicationProbeResponse(200, '{}')],
+    '/api/readiness': [applicationProbeResponse(
+      503,
+      JSON.stringify({ classification: 'CONFIGURATION_NOT_READY' }),
+    )],
+    '/login': [applicationProbeResponse(200, '<h1>Capstone Impact</h1>')],
+    ...overrides,
+  };
+}
+
+describe('restored application smoke startup', () => {
+  const repositoryRoot = path.resolve(__dirname, '../../../..');
+
+  it('recovers from a transient first login timeout and always cleans up the app', async () => {
+    const harness = applicationSmokeHarness(validSmokeProbes({
+      '/login': [
+        applicationProbeTimeout(),
+        applicationProbeResponse(200, '<h1>Capstone Impact</h1>'),
+      ],
+    }));
+
+    const result = await runApplicationSmoke(repositoryRoot, smokeStackEnv, 3_017, harness.runtime);
+
+    expect(applicationSmokeMatchesRecoveryContract(result)).toBe(true);
+    expect(result.loginProbe).toEqual({
+      attempts: 2,
+      timeouts: 1,
+      noResponses: 0,
+      outcome: 'RESPONSE',
+    });
+    expect(result.processExitedBeforeCleanup).toBe(false);
+    expect(harness.kill).toHaveBeenCalledTimes(1);
+    expect(harness.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('fails when login never responds and keeps retries bounded', async () => {
+    const harness = applicationSmokeHarness(validSmokeProbes({ '/login': [] }));
+
+    const result = await runApplicationSmoke(repositoryRoot, smokeStackEnv, 3_017, harness.runtime);
+
+    expect(applicationSmokeMatchesRecoveryContract(result)).toBe(false);
+    expect(result.loginStatus).toBeNull();
+    expect(result.loginProbe.outcome).toBe('DEADLINE_EXCEEDED');
+    expect(result.loginProbe.attempts).toBeGreaterThan(1);
+    expect(result.loginProbe.attempts).toBeLessThanOrEqual(24);
+    expect(harness.probe).toHaveBeenCalledTimes(result.loginProbe.attempts + 2);
+    expect(harness.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('fails immediately on a real login HTTP error without retrying it', async () => {
+    const harness = applicationSmokeHarness(validSmokeProbes({
+      '/login': [applicationProbeResponse(500, 'application error')],
+    }));
+
+    const result = await runApplicationSmoke(repositoryRoot, smokeStackEnv, 3_017, harness.runtime);
+
+    expect(applicationSmokeMatchesRecoveryContract(result)).toBe(false);
+    expect(result.loginStatus).toBe(500);
+    expect(result.loginProbe).toMatchObject({ attempts: 1, outcome: 'RESPONSE' });
+  });
+
+  it('fails immediately when the login marker is missing', async () => {
+    const harness = applicationSmokeHarness(validSmokeProbes({
+      '/login': [applicationProbeResponse(200, '<h1>Unexpected application</h1>')],
+    }));
+
+    const result = await runApplicationSmoke(repositoryRoot, smokeStackEnv, 3_017, harness.runtime);
+
+    expect(applicationSmokeMatchesRecoveryContract(result)).toBe(false);
+    expect(result.loginStatus).toBe(200);
+    expect(result.markerPresent).toBe(false);
+    expect(result.loginProbe.attempts).toBe(1);
+  });
+
+  it.each([
+    [500, 'CONFIGURATION_NOT_READY'],
+    [503, 'UNEXPECTED_CLASSIFICATION'],
+  ])('fails a readiness response with status %i and classification %s', async (
+    status,
+    classification,
+  ) => {
+    const harness = applicationSmokeHarness(validSmokeProbes({
+      '/api/readiness': [applicationProbeResponse(status, JSON.stringify({ classification }))],
+    }));
+
+    const result = await runApplicationSmoke(repositoryRoot, smokeStackEnv, 3_017, harness.runtime);
+
+    expect(applicationSmokeMatchesRecoveryContract(result)).toBe(false);
+    expect(result.readinessStatus).toBe(status);
+    expect(result.readinessClassification).toBe(classification);
+    expect(result.readinessProbe.attempts).toBe(1);
+  });
+
+  it('fails when readiness claims a staging identity', async () => {
+    const harness = applicationSmokeHarness(validSmokeProbes({
+      '/api/readiness': [applicationProbeResponse(
+        503,
+        JSON.stringify({ classification: 'READY' }),
+      )],
+    }));
+
+    const result = await runApplicationSmoke(repositoryRoot, smokeStackEnv, 3_017, harness.runtime);
+
+    expect(applicationSmokeMatchesRecoveryContract(result)).toBe(false);
+    expect(result.stagingIdentityClaimed).toBe(true);
+  });
+
+  it('records an early process exit without retrying unavailable surfaces', async () => {
+    const harness = applicationSmokeHarness(validSmokeProbes(), 1);
+
+    const result = await runApplicationSmoke(repositoryRoot, smokeStackEnv, 3_017, harness.runtime);
+
+    expect(applicationSmokeMatchesRecoveryContract(result)).toBe(false);
+    expect(result.processExitedBeforeCleanup).toBe(true);
+    expect(result.processExitCode).toBe(1);
+    expect(result.readinessProbe.outcome).toBe('PROCESS_EXITED');
+    expect(result.loginProbe.outcome).toBe('PROCESS_EXITED');
+    expect(harness.kill).not.toHaveBeenCalled();
+  });
+
+  it('fails valid responses when the application exits before cleanup', async () => {
+    const harness = applicationSmokeHarness(validSmokeProbes(), 3);
+
+    const result = await runApplicationSmoke(repositoryRoot, smokeStackEnv, 3_017, harness.runtime);
+
+    expect(result.healthStatus).toBe(200);
+    expect(result.readinessStatus).toBe(503);
+    expect(result.loginStatus).toBe(200);
+    expect(result.markerPresent).toBe(true);
+    expect(result.processExitedBeforeCleanup).toBe(true);
+    expect(applicationSmokeMatchesRecoveryContract(result)).toBe(false);
+  });
+});
+
 describe('disposable ownership and safe summaries', () => {
   it('builds a bare PostgreSQL 17 target without canonical seed or bucket declarations', () => {
     const baseConfig = [
@@ -1264,11 +1464,17 @@ describe('disposable ownership and safe summaries', () => {
       applicationSmoke: {
         attempted: false,
         healthStatus: null,
+        healthProbe: { attempts: 0, timeouts: 0, noResponses: 0, outcome: 'NOT_RUN' },
         readinessStatus: null,
         readinessClassification: null,
+        readinessProbe: { attempts: 0, timeouts: 0, noResponses: 0, outcome: 'NOT_RUN' },
         loginStatus: null,
         markerPresent: false,
+        loginProbe: { attempts: 0, timeouts: 0, noResponses: 0, outcome: 'NOT_RUN' },
         stagingIdentityClaimed: false,
+        processExitedBeforeCleanup: false,
+        processExitCode: null,
+        processSignal: null,
       },
       residueAbsent: true,
     } satisfies RestoreVerificationResult;
@@ -1304,11 +1510,17 @@ describe('disposable ownership and safe summaries', () => {
     const expected: ApplicationSmokeResult = {
       attempted: true,
       healthStatus: 200,
+      healthProbe: { attempts: 1, timeouts: 0, noResponses: 0, outcome: 'RESPONSE' },
       readinessStatus: 503,
       readinessClassification: 'CONFIGURATION_NOT_READY',
+      readinessProbe: { attempts: 1, timeouts: 0, noResponses: 0, outcome: 'RESPONSE' },
       loginStatus: 200,
       markerPresent: true,
+      loginProbe: { attempts: 1, timeouts: 0, noResponses: 0, outcome: 'RESPONSE' },
       stagingIdentityClaimed: false,
+      processExitedBeforeCleanup: false,
+      processExitCode: null,
+      processSignal: null,
     };
     expect(applicationSmokeMatchesRecoveryContract(expected)).toBe(true);
     expect(applicationSmokeMatchesRecoveryContract({
