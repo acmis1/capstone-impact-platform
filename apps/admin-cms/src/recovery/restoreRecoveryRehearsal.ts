@@ -138,14 +138,51 @@ export interface Gate4RestoredResult {
   tableGrantsMatch: boolean;
 }
 
+export type ApplicationProbeOutcome =
+  | 'NOT_RUN'
+  | 'RESPONSE'
+  | 'DEADLINE_EXCEEDED'
+  | 'PROCESS_EXITED';
+
+export interface ApplicationProbeDiagnostics {
+  attempts: number;
+  timeouts: number;
+  noResponses: number;
+  outcome: ApplicationProbeOutcome;
+}
+
 export interface ApplicationSmokeResult {
   attempted: boolean;
   healthStatus: number | null;
+  healthProbe: ApplicationProbeDiagnostics;
   readinessStatus: number | null;
   readinessClassification: string | null;
+  readinessProbe: ApplicationProbeDiagnostics;
   loginStatus: number | null;
   markerPresent: boolean;
+  loginProbe: ApplicationProbeDiagnostics;
   stagingIdentityClaimed: boolean;
+  processExitedBeforeCleanup: boolean;
+  processExitCode: number | null;
+  processSignal: NodeJS.Signals | null;
+}
+
+export interface ApplicationHttpProbeResult {
+  response: { status: number; body: string } | null;
+  failure: 'TIMEOUT' | 'NO_RESPONSE' | null;
+}
+
+export type ApplicationSmokeProcess = Pick<ChildProcess, 'exitCode' | 'signalCode' | 'kill'>;
+
+export interface ApplicationSmokeRuntime {
+  startApplication: (
+    repositoryRoot: string,
+    stackEnv: { apiUrl: string; serviceRoleKey: string; anonKey: string },
+    port: number,
+  ) => ApplicationSmokeProcess;
+  probe: (url: string, timeoutMs: number) => Promise<ApplicationHttpProbeResult>;
+  now: () => number;
+  wait: (milliseconds: number) => Promise<void>;
 }
 
 export interface RestoreVerificationResult {
@@ -531,35 +568,53 @@ export function runGate4(
   };
 }
 
-async function probe(url: string): Promise<Response | null> {
+const APPLICATION_SMOKE_DEADLINE_MS = 240_000;
+const APPLICATION_PROBE_TIMEOUT_MS = 10_000;
+const APPLICATION_PROBE_RETRY_DELAY_MS = 1_000;
+
+function emptyProbeDiagnostics(): ApplicationProbeDiagnostics {
+  return { attempts: 0, timeouts: 0, noResponses: 0, outcome: 'NOT_RUN' };
+}
+
+function initialApplicationSmokeResult(attempted: boolean): ApplicationSmokeResult {
+  return {
+    attempted,
+    healthStatus: null,
+    healthProbe: emptyProbeDiagnostics(),
+    readinessStatus: null,
+    readinessClassification: null,
+    readinessProbe: emptyProbeDiagnostics(),
+    loginStatus: null,
+    markerPresent: false,
+    loginProbe: emptyProbeDiagnostics(),
+    stagingIdentityClaimed: false,
+    processExitedBeforeCleanup: false,
+    processExitCode: null,
+    processSignal: null,
+  };
+}
+
+async function probe(url: string, timeoutMs: number): Promise<ApplicationHttpProbeResult> {
   try {
-    return await fetch(url, { signal: AbortSignal.timeout(10_000) });
-  } catch {
-    return null;
+    const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    const body = await response.text();
+    return { response: { status: response.status, body }, failure: null };
+  } catch (error) {
+    const name = error instanceof Error ? error.name : '';
+    return {
+      response: null,
+      failure: name === 'TimeoutError' || name === 'AbortError' ? 'TIMEOUT' : 'NO_RESPONSE',
+    };
   }
 }
 
-/**
- * Boots the reviewed Admin/CMS against the restored target. No real staging credential is used and
- * no copied identity is signed in: the smoke only proves the restored database serves the
- * application surfaces and that readiness still refuses to claim staging identity.
- */
-async function runApplicationSmoke(
+function startApplication(
   repositoryRoot: string,
   stackEnv: { apiUrl: string; serviceRoleKey: string; anonKey: string },
   port: number,
-): Promise<ApplicationSmokeResult> {
-  const result: ApplicationSmokeResult = {
-    attempted: true,
-    healthStatus: null,
-    readinessStatus: null,
-    readinessClassification: null,
-    loginStatus: null,
-    markerPresent: false,
-    stagingIdentityClaimed: false,
-  };
+): ApplicationSmokeProcess {
   const appDirectory = path.join(repositoryRoot, 'apps', 'admin-cms');
-  const child: ChildProcess = spawn(process.execPath, [
+  return spawn(process.execPath, [
     require.resolve('next/dist/bin/next', { paths: [appDirectory] }),
     'dev', '--hostname', '127.0.0.1', '--port', String(port),
   ], {
@@ -591,23 +646,90 @@ async function runApplicationSmoke(
       CAPSTONE_RUNTIME_ENV: '',
     },
   });
+}
 
-  try {
-    const deadline = Date.now() + 240_000;
-    while (Date.now() < deadline) {
-      const health = await probe(`http://127.0.0.1:${port}/api/health`);
-      if (health?.status === 200) {
-        result.healthStatus = health.status;
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
+const applicationSmokeRuntime: ApplicationSmokeRuntime = {
+  startApplication,
+  probe,
+  now: Date.now,
+  wait: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+};
+
+function processHasExited(child: ApplicationSmokeProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
+async function probeUntilResponse(
+  url: string,
+  child: ApplicationSmokeProcess,
+  deadline: number,
+  runtime: ApplicationSmokeRuntime,
+): Promise<{
+  response: ApplicationHttpProbeResult['response'];
+  diagnostics: ApplicationProbeDiagnostics;
+}> {
+  const diagnostics = emptyProbeDiagnostics();
+  while (runtime.now() < deadline) {
+    if (processHasExited(child)) {
+      diagnostics.outcome = 'PROCESS_EXITED';
+      return { response: null, diagnostics };
     }
 
-    const readiness = await probe(`http://127.0.0.1:${port}/api/readiness`);
-    if (readiness) {
-      result.readinessStatus = readiness.status;
+    const remaining = deadline - runtime.now();
+    const attempt = await runtime.probe(
+      url,
+      Math.max(1, Math.min(APPLICATION_PROBE_TIMEOUT_MS, remaining)),
+    );
+    diagnostics.attempts += 1;
+    if (attempt.response) {
+      diagnostics.outcome = 'RESPONSE';
+      return { response: attempt.response, diagnostics };
+    }
+    if (attempt.failure === 'TIMEOUT') diagnostics.timeouts += 1;
+    else diagnostics.noResponses += 1;
+
+    if (processHasExited(child)) {
+      diagnostics.outcome = 'PROCESS_EXITED';
+      return { response: null, diagnostics };
+    }
+    const retryDelay = Math.min(APPLICATION_PROBE_RETRY_DELAY_MS, deadline - runtime.now());
+    if (retryDelay > 0) await runtime.wait(retryDelay);
+  }
+  diagnostics.outcome = processHasExited(child) ? 'PROCESS_EXITED' : 'DEADLINE_EXCEEDED';
+  return { response: null, diagnostics };
+}
+
+/**
+ * Boots the reviewed Admin/CMS against the restored target. No real staging credential is used and
+ * no copied identity is signed in: the smoke only proves the restored database serves the
+ * application surfaces and that readiness still refuses to claim staging identity.
+ */
+export async function runApplicationSmoke(
+  repositoryRoot: string,
+  stackEnv: { apiUrl: string; serviceRoleKey: string; anonKey: string },
+  port: number,
+  runtime: ApplicationSmokeRuntime = applicationSmokeRuntime,
+): Promise<ApplicationSmokeResult> {
+  const result = initialApplicationSmokeResult(true);
+  const child = runtime.startApplication(repositoryRoot, stackEnv, port);
+  const deadline = runtime.now() + APPLICATION_SMOKE_DEADLINE_MS;
+
+  try {
+    const health = await probeUntilResponse(
+      `http://127.0.0.1:${port}/api/health`, child, deadline, runtime,
+    );
+    result.healthProbe = health.diagnostics;
+    if (health.response) result.healthStatus = health.response.status;
+    if (result.healthStatus !== 200) return result;
+
+    const readiness = await probeUntilResponse(
+      `http://127.0.0.1:${port}/api/readiness`, child, deadline, runtime,
+    );
+    result.readinessProbe = readiness.diagnostics;
+    if (readiness.response) {
+      result.readinessStatus = readiness.response.status;
       try {
-        const body = await readiness.json() as { classification?: string };
+        const body = JSON.parse(readiness.response.body) as { classification?: string };
         result.readinessClassification = body.classification ?? null;
         result.stagingIdentityClaimed = body.classification === 'READY';
       } catch {
@@ -615,27 +737,36 @@ async function runApplicationSmoke(
       }
     }
 
-    const login = await probe(`http://127.0.0.1:${port}/login`);
-    if (login) {
-      result.loginStatus = login.status;
-      const body = await login.text();
-      result.markerPresent = body.includes('Capstone Impact');
+    const login = await probeUntilResponse(
+      `http://127.0.0.1:${port}/login`, child, deadline, runtime,
+    );
+    result.loginProbe = login.diagnostics;
+    if (login.response) {
+      result.loginStatus = login.response.status;
+      result.markerPresent = login.response.body.includes('Capstone Impact');
     }
   } finally {
-    child.kill('SIGTERM');
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    result.processExitedBeforeCleanup = processHasExited(child);
+    result.processExitCode = child.exitCode;
+    result.processSignal = child.signalCode;
+    if (!processHasExited(child)) child.kill('SIGTERM');
+    await runtime.wait(1_500);
+    if (!processHasExited(child)) child.kill('SIGKILL');
   }
   return result;
 }
 
 export function applicationSmokeMatchesRecoveryContract(result: ApplicationSmokeResult): boolean {
   return result.healthStatus === 200
+    && result.healthProbe.outcome === 'RESPONSE'
     && result.loginStatus === 200
     && result.markerPresent
+    && result.loginProbe.outcome === 'RESPONSE'
     && result.readinessStatus === 503
     && result.readinessClassification === 'CONFIGURATION_NOT_READY'
-    && !result.stagingIdentityClaimed;
+    && result.readinessProbe.outcome === 'RESPONSE'
+    && !result.stagingIdentityClaimed
+    && !result.processExitedBeforeCleanup;
 }
 
 function describeStorageDifferences(differences: readonly StorageDifference[]): string[] {
@@ -774,15 +905,7 @@ export async function runRestoreVerification(
   let restoreCompletedAt = restoreStartedAt;
   let verificationCompletedAt = restoreStartedAt;
   let gate4: Gate4RestoredResult | null = null;
-  let applicationSmoke: ApplicationSmokeResult = {
-    attempted: false,
-    healthStatus: null,
-    readinessStatus: null,
-    readinessClassification: null,
-    loginStatus: null,
-    markerPresent: false,
-    stagingIdentityClaimed: false,
-  };
+  let applicationSmoke = initialApplicationSmokeResult(false);
   let restoredEvidence: Awaited<ReturnType<typeof readRecoveryEvidence>> | null = null;
   let restoredManagedSchemaEvidence: ManagedSchemaCustomizationEvidence | null = null;
   let restoredObjectCount = 0;
