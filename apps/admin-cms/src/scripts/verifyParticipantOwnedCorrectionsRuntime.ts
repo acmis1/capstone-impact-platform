@@ -53,7 +53,7 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
     return { token, hash, id: result.previewId as string };
   };
   try {
-    assert.match(sql('SELECT count(*) AS migration_count FROM supabase_migrations.schema_migrations;'), /\b51\b/);
+    assert.match(sql('SELECT count(*) AS migration_count FROM supabase_migrations.schema_migrations;'), /\b52\b/);
     // Default ACLs materialize as direct grants at CREATE TABLE; SELECT alone cannot narrow them.
     const correctionTables = ['participant_correction_events', 'participant_correction_prior_revisions',
       'participant_correction_recovery_rows', 'participant_correction_submissions'];
