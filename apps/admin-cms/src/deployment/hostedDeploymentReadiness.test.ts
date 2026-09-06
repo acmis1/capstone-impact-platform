@@ -154,20 +154,17 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
 
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(51);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(52);
 
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
-      // The controlled-project-links import migration and the participant-evidence migration
-      // and correction package migration are the new migrations relative to origin/main. Every current-main
+      // Only the Issue #268 forward migration is new relative to origin/main. Every historical
       // migration must stay byte-identical.
       const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
-        (migration) => migration !== '20260902010606_controlled_project_links_import.sql'
-          && migration !== '20260903120000_participant_preview_controlled_links.sql' && migration !== '20260903130000_participant_owned_corrections.sql',
-  '20260903130000_participant_owned_corrections.sql',
+        (migration) => migration !== '20260906120000_public_removal_completion_reconciliation.sql',
       );
 
-      expect(historicalMigrations).toHaveLength(48);
+      expect(historicalMigrations).toHaveLength(51);
 
       expect(() =>
         execFileSync(

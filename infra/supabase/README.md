@@ -7,8 +7,8 @@ This directory contains the version-controlled database schema migrations, polic
 ## ⚠️ Current Environment & Staging Status
 
 > [!NOTE]
-> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. The current 51-file timestamped migration manifest through `20260903130000_participant_owned_corrections.sql` is the executable repository baseline and passes its automated manifest contract. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
-> * **Active Hosted Staging (`capstone-admin-cms-staging-v2-2026`):** Historical read-only evidence first recorded 46 rows through `20260828120000` and later recorded 48/48 repository migrations through `20260831090000_postgres17_maintain_privilege_alignment`. This evidence predates repository migrations 0049–0051 and does not claim that they are hosted; migration history also does not by itself prove exact schema, grant, or RPC parity.
+> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. The current 52-file timestamped migration manifest through `20260906120000_public_removal_completion_reconciliation.sql` is the executable repository baseline and passes its automated manifest contract. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
+> * **Active Hosted Staging (`capstone-admin-cms-staging-v2-2026`):** Historical read-only evidence first recorded 46 rows through `20260828120000` and later recorded 48/48 repository migrations through `20260831090000_postgres17_maintain_privilege_alignment`. This evidence predates repository migrations 0049–0052 and does not claim that they are hosted; migration history also does not by itself prove exact schema, grant, or RPC parity.
 > * **Historical/Paused Hosted Staging (`capstone-admin-cms-staging-2026`):** This is the environment associated with the old manually evolved migration baseline. Its history must not be confused with the active staging-v2 evidence.
 > * **Corrective Fix:** Migration `0006` corrected the initial administrator bootstrap runtime by replacing `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
 > * **Default Execution Hardening:** Migration `0007` (`20260803174000_harden_function_execute_defaults.sql`) establishes global postgres-owned function default privilege revokes and conditionally revokes execution on the optional hosted RLS helper.
@@ -73,7 +73,7 @@ npm run supabase:stop
 
 ---
 
-## Selected Migration Inventory (51 Migrations Total)
+## Selected Migration Inventory (52 Migrations Total)
 
 The executable files under `migrations/` and the exact manifest enforced by
 `apps/admin-cms/src/deployment/hostedDeploymentReadiness.ts` are authoritative. The entries below
@@ -113,3 +113,4 @@ highlight major milestones rather than replacing that complete manifest.
 * **[20260902010606_controlled_project_links_import.sql](./migrations/20260902010606_controlled_project_links_import.sql):** Repository implementation that extends normal project-details workbook staging to persist optional, centrally validated video, live demo/prototype, and repository URLs into the existing project columns.
 * **[20260903120000_participant_preview_controlled_links.sql](./migrations/20260903120000_participant_preview_controlled_links.sql):** Repository implementation that includes controlled project links in immutable participant-preview evidence and in publication/reconciliation readiness comparisons; it does not publish them.
 * **[20260903130000_participant_owned_corrections.sql](./migrations/20260903130000_participant_owned_corrections.sql):** Repository implementation of immutable participant and staff pre-preview package submissions, exact-revision review, recoverable acceptance, and service-role-SELECT-only correction evidence tables. Hosted deployment and verification remain separately governed and are not asserted here.
+* **[20260906120000_public_removal_completion_reconciliation.sql](./migrations/20260906120000_public_removal_completion_reconciliation.sql):** Atomically reconciles a removal target's project state when the exact bound canonical-feed observation completes, and narrowly repairs historical pending rows backed by one unambiguous completed-removal ledger trail. It performs no Storage I/O and adds no schema objects.

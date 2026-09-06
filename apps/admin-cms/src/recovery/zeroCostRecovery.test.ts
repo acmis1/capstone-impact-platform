@@ -365,10 +365,10 @@ describe('managed auth/storage customization recovery boundary', () => {
     }
   });
 
-  it('inventories exactly both current Auth triggers and no custom Storage object across 51 migrations', () => {
+  it('inventories exactly both current Auth triggers and no custom Storage object across 52 migrations', () => {
     const operations = inspectRepositoryManagedSchemaMigrationInventory(repositoryRoot);
     const creates = operations.filter((operation) => operation.action === 'CREATE_TRIGGER');
-    expect(repositoryMigrationVersions(repositoryRoot)).toHaveLength(51);
+    expect(repositoryMigrationVersions(repositoryRoot)).toHaveLength(52);
     expect(creates.map((operation) => `${operation.schema}.${operation.table}.${operation.name}`))
       .toEqual([
         'auth.users.claim_staff_provisioning_auth_insert_before_insert',
@@ -452,7 +452,7 @@ describe('managed auth/storage customization recovery boundary', () => {
     }
   });
 
-  it('cannot false-green 51/51 migration history when a managed Auth trigger is absent', () => {
+  it('cannot false-green 52/52 migration history when a managed Auth trigger is absent', () => {
     const migrations = repositoryMigrationVersions(repositoryRoot);
     const restored = managedEvidenceFixture();
     restored.triggers.pop();
@@ -460,7 +460,7 @@ describe('managed auth/storage customization recovery boundary', () => {
       REPOSITORY_MANAGED_SCHEMA_EXPECTATION,
       restored,
     );
-    expect(migrations).toHaveLength(51);
+    expect(migrations).toHaveLength(52);
     expect(resolveClassification(
       managedDrift.length > 0 ? ['MANAGED_SCHEMA_CUSTOMIZATION_DRIFT'] : [],
     )).toBe('MANAGED_SCHEMA_CUSTOMIZATION_DRIFT');
@@ -1599,7 +1599,7 @@ describe('disposable ownership and safe summaries', () => {
  * The known hosted staging-v2 baseline is 48 migrations through 20260831090000, which predates the
  * participant correction tables, RPCs and the participant-corrections-private bucket. The hardened
  * capture derives its expectations from the CURRENT repository checkout, so running it from
- * 51-migration `main` against that 48-state source must fail closed rather than produce a bundle
+ * 52-migration `main` against that 48-state source must fail closed rather than produce a bundle
  * that silently records a different schema than the one the contract describes.
  *
  * These cases pin that refusal so it cannot be relaxed to make an older source pass. The safe
@@ -1608,19 +1608,24 @@ describe('disposable ownership and safe summaries', () => {
 describe('pre-migration hosted baseline capture boundary', () => {
   const repositoryRoot = path.resolve(__dirname, '../../../..');
   const BASELINE_LATEST_VERSION = '20260831090000';
-  const RELEASE_VERSIONS = ['20260902010606', '20260903120000', '20260903130000'];
+  const RELEASE_VERSIONS = [
+    '20260902010606',
+    '20260903120000',
+    '20260903130000',
+    '20260906120000',
+  ];
 
   function baselineMigrationVersions(): string[] {
     return repositoryMigrationVersions(repositoryRoot)
       .filter((version) => !RELEASE_VERSIONS.includes(version));
   }
 
-  it('describes the 48-migration baseline as a strict prefix of the 51-migration contract', () => {
+  it('describes the 48-migration baseline as a strict prefix of the 52-migration contract', () => {
     const repositoryVersions = repositoryMigrationVersions(repositoryRoot);
     const baselineVersions = baselineMigrationVersions();
 
-    expect(repositoryVersions).toHaveLength(51);
-    expect(repositoryVersions.at(-1)).toBe('20260903130000');
+    expect(repositoryVersions).toHaveLength(52);
+    expect(repositoryVersions.at(-1)).toBe('20260906120000');
     expect(baselineVersions).toHaveLength(48);
     expect(baselineVersions.at(-1)).toBe(BASELINE_LATEST_VERSION);
     expect(repositoryVersions.slice(0, 48)).toEqual(baselineVersions);
@@ -1647,7 +1652,7 @@ describe('pre-migration hosted baseline capture boundary', () => {
     }, { repositoryMigrationVersions: repositoryVersions });
 
     expect(errors).toContain(
-      'Recovery bundle records 48 migrations; the reviewed repository declares 51.',
+      'Recovery bundle records 48 migrations; the reviewed repository declares 52.',
     );
     expect(errors).toContain(
       'Recovery bundle migration history does not match the reviewed repository manifest.',
@@ -1663,6 +1668,6 @@ describe('pre-migration hosted baseline capture boundary', () => {
     expect(CANONICAL_STORAGE_BUCKETS).toContain('participant-corrections-private');
     expect(PRIVATE_STORAGE_BUCKETS).toContain('participant-corrections-private');
     expect([...CANONICAL_STORAGE_BUCKETS].sort()).toEqual([...REQUIRED_STORAGE_BUCKETS].sort());
-    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(51);
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(52);
   });
 });

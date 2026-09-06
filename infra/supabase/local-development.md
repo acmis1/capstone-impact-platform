@@ -10,7 +10,7 @@ This guide documents the canonical, local-only Supabase development workflow for
 - **Verified Host Binding:** `supabase:start` creates or reuses the deterministic `capstone-impact-platform-local-loopback` bridge network, captures and passes its immutable Docker ID to the pinned Supabase CLI, rechecks that ID after execution, verifies every container attachment by ID, explicitly applies loopback to Docker create requests for Docker Desktop compatibility, and then fails closed unless structured Docker inspection proves the exact required container set, health, and every published project port.
 - **Private Docker Compatibility Proxy:** The compatibility proxy exists only for one `start` or local reset invocation. It uses a cryptographically random per-run header supplied only to that CLI child, requires the header on normal and upgrade requests, strips it before forwarding, and uses a unique private endpoint. The optional Vector log collector is excluded because it requires independent Docker-socket access and cannot present the per-run CLI capability; local application, database, Auth, Storage, Studio, Mailpit, and Analytics workflows do not depend on that collector. On Unix, runtime checks require a `0700` directory plus a `0600` readiness file and socket; shutdown removes them. Native Windows uses a unique named pipe without enabling Node's all-user read/write options, but its ACL behavior remains runtime-unverified for this patch. Native developer Linux also remains runtime-unverified beyond tests and CI contracts.
 - **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real participant or stakeholder PII or credentials are used or committed.
-- **Deterministic Migration Replay:** Running `npm run supabase:reset` reconstructs the local database and replays all 51 timestamped migrations from `infra/supabase/migrations/` in strict ascending order, ending with Migration 0051, `20260903130000_participant_owned_corrections.sql`, followed by the synthetic SQL seed. Local replay is not evidence of hosted deployment.
+- **Deterministic Migration Replay:** Running `npm run supabase:reset` reconstructs the local database and replays all 52 timestamped migrations from `infra/supabase/migrations/` in strict ascending order, ending with Migration 0052, `20260906120000_public_removal_completion_reconciliation.sql`, followed by the synthetic SQL seed. Local replay is not evidence of hosted deployment.
 - **Verification Strategy & Scope:**
   - Static migration tests inspect committed SQL contracts.
   - Runtime verification inspects the actual local database reset, live schema, policy semantics, exact table-grant matrix, function execution privileges, storage buckets, and real password logins for all three synthetic accounts.
@@ -52,7 +52,7 @@ The `npm run setup:local` runner automatically executes these diagnostic steps i
 5. `npm run supabase:users:local` — Provision synthetic `admin`, `reviewer`, and `editor` staff accounts
 6. `npm run supabase:verify:local` — Verify loopback connectivity, schema, grants, RLS, storage, and password logins
 
-`setup:local` is idempotent and does not perform a database reset. On a new stack, startup applies the repository migrations and SQL seed; an existing stack is reused and then verified. An older local stack must be advanced through the approved local migration procedure or intentionally reconstructed before it can satisfy the current contract. Use `npm run supabase:reset` separately only for an intentional clean reconstruction of all 51 migrations, then rerun setup to restore local Storage fixtures, environment configuration and synthetic staff accounts.
+`setup:local` is idempotent and does not perform a database reset. On a new stack, startup applies the repository migrations and SQL seed; an existing stack is reused and then verified. An older local stack must be advanced through the approved local migration procedure or intentionally reconstructed before it can satisfy the current contract. Use `npm run supabase:reset` separately only for an intentional clean reconstruction of all 52 migrations, then rerun setup to restore local Storage fixtures, environment configuration and synthetic staff accounts.
 
 ---
 
@@ -67,7 +67,7 @@ When onboarding a new developer or testing on a fresh machine:
 - [ ] `npm run onboarding:check` passes all 12 prechecks.
 - [ ] `npm run supabase:start` launches local container suite.
 - [ ] Structured Docker inspection reports ports `54321`–`54327` on loopback only, with no `0.0.0.0` or `::` publication.
-- [ ] `npm run supabase:reset` replays all 51 migrations cleanly through Migration 0051.
+- [ ] `npm run supabase:reset` replays all 52 migrations cleanly through Migration 0052.
 - [ ] `npm run supabase:seed:buckets` reconciles three baseline buckets and poster fixtures, and verifies the fourth, migration-managed bucket.
 - [ ] `npm run supabase:env:local` creates `apps/admin-cms/.env.local`.
 - [ ] `npm run supabase:users:local` provisions synthetic `admin`, `reviewer`, and `editor` accounts.

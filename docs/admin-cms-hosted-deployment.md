@@ -16,7 +16,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | **Instance Status** | Active / Separate (Never touch) | **ACTIVE_HEALTHY** (Active Target) | **PAUSED / INACTIVE** (Do not modify) |
 | **Region** | `ap-southeast-1` | `ap-southeast-1` | `ap-southeast-1` |
 | **Hosting Service** | Existing Render static/web service | **Separate** Render/Cloud Web Service | — |
-| **Database State** | Prohibited from mutation | Historical read-only evidence recorded 46 migrations through `20260828120000` and later 48/48 through `20260831090000`; repository target is 51 and migrations 0049–0051 are not asserted as deployed. Exact schema/grant/RPC alignment is independently re-verifiable | Historical manually evolved baseline; migration history untracked |
+| **Database State** | Prohibited from mutation | Historical read-only evidence recorded 46 migrations through `20260828120000` and later 48/48 through `20260831090000`; repository target is 52 and migrations 0049–0052 are not asserted as deployed. Exact schema/grant/RPC alignment is independently re-verifiable | Historical manually evolved baseline; migration history untracked |
 
 > [!IMPORTANT]
 > The existing Render service configured for `Prototype/` must **NEVER** be repurposed or pointed to `apps/admin-cms`. The Admin/CMS requires an independent web service with its own environment variables and deployment pipeline. Furthermore, the Prototype Supabase project (`capstone-prototype-recovery-2026`) is completely isolated and must never be targeted by Admin/CMS operations.
@@ -261,7 +261,7 @@ Local publication, staging/test-showcase publication, and live production public
 The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpceeltukbzxpsvinb`) has the following point-in-time read-only evidence, listed in observation order:
 - **Migration History (Gate 3) — earlier observation**: 46 rows were recorded in `supabase_migrations.schema_migrations`, from earliest `20260601035138` through latest `20260828120000`.
 - **Migration History (Gate 3) — later observation**: 48/48 repository migrations were recorded, from earliest `20260601035138` through latest `20260831090000_postgres17_maintain_privilege_alignment`. This is the most recent hosted migration-history evidence and supersedes the 46-row observation.
-- **Repository target versus hosted**: the repository contains 51 migrations through `20260903130000_participant_owned_corrections.sql`. Hosted deployment of migrations 0049, 0050 and 0051 is **NOT ASSERTED**; no hosted check has established it. The release-specific transition is planned in the [Staging Migrations 0049–0051 Rollout Plan](operations/staging-migrations-49-51-rollout.md).
+- **Repository target versus hosted**: the repository contains 52 migrations through `20260906120000_public_removal_completion_reconciliation.sql`. Hosted deployment of migrations 0049 through 0052 is **NOT ASSERTED**; no hosted check has established it. The earlier 0049–0051 transition remains documented in the [Staging Migrations 0049–0051 Rollout Plan](operations/staging-migrations-49-51-rollout.md); Migration 0052 requires its own reviewed forward-deployment decision.
 - **Schema, Grants, and RPCs (Gate 4)**: Migration-history count alone does not prove exact schema, constraints, RLS, grants, or RPC parity. Those require a separate governed verification.
 - **Separate Release Gates**: Current Render deployment identity, Auth/Storage readiness, UAT, recovery, monitoring, and release acceptance are independent evidence layers.
 
@@ -303,7 +303,7 @@ A hosted target still at the historical 48-migration baseline predates migration
 
 ### B. Governed Evidence Boundary
 The active staging-v2 migration history is a separate Gate 3 evidence layer from the Gate 4 schema, grant, RLS, and RPC verification that may be required for a release:
-- **Migration History (Gate 3)**: The latest point-in-time record is 48/48 rows through `20260831090000_postgres17_maintain_privilege_alignment`, beginning at `20260601035138`; an earlier observation recorded 46 rows through `20260828120000`. Repository migrations 0049–0051 are not asserted as deployed.
+- **Migration History (Gate 3)**: The latest point-in-time record is 48/48 rows through `20260831090000_postgres17_maintain_privilege_alignment`, beginning at `20260601035138`; an earlier observation recorded 46 rows through `20260828120000`. Repository migrations 0049–0052 are not asserted as deployed.
 - **Schema & Grants (Gate 4)**: Exact alignment remains independently re-verifiable; matching migration-history count is not schema/grant/RPC parity.
 - **Other Gates**: Storage, Auth, deployment identity, UAT, recovery, monitoring, and release acceptance require their own evidence.
 

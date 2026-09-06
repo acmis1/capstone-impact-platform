@@ -235,7 +235,7 @@ describe('multi-image gallery integration contract', () => {
         .readdirSync(path.join(root, 'infra/supabase/migrations'))
         .filter((name) => name.endsWith('.sql'));
 
-      expect(files).toHaveLength(51);
+      expect(files).toHaveLength(52);
     });
 
     it('keeps the six gallery migrations present', () => {

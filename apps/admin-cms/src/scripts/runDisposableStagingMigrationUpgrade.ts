@@ -17,15 +17,15 @@ import { collectLocalGate4Evidence } from './checkGate4SchemaEvidence';
 import { MIGRATION_MANAGED_BUCKETS } from '../local-development/localSupabaseFixtures';
 
 /**
- * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 migration transition on a stack this verifier
+ * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 migration transition on a stack this verifier
  * owns outright.
  *
  * The known hosted staging-v2 baseline is 48 migrations through
- * 20260831090000_postgres17_maintain_privilege_alignment. A clean 51-migration install proves the
+ * 20260831090000_postgres17_maintain_privilege_alignment. A clean 52-migration install proves the
  * end state but not the transition, and the existing deployment-ledger upgrade proves a different
  * single migration. This rehearsal provisions exactly the 48-migration baseline, seeds the minimum
- * representative synthetic evidence a real 48-state database would hold, applies 0049, 0050 and
- * 0051 one at a time in deterministic order, and asserts after each step that nothing existing was
+ * representative synthetic evidence a real 48-state database would hold, applies 0049 through
+ * 0052 one at a time in deterministic order, and asserts after each step that nothing existing was
  * rewritten and that the new authority is exactly what the migration declares.
  *
  * Everything is disposable and loopback-only: its own project id, port block, Docker network,
@@ -37,6 +37,7 @@ const RELEASE_MIGRATIONS = [
   { ordinal: 49, version: '20260902010606', file: '20260902010606_controlled_project_links_import.sql' },
   { ordinal: 50, version: '20260903120000', file: '20260903120000_participant_preview_controlled_links.sql' },
   { ordinal: 51, version: '20260903130000', file: '20260903130000_participant_owned_corrections.sql' },
+  { ordinal: 52, version: '20260906120000', file: '20260906120000_public_removal_completion_reconciliation.sql' },
 ] as const;
 
 const BASELINE_MIGRATION_COUNT = 48;
@@ -71,7 +72,7 @@ const CORRECTION_RPC_SIGNATURES = [
 ] as const;
 
 /**
- * Rows that must survive 0049, 0050 and 0051 byte-identically. Shared taxonomy, publication and
+ * Rows that must survive 0049 through 0052 byte-identically. Shared taxonomy, publication and
  * deployment-ledger state are included because a release migration must never quietly touch them.
  */
 // The 41-table release inventory minus the four tables first created by 0051 is the exact
@@ -820,6 +821,35 @@ function assertAfter51(baseline: BaselineEvidence): void {
   console.log('PASS: Migration 0051 added fail-closed, immutable, service-only correction authority');
 }
 
+function assertAfter52(baseline: BaselineEvidence, publicTableGrantsBefore52: string): void {
+  assertPreservedTablesUnchanged(baseline.tables, 'Migration 0052');
+  const completion = routineDefinition(
+    'complete_public_feed_operation',
+    'p_operation_id uuid, p_owner_epoch bigint, p_owner_token text, p_actor_id uuid, p_observed_hash text, p_observed_record_count integer',
+  );
+  assert.ok(completion.includes('SECURITY DEFINER'), 'Migration 0052 lost SECURITY DEFINER.');
+  assert.ok(completion.includes("SET search_path TO ''"), 'Migration 0052 lost the empty search path.');
+  assert.ok(completion.includes('pending_removal_from_public = false'));
+  assert.ok(completion.includes('public_removal_completed_at = v_completed_at'));
+  assert.ok(completion.includes("v_operation.state <> 'DB_FINALIZED'"));
+  assert.ok(completion.includes("'INVALID_PROJECT_STATE'"));
+  assert.equal(
+    psql("SELECT COALESCE(pg_catalog.string_agg(CASE WHEN acl.grantee=0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(acl.grantee) END, ',' ORDER BY acl.grantee), 'NONE') FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE n.nspname='public' AND p.proname='complete_public_feed_operation' AND acl.privilege_type='EXECUTE' AND (acl.grantee=0 OR pg_catalog.pg_get_userbyid(acl.grantee) IN ('anon','authenticated','service_role'));"),
+    'service_role',
+  );
+  assert.equal(
+    untrustedRoutineExecuteGrants(),
+    baseline.untrustedRoutineGrants,
+    'Migration 0052 introduced an unsafe direct routine grant.',
+  );
+  assert.equal(
+    publicTableGrants(),
+    publicTableGrantsBefore52,
+    'Migration 0052 changed the public-schema table grant matrix.',
+  );
+  console.log('PASS: Migration 0052 installed atomic removal completion without changing unrelated rows or privileges');
+}
+
 async function verifyUpgrade(workdir: string, networkId: string): Promise<void> {
   assertBaseline();
   seedBaselineEvidence();
@@ -829,7 +859,7 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   const baselineGate4Errors = gate4ContractErrors();
   assert.ok(
     baselineGate4Errors.length > 0,
-    'The current 51-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
+    'The current 52-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
   );
   console.log(
     `PASS: current Gate 4 contract refuses the 48-state source (${baselineGate4Errors.length} findings)`,
@@ -857,6 +887,10 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   applyRelease(workdir, networkId, 51);
   assertAfter51(baseline);
   await assertStorageUnchanged(storageClient, baseline, 'Migration 0051');
+  const publicTableGrantsBefore52 = publicTableGrants();
+  applyRelease(workdir, networkId, 52);
+  assertAfter52(baseline, publicTableGrantsBefore52);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0052');
 
   const applied = appliedMigrations();
   assert.equal(applied.length, RELEASE_MIGRATION_COUNT, 'The upgraded head is not the full release migration set.');
@@ -903,7 +937,7 @@ async function main(): Promise<void> {
     startAttempted = true;
     runSupabase('start', workdir, networkId);
     await verifyUpgrade(workdir, networkId);
-    console.log('PASS: staging migration 0048 -> 0051 upgrade rehearsal');
+    console.log('PASS: staging migration 0048 -> 0052 upgrade rehearsal');
     console.log('HOSTED_SYSTEMS_CONTACTED = NO');
     exitCode = 0;
   } catch (error) {

@@ -67,16 +67,16 @@ describe('participant-preview controlled-links migration (0050)', () => {
   it('preserves the forward-only migration and every manifest agrees', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
 
-    expect(files).toHaveLength(51);
-    expect(files.at(-2)).toBe(FILENAME);
-    expect(files.at(-3)).toBe(IMPORT_MIGRATION);
+    expect(files).toHaveLength(52);
+    expect(files.at(-3)).toBe(FILENAME);
+    expect(files.at(-4)).toBe(IMPORT_MIGRATION);
 
     expect([...EXPECTED_MIGRATION_FILENAMES]).toEqual(files);
     expect([...EXPECTED_REPOSITORY_MIGRATIONS]).toEqual(files);
-    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(51);
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(52);
 
     const ci = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
-    expect(ci).toContain("test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 51");
+    expect(ci).toContain("test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 52");
   });
 
   it('edits no migration that already exists on origin/main', () => {
@@ -85,7 +85,7 @@ describe('participant-preview controlled-links migration (0050)', () => {
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'origin/main', '--',
       ...files
-        .filter((file) => file !== IMPORT_MIGRATION && file !== FILENAME && file !== '20260903130000_participant_owned_corrections.sql')
+        .filter((file) => file !== '20260906120000_public_removal_completion_reconciliation.sql')
         .map((file) => `infra/supabase/migrations/${file}`),
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
   });
