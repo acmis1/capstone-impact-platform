@@ -144,7 +144,7 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
     const initial = await project(); const oldMedia = await media();
     const previewBefore = await data(client.from('participant_previews').select('*').eq('id', preview.id).single());
     const correctionBefore = await data(client.from('participant_preview_correction_requests').select('*').eq('id', correctionId).single());
-    pass('51 migrations; synthetic source, old gallery and confirmed historical evidence');
+    pass('52 migrations; synthetic source, old gallery and confirmed historical evidence');
 
     phase = 'participant staging and access controls';
     const form = await correctionForm();

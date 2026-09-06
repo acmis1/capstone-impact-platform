@@ -46,11 +46,11 @@ const RUNTIME_TIMEOUT_MS = 600_000;
  * restoring it proves the supported forward-only upgrade back to the full set.
  */
 const CORRECTION_MIGRATIONS = [
-  '20260826090000_public_feed_activation_authority_guard.sql',
+  '20260906120000_public_removal_completion_reconciliation.sql',
 ];
 
-const PRE_CORRECTION_MIGRATION_COUNT = 50;
-const CURRENT_MAIN_MIGRATION_COUNT = 51;
+const PRE_CORRECTION_MIGRATION_COUNT = 51;
+const CURRENT_MAIN_MIGRATION_COUNT = 52;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -122,6 +122,24 @@ function psql(sql: string): string {
   ).trim();
 }
 
+function applyMigrationDirect(file: string): void {
+  execFileSync(
+    'docker',
+    [
+      'exec', '-i', '-e', 'PGOPTIONS=-c statement_timeout=30000 -c lock_timeout=10000',
+      `supabase_db_${projectId}`, 'psql', '-X', '-U', 'postgres', '-d', 'postgres',
+      '-v', 'ON_ERROR_STOP=1',
+    ],
+    {
+      cwd: repositoryRoot,
+      input: fs.readFileSync(path.join(repositoryRoot, 'infra', 'supabase', 'migrations', file)),
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: PSQL_COMMAND_TIMEOUT_MS,
+    },
+  );
+}
+
 function routineCount(name: string): string {
   return psql(
     'SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace'
@@ -137,16 +155,36 @@ function routineDefinition(name: string): string {
   );
 }
 
-/**
- * Proves the exact correction upgrade rather than only proving a fresh install. The stack starts
- * at the pre-correction migration head, preserves synthetic relational and pre-write operation data,
- * applies the activation-authority migration alone, and re-inspects both the new fence and the
- * existing writer protocol.
- */
+/** Proves the exact historical repair and its idempotency on the 51 -> 52 upgrade. */
 function verifyCorrectionUpgrade(workdir: string): void {
   const appliedCount = () => psql('SELECT count(*) FROM supabase_migrations.schema_migrations;');
   const baselineFiles = fs.readdirSync(path.join(workdir, 'supabase', 'migrations'))
     .filter((name) => name.endsWith('.sql'));
+  const hash = (content: string) => createHash('sha256').update(content).digest('hex');
+  const exactContent = '[{"publicId":"268-exact"}]';
+  const emptyContent = '[]';
+  const ambiguousContent = '[{"publicId":"268-ambiguous"}]';
+  const exactHash = hash(exactContent);
+  const emptyHash = hash(emptyContent);
+  const ambiguousHash = hash(ambiguousContent);
+  const adminId = '26800000-0000-4000-8000-000000000001';
+  const exactProjectId = '26800000-0000-4000-8000-000000000002';
+  const ambiguousProjectId = '26800000-0000-4000-8000-000000000003';
+  const incompleteProjectId = '26800000-0000-4000-8000-000000000004';
+  const failedProjectId = '26800000-0000-4000-8000-000000000005';
+  const noOperationProjectId = '26800000-0000-4000-8000-000000000006';
+  const reconciledProjectId = '26800000-0000-4000-8000-000000000007';
+  const baselineOperationId = '26800000-0000-4000-8000-000000000011';
+  const exactRemovalOperationId = '26800000-0000-4000-8000-000000000012';
+  const ambiguousRemovalOperationId = '26800000-0000-4000-8000-000000000013';
+  const laterPublicationOperationId = '26800000-0000-4000-8000-000000000014';
+  const incompleteOperationId = '26800000-0000-4000-8000-000000000015';
+  const failedOperationId = '26800000-0000-4000-8000-000000000016';
+  const baselineVersionId = '26800000-0000-4000-8000-000000000021';
+  const exactRemovalVersionId = '26800000-0000-4000-8000-000000000022';
+  const laterPublicationVersionId = '26800000-0000-4000-8000-000000000023';
+  const exactCompletedAt = '2026-09-01T01:02:03+00:00';
+  const alreadyReconciledAt = '2026-08-01T01:02:03+00:00';
 
   assert.equal(
     baselineFiles.length,
@@ -158,81 +196,113 @@ function verifyCorrectionUpgrade(workdir: string): void {
     String(PRE_CORRECTION_MIGRATION_COUNT),
     'The provisioned baseline is not exactly the pre-correction migration head.',
   );
-  assert.equal(psql("SELECT to_regclass('public.public_feed_operations') IS NOT NULL;"), 't');
-  assert.equal(psql("SELECT to_regclass('public.public_feed_head') IS NOT NULL;"), 't');
-  assert.equal(routineCount('get_project_reconciliation_readiness'), '1');
-  assert.equal(routineCount('guard_public_feed_activation_projection'), '0');
-  assert.equal(routineCount('guard_public_feed_activation_authority_transition'), '0');
-  assert.equal(routineCount('get_project_publication_readiness'), '1');
-  assert.equal(routineCount('submit_import_projects_for_review'), '1');
-  const prewriteOperationId = '18600000-0000-4000-8000-000000000016';
-  const emptyFeedHash = createHash('sha256').update('[]').digest('hex');
+  assert.equal(routineCount('complete_public_feed_operation'), '1');
+
   psql(`
     INSERT INTO public.admin_users(id,email,full_name)
-      VALUES ('18600000-0000-4000-8000-000000000015'::uuid,
-        'migration-upgrade-actor@capstone.test','Migration Upgrade Actor');
+      VALUES ('${adminId}'::uuid,'issue-268-upgrade@capstone.test','Issue 268 Upgrade');
+    INSERT INTO public.user_roles(user_id,role) VALUES ('${adminId}'::uuid,'admin');
+
+    INSERT INTO public.projects(
+      id,public_id,title,slug,year,status,archived_at,archived_from_status,archive_reason,
+      pending_removal_from_public,public_removal_completed_at
+    ) VALUES
+      ('${exactProjectId}'::uuid,'268-exact','Exact repair','268-exact',2026,'archived',
+        '2026-09-01T01:00:00+00:00','published','exact repair',true,NULL),
+      ('${ambiguousProjectId}'::uuid,'268-ambiguous','Later republished','268-ambiguous',2026,'archived',
+        '2026-09-01T02:00:00+00:00','published','later republished',true,NULL),
+      ('${incompleteProjectId}'::uuid,'268-incomplete','Incomplete removal','268-incomplete',2026,'archived',
+        '2026-09-01T03:00:00+00:00','published','incomplete removal',true,NULL),
+      ('${failedProjectId}'::uuid,'268-failed','Failed removal','268-failed',2026,'archived',
+        '2026-09-01T04:00:00+00:00','published','failed removal',true,NULL),
+      ('${noOperationProjectId}'::uuid,'268-no-operation','No operation','268-no-operation',2026,'archived',
+        '2026-09-01T05:00:00+00:00','published','no operation',true,NULL),
+      ('${reconciledProjectId}'::uuid,'268-reconciled','Already reconciled','268-reconciled',2026,'archived',
+        '2026-08-01T01:00:00+00:00','published','already reconciled',false,'${alreadyReconciledAt}');
+
     INSERT INTO public.public_feed_operations(
-      id,operation_key,kind,authorizing_actor_id,baseline_storage_existed,
-      candidate_feed_hash,candidate_record_count,candidate_byte_count,candidate_feed_content,
-      candidate_members,storage_bucket,storage_path,feed_public_url,media_manifest,
-      rollback_capability_requested,state,owner_epoch,owner_token_hash,lease_expires_at
-    ) VALUES (
-      '${prewriteOperationId}'::uuid,'18600000-0000-4000-8000-000000000017'::uuid,
-      'activation','18600000-0000-4000-8000-000000000015'::uuid,false,
-      '${emptyFeedHash}',0,2,'[]','[]'::jsonb,'public-feeds','upgrade/prewrite.json',
-      'https://assets.example.invalid/upgrade/prewrite.json','[]'::jsonb,true,'PREPARED',1,
-      '${'0'.repeat(64)}',pg_catalog.now() + interval '2 minutes'
-    );
+      id,operation_key,kind,publication_mode,authorizing_actor_id,completion_actor_id,
+      project_id,public_id,baseline_storage_existed,candidate_feed_hash,candidate_record_count,
+      candidate_byte_count,candidate_feed_content,candidate_members,storage_bucket,storage_path,
+      feed_public_url,media_manifest,rollback_capability_requested,state,owner_epoch,
+      owner_token_hash,lease_expires_at,observed_storage_hash,observed_storage_record_count,
+      created_at,updated_at,finalized_at,completed_at,failure_code,failed_at
+    ) VALUES
+      ('${baselineOperationId}'::uuid,gen_random_uuid(),'activation',NULL,'${adminId}'::uuid,'${adminId}'::uuid,
+        NULL,NULL,false,'${exactHash}',1,${Buffer.byteLength(exactContent)},'${exactContent}','[]'::jsonb,
+        'public-feeds','projects.json','https://assets.invalid/projects.json','[]'::jsonb,true,
+        'COMPLETED',1,'${'0'.repeat(64)}','2026-09-01T00:10:00+00:00','${exactHash}',1,
+        '2026-09-01T00:00:00+00:00','2026-09-01T00:05:00+00:00','2026-09-01T00:04:00+00:00','2026-09-01T00:05:00+00:00',NULL,NULL),
+      ('${exactRemovalOperationId}'::uuid,gen_random_uuid(),'removal',NULL,'${adminId}'::uuid,'${adminId}'::uuid,
+        '${exactProjectId}'::uuid,'268-exact',false,'${emptyHash}',0,${Buffer.byteLength(emptyContent)},'${emptyContent}','[]'::jsonb,
+        'public-feeds','projects.json','https://assets.invalid/projects.json','[]'::jsonb,true,
+        'COMPLETED',1,'${'1'.repeat(64)}','${exactCompletedAt}','${emptyHash}',0,
+        '2026-09-01T01:00:00+00:00','${exactCompletedAt}','2026-09-01T01:01:00+00:00','${exactCompletedAt}',NULL,NULL),
+      ('${ambiguousRemovalOperationId}'::uuid,gen_random_uuid(),'removal',NULL,'${adminId}'::uuid,'${adminId}'::uuid,
+        '${ambiguousProjectId}'::uuid,'268-ambiguous',false,'${emptyHash}',0,${Buffer.byteLength(emptyContent)},'${emptyContent}','[]'::jsonb,
+        'public-feeds','projects.json','https://assets.invalid/projects.json','[]'::jsonb,true,
+        'COMPLETED',1,'${'2'.repeat(64)}','2026-09-01T02:03:00+00:00','${emptyHash}',0,
+        '2026-09-01T02:00:00+00:00','2026-09-01T02:02:00+00:00','2026-09-01T02:01:00+00:00','2026-09-01T02:02:00+00:00',NULL,NULL),
+      ('${laterPublicationOperationId}'::uuid,gen_random_uuid(),'publication','normal','${adminId}'::uuid,'${adminId}'::uuid,
+        '${ambiguousProjectId}'::uuid,'268-ambiguous',false,'${ambiguousHash}',1,${Buffer.byteLength(ambiguousContent)},'${ambiguousContent}','[]'::jsonb,
+        'public-feeds','projects.json','https://assets.invalid/projects.json','[]'::jsonb,true,
+        'COMPLETED',1,'${'3'.repeat(64)}','2026-09-01T02:13:00+00:00','${ambiguousHash}',1,
+        '2026-09-01T02:10:00+00:00','2026-09-01T02:12:00+00:00','2026-09-01T02:11:00+00:00','2026-09-01T02:12:00+00:00',NULL,NULL),
+      ('${incompleteOperationId}'::uuid,gen_random_uuid(),'removal',NULL,'${adminId}'::uuid,NULL,
+        '${incompleteProjectId}'::uuid,'268-incomplete',false,'${ambiguousHash}',1,${Buffer.byteLength(ambiguousContent)},'${ambiguousContent}','[]'::jsonb,
+        'public-feeds','projects.json','https://assets.invalid/projects.json','[]'::jsonb,true,
+        'DB_FINALIZED',1,'${'4'.repeat(64)}','2026-09-01T03:05:00+00:00','${ambiguousHash}',1,
+        '2026-09-01T03:00:00+00:00','2026-09-01T03:02:00+00:00','2026-09-01T03:02:00+00:00',NULL,NULL,NULL),
+      ('${failedOperationId}'::uuid,gen_random_uuid(),'removal',NULL,'${adminId}'::uuid,NULL,
+        '${failedProjectId}'::uuid,'268-failed',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,false,
+        'FAILED',1,'${'5'.repeat(64)}','2026-09-01T04:05:00+00:00',NULL,NULL,
+        '2026-09-01T04:00:00+00:00','2026-09-01T04:02:00+00:00',NULL,NULL,'TEST_FAILURE','2026-09-01T04:02:00+00:00');
+
+    INSERT INTO public.public_feed_versions(
+      id,operation,publication_mode,operation_id,previous_version_id,project_id,affected_public_id,
+      authorizing_actor_id,completion_actor_id,artifact_content,byte_count,feed_hash,record_count,created_at
+    ) VALUES
+      ('${baselineVersionId}'::uuid,'baseline',NULL,'${baselineOperationId}'::uuid,NULL,NULL,NULL,
+        '${adminId}'::uuid,'${adminId}'::uuid,'${exactContent}',${Buffer.byteLength(exactContent)},'${exactHash}',1,'2026-09-01T00:05:00+00:00'),
+      ('${exactRemovalVersionId}'::uuid,'removal',NULL,'${exactRemovalOperationId}'::uuid,'${baselineVersionId}'::uuid,
+        '${exactProjectId}'::uuid,'268-exact','${adminId}'::uuid,'${adminId}'::uuid,
+        '${emptyContent}',${Buffer.byteLength(emptyContent)},'${emptyHash}',0,'${exactCompletedAt}'),
+      ('${laterPublicationVersionId}'::uuid,'publication','normal','${laterPublicationOperationId}'::uuid,'${exactRemovalVersionId}'::uuid,
+        '${ambiguousProjectId}'::uuid,'268-ambiguous','${adminId}'::uuid,'${adminId}'::uuid,
+        '${ambiguousContent}',${Buffer.byteLength(ambiguousContent)},'${ambiguousHash}',1,'2026-09-01T02:12:00+00:00');
+
+    UPDATE public.public_feed_operations SET baseline_storage_existed=true, baseline_version_id='${baselineVersionId}'::uuid,
+      baseline_feed_content='${exactContent}',baseline_feed_hash='${exactHash}',baseline_record_count=1
+      WHERE id='${exactRemovalOperationId}'::uuid;
+    UPDATE public.public_feed_operations SET baseline_storage_existed=true, baseline_version_id='${exactRemovalVersionId}'::uuid,
+      baseline_feed_content='${emptyContent}',baseline_feed_hash='${emptyHash}',baseline_record_count=0
+      WHERE id IN ('${ambiguousRemovalOperationId}'::uuid,'${laterPublicationOperationId}'::uuid);
+    UPDATE public.public_feed_operations SET baseline_storage_existed=true, baseline_version_id='${laterPublicationVersionId}'::uuid,
+      baseline_feed_content='${ambiguousContent}',baseline_feed_hash='${ambiguousHash}',baseline_record_count=1
+      WHERE id='${incompleteOperationId}'::uuid;
+
+    INSERT INTO public.public_feed_version_members(version_id,ordinal,public_id,record_hash) VALUES
+      ('${baselineVersionId}'::uuid,0,'268-exact','${hash('268-exact')}'),
+      ('${laterPublicationVersionId}'::uuid,0,'268-ambiguous','${hash('268-ambiguous')}');
+    INSERT INTO public.public_feed_head(
+      singleton,current_version_id,generation,activated_by_id,transitioned_by_id,last_operation_id
+    ) VALUES (true,'${laterPublicationVersionId}'::uuid,3,'${adminId}'::uuid,'${adminId}'::uuid,'${laterPublicationOperationId}'::uuid);
+    INSERT INTO public.public_feed_operation_events(
+      operation_id,sequence,from_state,to_state,actor_id,owner_epoch,
+      observed_storage_hash,observed_storage_record_count,code,created_at
+    ) VALUES
+      ('${exactRemovalOperationId}'::uuid,1,'DB_FINALIZED','COMPLETED','${adminId}'::uuid,1,'${emptyHash}',0,NULL,'${exactCompletedAt}'),
+      ('${ambiguousRemovalOperationId}'::uuid,1,'DB_FINALIZED','COMPLETED','${adminId}'::uuid,1,'${emptyHash}',0,NULL,'2026-09-01T02:02:00+00:00');
   `);
-  assert.equal(
-    psql(`SELECT state || '|' || storage_request_generation::text
-      FROM public.public_feed_operations WHERE id='${prewriteOperationId}'::uuid;`),
-    'PREPARED|0',
-  );
-  psql(`
-    INSERT INTO public.disciplines(id,name)
-      VALUES ('18600000-0000-4000-8000-000000000011'::uuid,'Upgrade Preserved Discipline');
-    INSERT INTO public.industry_categories(id,name)
-      VALUES ('18600000-0000-4000-8000-000000000012'::uuid,'Upgrade Preserved Industry');
-    INSERT INTO public.projects(id,public_id,title,slug,year,status,snapshots)
-      VALUES ('18600000-0000-4000-8000-000000000013'::uuid,'186-upgrade-preserved',
-        'Upgrade Preserved Project','186-upgrade-preserved',2026,'published',
-        ARRAY['https://assets.example.invalid/upgrade-preserved.png']);
-    INSERT INTO public.project_disciplines(project_id,discipline_id)
-      VALUES ('18600000-0000-4000-8000-000000000013'::uuid,
-        '18600000-0000-4000-8000-000000000011'::uuid);
-    INSERT INTO public.project_industry_categories(project_id,industry_category_id)
-      VALUES ('18600000-0000-4000-8000-000000000013'::uuid,
-        '18600000-0000-4000-8000-000000000012'::uuid);
-    INSERT INTO public.media_assets(
-      id,project_id,asset_type,file_name,storage_bucket,storage_path,mime_type,file_size_bytes,
-      public_storage_bucket,public_storage_path,public_url,is_public_approved,
-      gallery_position,alt_text_public
-    ) VALUES (
-      '18600000-0000-4000-8000-000000000014'::uuid,
-      '18600000-0000-4000-8000-000000000013'::uuid,
-      'snapshot_image','upgrade-preserved.png','project-drafts-private',
-      'drafts/186-upgrade-preserved/snapshot_image/upgrade-preserved.png','image/png',12,
-      'project-public-assets','published/186-upgrade-preserved/snapshot_image/upgrade-preserved.png',
-      'https://assets.example.invalid/upgrade-preserved.png',true,1,
-      'Synthetic pre-upgrade snapshot.'
-    );
-  `);
-  const preservedBefore = psql(`SELECT pg_catalog.jsonb_build_object(
-      'project', (SELECT pg_catalog.to_jsonb(p) FROM public.projects p
-        WHERE p.id='18600000-0000-4000-8000-000000000013'::uuid),
-      'discipline', (SELECT pg_catalog.to_jsonb(d) FROM public.disciplines d
-        WHERE d.id='18600000-0000-4000-8000-000000000011'::uuid),
-      'industry', (SELECT pg_catalog.to_jsonb(ic) FROM public.industry_categories ic
-        WHERE ic.id='18600000-0000-4000-8000-000000000012'::uuid),
-      'disciplineLink', (SELECT pg_catalog.to_jsonb(pd) FROM public.project_disciplines pd
-        WHERE pd.project_id='18600000-0000-4000-8000-000000000013'::uuid),
-      'industryLink', (SELECT pg_catalog.to_jsonb(pic) FROM public.project_industry_categories pic
-        WHERE pic.project_id='18600000-0000-4000-8000-000000000013'::uuid),
-      'media', (SELECT pg_catalog.to_jsonb(ma) FROM public.media_assets ma
-        WHERE ma.id='18600000-0000-4000-8000-000000000014'::uuid)
-    )::text;`);
-  assert.equal(psql('SELECT count(*) FROM public.public_feed_head;'), '0');
+  const ledgerBefore = psql(`SELECT pg_catalog.jsonb_build_object(
+    'operations',(SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(o) ORDER BY o.id) FROM public.public_feed_operations o),
+    'versions',(SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(v) ORDER BY v.id) FROM public.public_feed_versions v),
+    'members',(SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(m) ORDER BY m.version_id,m.ordinal) FROM public.public_feed_version_members m),
+    'head',(SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(h) ORDER BY h.singleton) FROM public.public_feed_head h),
+    'events',(SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(e) ORDER BY e.operation_id,e.sequence) FROM public.public_feed_operation_events e)
+  )::text;`);
+  const projectRowsBefore = psql(`SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(p) ORDER BY p.id)::text
+    FROM public.projects p WHERE p.id::text LIKE '26800000-%';`);
   console.log(`PASS: disposable stack provisioned at the exact ${PRE_CORRECTION_MIGRATION_COUNT}-migration pre-correction baseline`);
 
   restoreMigrations(workdir, CORRECTION_MIGRATIONS);
@@ -242,105 +312,60 @@ function verifyCorrectionUpgrade(workdir: string): void {
   assert.equal(
     psql(
       'SELECT count(*) FROM supabase_migrations.schema_migrations'
-      + " WHERE version='20260826090000';",
+      + " WHERE version='20260906120000';",
     ),
     '1',
   );
+  const completionDefinition = routineDefinition('complete_public_feed_operation');
+  assert.ok(completionDefinition.includes("v_project.status <> 'archived'"));
+  assert.ok(completionDefinition.includes("archived_from_status IS DISTINCT FROM 'published'"));
+  assert.ok(completionDefinition.includes('pending_removal_from_public = false'));
+  assert.ok(completionDefinition.includes("'INVALID_PROJECT_STATE'"));
   assert.equal(
-    psql(
-      "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN"
-      + " ('public_feed_operations','public_feed_versions','public_feed_version_members',"
-      + "'public_feed_head','feed_rollback_preparations','public_feed_operation_events');",
-    ),
-    '6',
-  );
-  assert.equal(routineCount('get_project_reconciliation_readiness'), '1');
-  assert.equal(routineCount('reserve_public_feed_operation'), '1');
-  assert.equal(routineCount('mark_public_feed_write_started'), '1');
-  assert.equal(routineCount('guard_active_public_feed_taxonomy'), '1');
-  assert.equal(routineCount('guard_public_feed_activation_projection'), '1');
-  assert.equal(routineCount('guard_public_feed_activation_authority_transition'), '1');
-  assert.equal(
-    psql("SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND c.relname IN ('disciplines','industry_categories') AND t.tgname IN ('guard_discipline_lookup_during_public_feed_operation','guard_industry_category_lookup_during_public_feed_operation');"),
-    '2',
+    psql("SELECT p.prosecdef::text || '|' || pg_catalog.array_to_string(p.proconfig,',') FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='complete_public_feed_operation';"),
+    'true|search_path=""',
   );
   assert.equal(
-    psql("SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND t.tgname IN ('guard_public_feed_activation_authority_transition','guard_projects_during_public_feed_activation','guard_snapshot_media_during_public_feed_activation','guard_project_disciplines_during_public_feed_activation','guard_discipline_lookup_during_public_feed_activation');"),
-    '5',
+    psql("SELECT has_function_privilege('service_role','public.complete_public_feed_operation(uuid,bigint,text,uuid,text,integer)','EXECUTE')::text || '|' || has_function_privilege('anon','public.complete_public_feed_operation(uuid,bigint,text,uuid,text,integer)','EXECUTE')::text || '|' || has_function_privilege('authenticated','public.complete_public_feed_operation(uuid,bigint,text,uuid,text,integer)','EXECUTE')::text;"),
+    'true|false|false',
   );
-  assert.equal(
-    psql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('public_feed_activation_authority','public_feed_project_projection_authority','public_feed_discipline_projection_authority');"),
-    '3',
-  );
-  assert.equal(
-    psql("SELECT generation::text || '|' || COALESCE(active_activation_operation_id::text,'') FROM public.public_feed_activation_authority WHERE singleton=true;"),
-    `1|${prewriteOperationId}`,
-  );
-  assert.equal(
-    psql(`SELECT activation_authority_generation::text FROM public.public_feed_operations
-      WHERE id='${prewriteOperationId}'::uuid;`),
-    '1',
-  );
-  psql(`UPDATE public.public_feed_operations
-    SET state='FAILED', failure_code='UPGRADE_ADOPTION_VERIFIED', failed_at=pg_catalog.now(),
-        updated_at=pg_catalog.now()
-    WHERE id='${prewriteOperationId}'::uuid;`);
-  assert.equal(
-    psql("SELECT generation::text || '|' || COALESCE(active_activation_operation_id::text,'') FROM public.public_feed_activation_authority WHERE singleton=true;"),
-    '1|',
-  );
-  assert.equal(
-    psql(`SELECT state || '|' || activation_authority_generation::text
-      FROM public.public_feed_operations WHERE id='${prewriteOperationId}'::uuid;`),
-    'FAILED|1',
-  );
-  // Upgrading installs authority, never deployment state: nothing is active and no version exists.
-  assert.equal(psql('SELECT count(*) FROM public.public_feed_head;'), '0');
-  assert.equal(psql('SELECT count(*) FROM public.public_feed_versions;'), '0');
-  assert.equal(psql(`SELECT pg_catalog.jsonb_build_object(
-      'project', (SELECT pg_catalog.to_jsonb(p) FROM public.projects p
-        WHERE p.id='18600000-0000-4000-8000-000000000013'::uuid),
-      'discipline', (SELECT pg_catalog.to_jsonb(d) FROM public.disciplines d
-        WHERE d.id='18600000-0000-4000-8000-000000000011'::uuid),
-      'industry', (SELECT pg_catalog.to_jsonb(ic) FROM public.industry_categories ic
-        WHERE ic.id='18600000-0000-4000-8000-000000000012'::uuid),
-      'disciplineLink', (SELECT pg_catalog.to_jsonb(pd) FROM public.project_disciplines pd
-        WHERE pd.project_id='18600000-0000-4000-8000-000000000013'::uuid),
-      'industryLink', (SELECT pg_catalog.to_jsonb(pic) FROM public.project_industry_categories pic
-        WHERE pic.project_id='18600000-0000-4000-8000-000000000013'::uuid),
-      'media', (SELECT pg_catalog.to_jsonb(ma) FROM public.media_assets ma
-        WHERE ma.id='18600000-0000-4000-8000-000000000014'::uuid)
-    )::text;`), preservedBefore);
-  console.log(`PASS: exact ${PRE_CORRECTION_MIGRATION_COUNT} -> ${CURRENT_MAIN_MIGRATION_COUNT} activation-authority upgrade preserved project, taxonomy, and media data`);
 
-  // End-of-sequence composition. The deployment-ledger migrations carry earlier timestamps than the
-  // final merged gallery migration, so the composed database must still end on the merged gallery
-  // and accessibility behavior rather than on anything this stream redefined.
-  assert.ok(
-    routineDefinition('submit_import_projects_for_review').includes('INVALID_SNAPSHOT_GALLERY_STRUCTURE'),
-    'The merged gallery review-submission authority did not survive the upgrade.',
-  );
-  const normalReadiness = routineDefinition('get_project_publication_readiness');
-  assert.ok(
-    normalReadiness.includes("v_project.status <> 'approved'"),
-    'The approved-only pre-publication gate was weakened by the upgrade.',
-  );
-  assert.ok(
-    normalReadiness.includes("'galleryPosition'"),
-    'The merged gallery evidence was lost from the pre-publication gate.',
-  );
-  // Reconciliation is a separate authority, proved at both boundaries, and never a relaxed reuse.
-  const reconciliation = routineDefinition('get_project_reconciliation_readiness');
-  assert.ok(reconciliation.includes("v_project.status <> 'published'"));
-  assert.ok(reconciliation.includes("'galleryPosition'"));
-  assert.ok(reconciliation.includes('PUBLISHED_MEDIA_MAPPING_INVALID'));
-  for (const boundary of ['reserve_public_feed_operation', 'mark_public_feed_write_started']) {
-    assert.ok(
-      routineDefinition(boundary).includes('public.get_project_reconciliation_readiness('),
-      `${boundary} does not prove the reconciliation authority after upgrade.`,
-    );
+  const state = (projectIdValue: string) => psql(`SELECT pending_removal_from_public::text || '|' || COALESCE(public_removal_completed_at::text,'') FROM public.projects WHERE id='${projectIdValue}'::uuid;`);
+  assert.equal(state(exactProjectId), 'false|2026-09-01 01:02:03+00');
+  for (const untouched of [ambiguousProjectId, incompleteProjectId, failedProjectId, noOperationProjectId]) {
+    assert.equal(state(untouched), 'true|');
   }
-  console.log('PASS: composed end state keeps the merged gallery gate and both reconciliation boundaries');
+  assert.equal(state(reconciledProjectId), 'false|2026-08-01 01:02:03+00');
+  assert.equal(
+    psql(`SELECT pg_catalog.jsonb_build_object(
+      'operations',(SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(o) ORDER BY o.id) FROM public.public_feed_operations o),
+      'versions',(SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(v) ORDER BY v.id) FROM public.public_feed_versions v),
+      'members',(SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(m) ORDER BY m.version_id,m.ordinal) FROM public.public_feed_version_members m),
+      'head',(SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(h) ORDER BY h.singleton) FROM public.public_feed_head h),
+      'events',(SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(e) ORDER BY e.operation_id,e.sequence) FROM public.public_feed_operation_events e)
+    )::text;`),
+    ledgerBefore,
+  );
+  assert.notEqual(
+    psql(`SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(p) ORDER BY p.id)::text FROM public.projects p WHERE p.id::text LIKE '26800000-%';`),
+    projectRowsBefore,
+  );
+  const projectRowsAfterFirst = psql(`SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(p) ORDER BY p.id)::text
+    FROM public.projects p WHERE p.id::text LIKE '26800000-%';`);
+  const exactStableBeforeReplay = state(exactProjectId);
+  applyMigrationDirect(CORRECTION_MIGRATIONS[0]);
+  assert.equal(state(exactProjectId), exactStableBeforeReplay);
+  assert.equal(state(ambiguousProjectId), 'true|');
+  assert.equal(
+    psql(`SELECT pg_catalog.jsonb_agg(pg_catalog.to_jsonb(p) ORDER BY p.id)::text
+      FROM public.projects p WHERE p.id::text LIKE '26800000-%';`),
+    projectRowsAfterFirst,
+  );
+  assert.equal(
+    psql(`SELECT count(*)::text || '|' || (SELECT count(*) FROM public.public_feed_versions)::text || '|' || (SELECT count(*) FROM public.public_feed_operation_events)::text FROM public.approval_records;`),
+    '0|3|2',
+  );
+  console.log(`PASS: exact ${PRE_CORRECTION_MIGRATION_COUNT} -> ${CURRENT_MAIN_MIGRATION_COUNT} removal reconciliation repaired only exact durable evidence and replay stayed idempotent`);
 }
 
 function runSupabase(command: 'start' | 'stop' | 'migrate', workdir: string, networkId: string): void {

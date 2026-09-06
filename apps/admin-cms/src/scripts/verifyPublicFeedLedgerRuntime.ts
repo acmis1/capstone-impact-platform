@@ -719,7 +719,7 @@ async function main(): Promise<void> {
   const anon = createClient(local.API_URL!, local.ANON_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
   const ledger = new SupabasePublicFeedLedgerRepositoryCore(client);
 
-  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '51');
+  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '52');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('20260824180000','20260824183000','20260825030000');"), '3');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260826090000';"), '1');
   assert.equal(psql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('public_feed_operations','public_feed_versions','public_feed_version_members','public_feed_head','feed_rollback_preparations','public_feed_operation_events');"), '6');
@@ -1313,17 +1313,31 @@ async function main(): Promise<void> {
     },
   });
   await assertCompleted(removal, 'controlled removal');
+  const noChangePublicId = 'runtime-no-change-pending';
+  psql(`INSERT INTO public.projects(
+      public_id,title,slug,year,status,archived_at,archived_from_status,archive_reason,
+      pending_removal_from_public,public_removal_completed_at
+    ) VALUES (
+      ${sqlLiteral(noChangePublicId)},'No-change pending removal',${sqlLiteral(noChangePublicId)},
+      2026,'archived',pg_catalog.now(),'published','Runtime no-change removal',true,NULL
+    );`);
   const versionCountBeforeNoChange = Number(psql('SELECT count(*) FROM public.public_feed_versions;'));
   const noChange = await executePublicFeedWriter({
-    supabase: client, adminId, kind: 'removal', publicId: traffic.publicId,
+    supabase: client, adminId, kind: 'removal', publicId: noChangePublicId,
     archiveReason: 'Runtime no-change removal', feedBucket, feedPath,
     prepareCandidate: async (baseline) => {
       assert.ok(baseline);
-      return { artifact: composePublicFeedRemoval(baseline, traffic.publicId) };
+      return { artifact: composePublicFeedRemoval(baseline, noChangePublicId) };
     },
   });
   await assertCompleted(noChange, 'no-change removal');
   assert.equal(Number(psql('SELECT count(*) FROM public.public_feed_versions;')), versionCountBeforeNoChange);
+  assert.match(
+    psql(`SELECT status || '|' || archived_from_status || '|'
+      || pending_removal_from_public::text || '|' || public_removal_completed_at::text
+      FROM public.projects WHERE public_id=${sqlLiteral(noChangePublicId)};`),
+    /^archived\|published\|false\|.+/,
+  );
 
   const preparation = await preparePublicFeedRollback(historyDependencies(client, [
     project(traffic.publicId, 'archived'), relevanceProject, medical,
@@ -2010,8 +2024,14 @@ async function main(): Promise<void> {
 
   const crashIds = ['reserved', 'prepared', 'write-started', 'candidate-observed', 'db-finalized', 'explicit-recovery', 'same-a', 'same-b', 'different'];
   for (const suffix of crashIds) {
-    psql(`INSERT INTO public.projects(id,public_id,title,slug,year,status)
-      VALUES (${sqlLiteral(randomUUID())}::uuid,${sqlLiteral(`186-${suffix}`)},${sqlLiteral(`Runtime ${suffix}`)},${sqlLiteral(`runtime-${suffix}`)},2026,'archived');`);
+    psql(`INSERT INTO public.projects(
+        id,public_id,title,slug,year,status,archived_at,archived_from_status,
+        archive_reason,pending_removal_from_public,public_removal_completed_at
+      ) VALUES (
+        ${sqlLiteral(randomUUID())}::uuid,${sqlLiteral(`186-${suffix}`)},
+        ${sqlLiteral(`Runtime ${suffix}`)},${sqlLiteral(`runtime-${suffix}`)},2026,
+        'archived',pg_catalog.now(),'published',${sqlLiteral(CRASH_BOUNDARY_REASON)},true,NULL
+      );`);
   }
 
   for (const state of ['RESERVED', 'PREPARED', 'CANDIDATE_OBSERVED', 'DB_FINALIZED'] as const) {
@@ -2094,7 +2114,7 @@ async function main(): Promise<void> {
   const memberHash = psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id=${sqlLiteral(firstVersionId)}::uuid ORDER BY ordinal LIMIT 1;`);
   assert.equal(memberHash, trafficArtifact.members[0].recordHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
-  console.log('Public feed ledger runtime verification passed: fresh 51-migration schema, durable activation authority through pre-write recovery, real overlapping READ COMMITTED/REPEATABLE READ/SERIALIZABLE proof, unrelated-draft nonblocking proof, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, stale-owner fencing, grants, and immutable history.');
+  console.log('Public feed ledger runtime verification passed: fresh 52-migration schema, durable activation authority through pre-write recovery, real overlapping READ COMMITTED/REPEATABLE READ/SERIALIZABLE proof, unrelated-draft nonblocking proof, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, stale-owner fencing, grants, and immutable history.');
 }
 
 async function run(): Promise<void> {
