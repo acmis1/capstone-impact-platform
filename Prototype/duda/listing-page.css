@@ -36,7 +36,8 @@
   font-weight: 800;
 }
 
-.capstone-filter-group select {
+.capstone-filter-group select,
+.capstone-filter-group input[type="search"] {
   width: 100%;
   padding: 10px 16px;
   border-radius: 8px;
@@ -51,7 +52,9 @@
 }
 
 .capstone-filter-group select:hover,
-.capstone-filter-group select:focus {
+.capstone-filter-group select:focus,
+.capstone-filter-group input[type="search"]:hover,
+.capstone-filter-group input[type="search"]:focus {
   border-color: rgba(255, 255, 255, 0.3);
   background: rgba(15, 23, 42, 0.92);
   box-shadow: 0 0 0 2px rgba(230, 30, 42, 0.18);
@@ -60,6 +63,10 @@
 .capstone-filter-group select option {
   background: #0f172a;
   color: #fff;
+}
+
+.capstone-filter-group input[type="search"] {
+  cursor: text;
 }
 
 .capstone-year-section {

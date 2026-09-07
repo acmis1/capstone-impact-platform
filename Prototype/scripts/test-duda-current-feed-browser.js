@@ -291,6 +291,50 @@ function harnessDriver() {
 
     if (scenario === 'listing') {
       check(document.querySelectorAll('.capstone-card').length === 3, 'listing renders all fixture cards');
+      const searchInput = document.getElementById('filter-search');
+      const searchLabel = document.querySelector('label[for="filter-search"]');
+      const setSearch = (value) => {
+        searchInput.value = value;
+        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      check(Boolean(searchInput), 'listing renders a public project search input');
+      check(searchLabel?.textContent.trim() === 'Search projects', 'search input has the required visible label');
+      check(searchLabel?.htmlFor === searchInput?.id, 'search label is associated with the input');
+      check(searchInput?.type === 'search', 'search input uses search semantics');
+      check(searchInput?.maxLength === 100, 'search input limits user input to 100 characters');
+
+      setSearch('flood');
+      check(JSON.stringify(visibleCardTitles()) === JSON.stringify(['Accessible Flood Response Dashboard']), 'title search selects the expected project');
+      setSearch('ZERO TRUST');
+      check(JSON.stringify(visibleCardTitles()) === JSON.stringify(['Zero Trust Learning Lab']), 'search is case-insensitive');
+      setSearch('clinic-wayfinding');
+      check(JSON.stringify(visibleCardTitles()) === JSON.stringify(['Inclusive Clinic Wayfinding']), 'public ID search selects the expected project');
+      setSearch('Security Studio');
+      check(JSON.stringify(visibleCardTitles()) === JSON.stringify(['Zero Trust Learning Lab']), 'industry partner search selects the expected project');
+      setSearch('Cafe\u0301');
+      check(JSON.stringify(visibleCardTitles()) === JSON.stringify(['Accessible Flood Response Dashboard']), 'decomposed search matches canonically equivalent composed public text');
+      setSearch('R\u00e9sum\u00e9');
+      check(JSON.stringify(visibleCardTitles()) === JSON.stringify(['Zero Trust Learning Lab']), 'composed search matches canonically equivalent decomposed public text');
+      setSearch('Group Alpha');
+      check(JSON.stringify(visibleCardTitles()) === JSON.stringify(['Accessible Flood Response Dashboard']), 'group name search selects the expected project');
+      setSearch('deterministic-no-match');
+      check(document.querySelectorAll('.capstone-card').length === 0, 'no-match search renders no project cards');
+      check(document.getElementById('capstone-project-grid')?.textContent.includes('No projects match the current search or filters.'), 'no-match search renders truthful empty copy');
+      setSearch('');
+      check(document.querySelectorAll('.capstone-card').length === 3, 'clearing search restores all fixture cards');
+
+      setSearch('Synthetic');
+      check(document.querySelectorAll('.capstone-card').length === 3, 'broad public search matches multiple records');
+      window.handleFilterChange('industry', 'Healthcare');
+      check(JSON.stringify(visibleCardTitles()) === JSON.stringify(['Inclusive Clinic Wayfinding']), 'search and industry filter compose as an intersection');
+      window.handleFilterChange('industry', 'All');
+      check(document.querySelectorAll('.capstone-card').length === 3, 'clearing the facet filter preserves the active search results');
+      setSearch('');
+      check(document.querySelectorAll('.capstone-card').length === 3, 'clearing search and filters restores the normal listing');
+
+      setSearch('<' + 'script id="unsafe-search-node">alert(1)</' + 'script>');
+      check(!document.getElementById('unsafe-search-node'), 'search input does not inject hostile HTML into the listing');
+      setSearch('');
       const filterCases = [
         ['year', '2026', 'Accessible Flood Response Dashboard'],
         ['program', 'Master of Cyber Security', 'Zero Trust Learning Lab'],
@@ -747,6 +791,10 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases) {
   let harnessContractCase = null;
   let harnessMixedFeed = null;
 
+  if (scenario === 'listing') {
+    payload[0].industryPartner += ' Caf\u00e9';
+    payload[1].industryPartner += ' Re\u0301sume\u0301';
+  }
   if (scenario === 'empty-feed') payload = [];
   if (scenario === 'malformed-feed') payload = { records: fixtureCopy };
   if (scenario === 'malformed-snapshots') {

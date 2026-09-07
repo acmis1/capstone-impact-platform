@@ -67,6 +67,7 @@
     // --- STATE ---
     let allProjects = [];
     let currentFilters = {
+        search: '',
         year: 'All',
         program: 'All',
         discipline: 'All',
@@ -86,6 +87,24 @@
         div.textContent = String(str);
         return div.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
     };
+
+    const normalizeSearchInput = (rawSearch) => {
+        if (typeof rawSearch !== 'string') return '';
+
+        let cleaned = rawSearch.normalize('NFC').trim().slice(0, 100);
+        cleaned = cleaned.replace(/[\x00-\x1F\x7F]/g, '');
+        cleaned = cleaned.replace(/[^\p{L}\p{N}\s-]/gu, ' ');
+
+        return cleaned.replace(/\s+/g, ' ').trim();
+    };
+
+    const normalizeSearchField = (value) => String(value || '')
+        .normalize('NFC')
+        .replace(/[\x00-\x1F\x7F]/g, '')
+        .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
 
     const getQueryParam = (name) => {
         const params = new URLSearchParams(window.location.search);
@@ -644,6 +663,10 @@
 
         filtersContainer.innerHTML = `
             <div class="capstone-filter-group">
+                <label for="filter-search">Search projects</label>
+                <input id="filter-search" type="search" maxlength="100" placeholder="Search by title, project ID, partner, or team" value="${escapeHTML(currentFilters.search)}" oninput="handleSearchChange(this.value)">
+            </div>
+            <div class="capstone-filter-group">
                 <label for="filter-year">Year</label>
                 <select id="filter-year" onchange="handleFilterChange('year', this.value)">
                     ${options.years.map(y => `<option value="${escapeHTML(y)}" ${currentFilters.year === y ? 'selected' : ''}>${escapeHTML(y)}</option>`).join('')}
@@ -675,6 +698,12 @@
         if (!grid) return;
 
         const filteredProjects = allProjects.filter(p => {
+            const search = normalizeSearchField(currentFilters.search);
+            if (search) {
+                const searchableFields = [p.title, p.publicId, p.industryPartner, p.groupName];
+                if (!searchableFields.some(field => normalizeSearchField(field).includes(search))) return false;
+            }
+
             if (currentFilters.year !== 'All' && String(p.year) !== currentFilters.year) return false;
 
             if (currentFilters.program !== 'All') {
@@ -697,7 +726,7 @@
         });
 
         if (filteredProjects.length === 0) {
-            grid.innerHTML = '<p style="text-align:center; padding: 60px 10px; color: #ffffff; font-size: 1.15rem; width: 100%;">No projects match the selected filters.</p>';
+            grid.innerHTML = '<p style="text-align:center; padding: 60px 10px; color: #ffffff; font-size: 1.15rem; width: 100%;">No projects match the current search or filters.</p>';
             return;
         }
 
@@ -1318,8 +1347,14 @@
         renderListingCards();
     };
 
+    const handleSearchChange = (value) => {
+        currentFilters.search = normalizeSearchInput(value);
+        renderListingCards();
+    };
+
     // --- GLOBAL ATTACHMENTS FOR DUDA SCOPED RESOLUTION ---
     window.handleFilterChange = handleFilterChange;
+    window.handleSearchChange = handleSearchChange;
     window.handleProjectClick = handleProjectClick;
     window.goBack = goBack;
     window.openLightbox = openLightbox;
