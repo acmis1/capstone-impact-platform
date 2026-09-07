@@ -11,8 +11,8 @@ This guide documents historical manual migration steps for initializing a *new*,
 > **DO NOT USE OLD SCRIPT VERSION:** If you copied the database SQL before the June 1st schema correction (which lacked audit trail logs, extended import ingestion fields, and strict RLS definitions), **DO NOT apply it**. Delete any active queries and copy only this corrected version.
 
 > [!IMPORTANT]
-> * **Check Project Name:** Ensure you are logged into the Supabase Dashboard and have selected the `capstone-admin-cms-staging-2026` project.
-> * **DO NOT run these scripts against the old demo project.**
+> * **Authorized New-Environment Target Only:** Use these historical/manual initialization steps only for a separately authorized **new blank** environment. Confirm it is not an existing staging, recovery, production, or live system before opening any SQL.
+> * **Never target** active staging-v2 (`capstone-admin-cms-staging-v2-2026`), historical/paused staging (`capstone-admin-cms-staging-2026`), the Prototype recovery project, or any production/live system. Existing active staging environments must use the governed reconciliation and release procedure instead.
 > * **DO NOT run these scripts against the Prototype recovery project.** No migration or database commands should ever target the Prototype recovery project.
 > * **DO NOT connect Duda to this database yet.**
 > * **Storage Provisioning Is a Separate Task:** Do not create or configure Storage buckets during this migration application task. After migrations 0001 through 0004 have been applied and verified read-only, provision and verify storage buckets through a separately approved Storage task.
@@ -150,15 +150,15 @@ Follow this exact safe sequence to provision the initial administrator in a fres
 3. **Set required staging target identity & bootstrap variables privately:**
    ```bash
    export CAPSTONE_RUNTIME_ENV=staging
-   export CAPSTONE_EXPECTED_SUPABASE_HOST=app-staging.supabase.co
-   export CAPSTONE_STAGING_MUTATION_CONFIRMATION=capstone-admin-cms-staging-v2-2026
+   export CAPSTONE_EXPECTED_SUPABASE_HOST=<authorized-new-target-host>
+   export CAPSTONE_STAGING_MUTATION_CONFIRMATION=<configured-label>
    export CAPSTONE_BOOTSTRAP_ADMIN_EMAIL=admin@school.edu
    export CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME="Initial Admin"
    export CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN
    ```
 4. **Run the guarded linking script with double-acknowledgment flags:**
    ```bash
-   npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026
+   npm run link:admin-staging -- --apply --confirm-staging=<same-configured-label>
    ```
 5. **Clear all temporary variables:** Immediately clear the temporary bootstrap variables from your shell process.
 6. **Run the check command:**

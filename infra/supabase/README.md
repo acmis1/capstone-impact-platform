@@ -8,7 +8,7 @@ This directory contains the version-controlled database schema migrations, polic
 
 > [!NOTE]
 > * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. The current 52-file timestamped migration manifest through `20260906120000_public_removal_completion_reconciliation.sql` is the executable repository baseline and passes its automated manifest contract. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
-> * **Active Hosted Staging (`capstone-admin-cms-staging-v2-2026`):** Historical read-only evidence first recorded 46 rows through `20260828120000` and later recorded 48/48 repository migrations through `20260831090000_postgres17_maintain_privilege_alignment`. This evidence predates repository migrations 0049–0052 and does not claim that they are hosted; migration history also does not by itself prove exact schema, grant, or RPC parity.
+> * **Active Hosted Staging (`capstone-admin-cms-staging-v2-2026`):** Historical read-only observations recorded 46 rows through `20260828120000`, then 48/48 through `20260831090000_postgres17_maintain_privilege_alignment`. Current independent Gate 3 evidence records 52 rows through `20260906120000_public_removal_completion_reconciliation`; Gate 4 is a 52-migration structural `GATE4_MATCH`. This proves the collected schema/grant/RPC contract, not application data, Auth identities, Storage objects, recovery, monitoring, UAT, or production acceptance.
 > * **Historical/Paused Hosted Staging (`capstone-admin-cms-staging-2026`):** This is the environment associated with the old manually evolved migration baseline. Its history must not be confused with the active staging-v2 evidence.
 > * **Corrective Fix:** Migration `0006` corrected the initial administrator bootstrap runtime by replacing `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
 > * **Default Execution Hardening:** Migration `0007` (`20260803174000_harden_function_execute_defaults.sql`) establishes global postgres-owned function default privilege revokes and conditionally revokes execution on the optional hosted RLS helper.
@@ -17,7 +17,7 @@ This directory contains the version-controlled database schema migrations, polic
 > * **Project Metadata Audit Trail:** Migration `0021` (`20260813002154_project_metadata_audit_history.sql`) introduces the project metadata audit trail directly into `approval_records`.
 > * **Identity Linkage:** Initial administrator linkage was verified in isolated staging (`READY_FOR_MANUAL_LOGIN_TEST`).
 > * **Do Not Rerun:** Do not rerun the migration sequence or initial bootstrap merely because these files exist.
-> * **Pending Scope:** Exact hosted schema/grant/RPC verification, hosted staff lifecycle provisioning, reviewer/editor UAT, and production deployment remain pending. Migration alignment must be rechecked for each release candidate.
+> * **Pending Scope:** Hosted staff lifecycle provisioning, reviewer/editor UAT, recovery rehearsal, monitoring/alert delivery, institutional ownership, and production deployment remain pending. Migration alignment and structural evidence must be rechecked when a later release changes the contract.
 
 ---
 

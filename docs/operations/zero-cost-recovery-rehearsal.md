@@ -199,9 +199,10 @@ npm run capture:recovery-backup -- \
 Required terminal evidence includes `SOURCE_CAPTURE_COMPLETE`, the exact reviewed SHA and its
 matching migration manifest, bounded database/Auth/execution-control counts, canonical bucket
 summaries, `SOURCE_MUTATIONS = NONE`, and `PRIVATE_RECOVERY_EVIDENCE_NEVER_COMMIT`. The current
-repository requires 52 migrations through `20260906120000_public_removal_completion_reconciliation.sql` and
-four buckets. Historical hosted 48/48 evidence through `20260831090000` does not establish that
-migrations 0049–0052 are deployed; source parity must be separately verified before capture.
+repository and active staging-v2 migration history contain 52 migrations through
+`20260906120000_public_removal_completion_reconciliation.sql` and four buckets. Historical 48/48 evidence
+through `20260831090000` remains historical; current Gate 4 evidence is a 52-migration structural match.
+Source parity must still be separately verified before any authorized hosted-origin capture.
 
 Stop if the target guard, migration history, source Gate 4 contract, Auth integrity, cost fence,
 managed-schema customization contract, canonical bucket inventory, dump, source-stability check,

@@ -68,13 +68,13 @@ npm run supabase:stop
 3. **No Credentials in Code or Docs**: Secrets, API keys, private tokens, passwords, and database connection strings must never appear in code, logs, screenshots, issues, or pull requests.
 4. **Local Credentials Ignored**: Local environment files (`apps/admin-cms/.env.local`) and user credential stores (`apps/admin-cms/.local-users.json`) remain strictly git-ignored.
 5. **Dashboard Access Policy**: Normal local contributors need no hosted administrative dashboard access (Supabase, Duda, Render, Vercel). Hosted operator access requires explicit project owner authorization for the specific operation and environment.
-6. **Staging Guard & Acknowledgment Refusal**: Shared-staging state-changing commands require target environment identity validation (`CAPSTONE_RUNTIME_ENV=staging`, `CAPSTONE_EXPECTED_SUPABASE_HOST`) and double-acknowledgment flags (`--apply --confirm-staging=capstone-admin-cms-staging-2026`). Missing required flags cause a refusal before Supabase admin-client creation.
+6. **Staging Guard & Acknowledgment Refusal**: Shared-staging state-changing commands require target environment identity validation (`CAPSTONE_RUNTIME_ENV=staging`, `CAPSTONE_EXPECTED_SUPABASE_HOST`) and double-acknowledgment flags (`--apply --confirm-staging=<configured-label>`; current example: `capstone-admin-cms-staging-v2-2026`). Missing required flags cause a refusal before Supabase admin-client creation.
 
 ---
 
 ## E. Database & Migration Governance
 
-1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete existing migrations `0001` through `0051`.
+1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete existing migrations `0001` through `0052`.
 2. **New Schema Changes**: Any schema, policy, or grant change requires a new 14-digit timestamped migration file in `infra/supabase/migrations/` (`YYYYMMDDHHMMSS_description.sql`).
 3. **Local Replay & Reset Verification**: Verify all schema changes locally by running `npm run supabase:reset` to replay migrations from zero in strict timestamp order.
 4. **Static Contract Tests**: Add static contract tests in `apps/admin-cms/src/security/` for any new database migration file.

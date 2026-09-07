@@ -14,7 +14,7 @@ The Capstone Impact Platform is a school-owned administrative CMS and publicatio
 - **Active Application Code**: [`apps/admin-cms/`](./apps/admin-cms/) — The modern Next.js 16 application containing the admin dashboard, review APIs, schema validators, and public feed compiler.
 - **Active Database Infrastructure**: [`infra/supabase/`](./infra/supabase/) — PostgreSQL migrations, seed SQL, and local development runbooks.
 - **Active Documentation & Contributor Automation**: Root files (`README.md`, `CONTRIBUTING.md`, `AGENTS.md`, `START_HERE.md`), [`docs/`](./docs/), and [`.github/`](./.github/) may also change during active development.
-- **Historical Prototype Warning**: The [`Prototype/`](./Prototype/) folder at the root contains legacy feasibility code and demo pages. **Do not modify files in `Prototype/` or add new features there.**
+- **Prototype Boundary**: The [`Prototype/`](./Prototype/) folder contains historical feasibility material and demo pages. Ordinary Admin/CMS work must not casually modify it. Assigned Duda/public-layer integration work may modify the explicitly maintained [`Prototype/duda/`](./Prototype/duda/) renderer and its contract harness when the issue scope authorizes it; `apps/admin-cms` must never import Prototype implementation helpers.
 
 ---
 
@@ -120,8 +120,8 @@ capstone-impact-platform/
 │   └── developer-troubleshooting.md # Developer setup troubleshooting guide
 ├── infra/
 │   └── supabase/             # Database migrations, seed SQL, runbooks
-│       └── migrations/       # 9 timestamped PostgreSQL migration files
-├── Prototype/                # Legacy historical code (DO NOT MODIFY)
+│       └── migrations/       # 52 timestamped PostgreSQL migration files
+├── Prototype/                # Historical material; maintained Duda renderer is under duda/
 ├── AGENTS.md                 # Agent governance & repository rules
 ├── CONTRIBUTING.md           # Contributor workflow & safety rules
 ├── README.md                 # Primary repository overview
@@ -277,7 +277,7 @@ Do not select broad roadmap topics directly from `docs/implementation-backlog.md
 | Environment | Host / Location | Credentials Used | State Modifications |
 |---|---|---|---|
 | **Local** | `http://127.0.0.1` | Synthetic credentials in `.local-users.json` | Fully controlled via `npm run setup:local` |
-| **Staging** | `capstone-admin-cms-staging-2026` | Isolated staging secrets (maintained by project owner) | Requires double-acknowledgement CLI flags (`--apply --confirm-staging=...`) |
+| **Staging** | `capstone-admin-cms-staging-v2-2026` | Isolated staging secrets (maintained by project owner) | Requires double-acknowledgement CLI flags (`--apply --confirm-staging=<configured-label>`) |
 | **Production** | Live public showcase (Duda) | Isolated production credentials | Strictly restricted; no project participant direct access |
 
 ---
@@ -288,8 +288,8 @@ Do not select broad roadmap topics directly from `docs/implementation-backlog.md
 - ❌ **DO NOT** access hosted Supabase, Render, Vercel, or Duda dashboards.
 - ❌ **DO NOT** hardcode or commit API keys, secrets, credentials, passwords, or connection strings.
 - ❌ **DO NOT** use real participant, staff, or supervisor personal identity data (use synthetic data only).
-- ❌ **DO NOT** modify files in `Prototype/`.
-- ❌ **DO NOT** edit merged migrations `0001` through `0009`.
+- ❌ **DO NOT** casually modify historical `Prototype/` material; only authorized Duda/public-layer work may change the maintained `Prototype/duda/` renderer and contract harness.
+- ❌ **DO NOT** edit merged migrations `0001` through `0052`.
 - ❌ **DO NOT** self-merge Pull Requests without maintainer sign-off.
 
 ---

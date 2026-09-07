@@ -16,7 +16,7 @@ Ensure that administrative workflows, participant project data, and public showc
                                                                                            │
 [Duda Shell (Public UI)] ◄── (HTTPS GET) ◄── [Stable Public JSON Feed] ◄── [Approved Public Feed Storage]
 ```
-*(Note: The complete HTTPS participant-upload workflow is a target design and is not currently operational. Current Duda test-site verification used the recovered Prototype public feed. Future Admin/CMS-to-Duda connection requires a separately approved and verified cutover; the Admin/CMS staging feed must not be connected accidentally during auth activation. The current authorization implementation uses the server-only requireAdmin helper, the protected admin layout, protected API routes, and permission checks).*
+*(Note: The complete HTTPS participant-upload workflow is a target design and is not currently operational. The repository-owned `Prototype/duda/` renderer implements and tests the public-feed listing/detail contract, including search and public-URL policy. The actual authenticated Duda TEST configuration still has the previous renderer and has not been updated with search; no live Duda site was touched. Any Admin/CMS-to-Duda cutover requires separate authorization and verification. The current authorization implementation uses the server-only `requireAdmin` helper, protected admin layout, protected API routes, and permission checks.)*
 
 ---
 
@@ -24,30 +24,30 @@ Ensure that administrative workflows, participant project data, and public showc
 
 | Security Control | Scope / Description | Status |
 | :--- | :--- | :--- |
-| **Auth Identity Migrations** | Supabase authentication schema and admin users role migrations in code (`0001` - `0006`) | `VERIFIED (STAGING)` |
-| **Claims/Session Authorization Helper** | Verification of admin roles and permission checks via requireAdmin helper | `VERIFIED (STAGING)` |
-| **Protected Layout & Route guards** | Protected admin layout and API route session validation guards | `VERIFIED (STAGING)` |
-| **Live Session Verification** | Live initial identity provisioning and session verification check (`capstone-admin-cms-staging-2026`) | `VERIFIED (STAGING)` |
-| **Service-Role Client Isolation** | Server-only administrative client wrapper (`admin.ts`) with `server-only` guards | `VERIFIED (STAGING)` |
-| **RLS Policy Definitions** | Supabase RLS policies defined in migrations | `SCAFFOLDED` |
+| **Auth and schema migrations** | 52 append-only versioned migrations through `20260906120000_public_removal_completion_reconciliation` | `VERIFIED_STAGING` for migration history; not human-UAT evidence |
+| **Claims/Session Authorization Helper** | Verification of admin roles and permission checks via `requireAdmin` helper | `IMPLEMENTED_AND_TESTED` |
+| **Protected Layout & Route guards** | Protected admin layout and API route session validation guards | `IMPLEMENTED_AND_TESTED` |
+| **Live Session Verification** | Initial administrator activation is historical evidence; current staging-v2 is a separate target | `HISTORICAL_EVIDENCE` |
+| **Service-Role Client Isolation** | Server-only administrative client wrapper (`admin.ts`) with `server-only` guards | `IMPLEMENTED_AND_TESTED` |
+| **RLS Policy Definitions** | Restrictive RLS policies and grants in migrations; Gate 4 structurally matched 31 policies in active staging-v2 | `VERIFIED_STAGING` |
 | **RLS Role-Matrix Verification** | Real Local Auth, exact Admin/Reviewer/Editor and editor+reviewer union permissions, Data API/RLS mutation denial, and service-only RPC denial | `AUTOMATED LOCAL ACCEPTANCE IMPLEMENTED` |
-| **Public Feed Compiler & Validator** | Stripping admin metadata, compiling and validating approved/published JSON | `IMPLEMENTED` |
-| **Configurable private/public media workflow** | Storing drafts in project-drafts-private and approved posters in public bucket | `SCAFFOLDED` |
+| **Public Feed Compiler & Validator** | Strips administrative metadata, validates public records, and preserves canonical artifacts/ledger history | `IMPLEMENTED_AND_TESTED` |
+| **Private/public media workflow** | Governed private draft intake, approval gates, controlled public-media promotion, and public-feed publication/removal coordination | `IMPLEMENTED_AND_TESTED` |
 | **Institutional account handover** | Cloud resource ownership transfer to school-controlled aliases | `REQUIRED` |
 
 ---
 
 ## 4. Prototype Preservation Rules
-*   **Complete Isolation**: The feasibility prototype located in `/Prototype` is preserved purely as historical evidence and must remain completely isolated.
+*   **Complete Isolation**: Historical Prototype material remains isolated. The explicitly maintained `Prototype/duda/` public renderer and contract harness may be changed only by assigned Duda/public-layer integration work.
 *   **No Helper Sharing**: Under no circumstances should `/apps/admin-cms` import helper code or utilities directly from `/Prototype`. Common modules must be built independently within the Next.js app directory.
 
 ---
 
 ## 5. Authentication and Authorization Status
-*   **CMS Authentication**: Initial administrator authentication remains operationally verified in isolated staging (`capstone-admin-cms-staging-2026`). Automated disposable-Local acceptance now verifies real Admin/Reviewer/Editor sign-in, exact role and multi-role permission unions, RLS/Data API denial, service-only RPC denial, 3600-second issued-session timing, sign-out browser-session removal, CSRF mutation boundaries, and server-derived audit attribution. Human reviewer/editor UAT, hosted multi-role acceptance, institutional provisioning, and staff handover remain pending.
-*   **Environment Lock**: Staging auth verification and session checks executed against the separate `capstone-admin-cms-staging-2026` environment in Singapore. The Prototype recovery project **was not used during this activation and must not be used** for Admin/CMS authentication.
+*   **CMS Authentication**: Initial administrator authentication in `capstone-admin-cms-staging-2026` is historical evidence, not a current staging-v2 acceptance claim. Automated disposable-Local acceptance verifies real Admin/Reviewer/Editor sign-in, exact role and multi-role permission unions, RLS/Data API denial, service-only RPC denial, 3600-second issued-session timing, sign-out browser-session removal, CSRF mutation boundaries, and server-derived audit attribution. Human reviewer/editor UAT, hosted multi-role acceptance, institutional provisioning, and staff handover remain pending.
+*   **Environment Lock**: The current active target is `capstone-admin-cms-staging-v2-2026`; the old `capstone-admin-cms-staging-2026` activation is historical. The Prototype recovery project **must not be used** for Admin/CMS authentication.
 *   **Least Privilege Credentials**: Supabase `service_role` keys are backend-only and their usage is isolated in server-only modules (`import 'server-only'`). Static client bundle scanning confirmed zero service-role keys or secret names exist in frontend assets.
-*   **Migration Technical Debt**: This staging database currently follows the established manually applied version-controlled migration process (`0001` through `0006`). Future delivery should adopt a standard Supabase CLI/CI migration workflow through a separately planned task. Migration-history reconciliation is intentionally not part of this closure PR.
+*   **Migration Contract**: The repository and active staging-v2 migration history contain 52 versioned migrations. Independent Gate 4 evidence structurally matches that contract. This does not authorize routine migration repair, `db push`, reset, or hosted mutation; repair requires a proven history mismatch and separate authorization.
 
 ---
 
@@ -58,23 +58,23 @@ Ensure that administrative workflows, participant project data, and public showc
     *   Public feeds: `public-feeds`
 *   **Public Assets**: Only approved project media (posters, snapshot images, and PDFs) may be copied to the public approved asset storage. Current video handling is strictly metadata-driven (external video link URL); video binary files are not copied to public storage.
 *   **No Real Data Seeding**: No real participant or stakeholder data may be checked into Git or loaded into staging without authorization. All test configurations must use fictional mock data.
-*   **Row-Level Security**: Policies are defined in migrations, but effective staging-environment verification is required before operational acceptance.
+*   **Row-Level Security**: Local role-matrix acceptance verifies real role behavior and mutation/RPC denials; Gate 4 structurally verified RLS/policies and grants in active staging-v2. Hosted multi-role human UAT remains required before operational acceptance.
 
 ---
 
 ## 7. Feed and Duda Public-Layer Protection
 *   **Feed Validation Gate**: The feed validation script (`validatePublicFeed.ts`) operates as a security boundary, rejecting any payload containing administrative metadata or unexpected properties.
-*   **Output Sanitization**: The Duda dynamic script (`bodyend.html`) escapes many text values before inserting them. However, it does not sanitize every URL or value; some snapshot URLs currently enter image src attributes directly. Strict URL validation, approved-host checks, and safe DOM construction remain required hardening work.
+*   **Output Sanitization and URL Policy**: The repository Duda renderer validates public URLs, rejects private/signed/authenticated Storage paths, token-bearing URLs, unsafe schemes, malformed encodings, and embedded credentials; its Chrome contract harness passed 40 scenarios, with paired browser/server contract cases exercising this boundary. The actual Duda TEST site still serves the prior renderer, so this repository implementation is `REPOSITORY_IMPLEMENTED_TEST_SITE_UPDATE_PENDING`, not a statement about an external site.
 *   **Workflow Integrity**:
     *   Participant preview rendering should be isolated from the administrative UI where practical.
-    *   Feed publication needs snapshot history and tested rollback.
-    *   Administrative state changes plus audit attribution should become atomic.
+    *   Feed publication/removal uses immutable public-feed snapshot/history and a controlled ledger; rollback is tested only in disposable Local execution, not hosted recovery.
+    *   Administrative metadata, review, import, publication, and removal operations use implemented atomic database/coordinator boundaries with audit attribution.
 
 ---
 
 ## 8. Auditability and Transactional Integrity
-*   **Staging Actions**: Administrative actions (mapping batches, updating project statuses, and archiving) should generate immutable audit logs in a dedicated database table.
-*   **Atomic Transactions**: Multi-table updates must be executed as atomic database transactions to ensure consistency.
+*   **Staging Actions**: Administrative mapping, review, publication, removal, and archival actions use implemented ledger/audit contracts; hosted human acceptance remains pending.
+*   **Atomic Transactions**: Multi-table metadata, review, import, publication, and removal operations are implemented with atomic database/coordinator boundaries and tested repository contracts.
 
 ---
 

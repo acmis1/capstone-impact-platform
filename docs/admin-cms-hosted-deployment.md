@@ -16,7 +16,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | **Instance Status** | Active / Separate (Never touch) | **ACTIVE_HEALTHY** (Active Target) | **PAUSED / INACTIVE** (Do not modify) |
 | **Region** | `ap-southeast-1` | `ap-southeast-1` | `ap-southeast-1` |
 | **Hosting Service** | Existing Render static/web service | **Separate** Render/Cloud Web Service | — |
-| **Database State** | Prohibited from mutation | Historical read-only evidence recorded 46 migrations through `20260828120000` and later 48/48 through `20260831090000`; repository target is 52 and migrations 0049–0052 are not asserted as deployed. Exact schema/grant/RPC alignment is independently re-verifiable | Historical manually evolved baseline; migration history untracked |
+| **Database State** | Prohibited from mutation | Historical read-only observations recorded 46 then 48/48 rows; current verified Gate 3 history is 52 through `20260906120000_public_removal_completion_reconciliation`, and Gate 4 is a 52-migration structural match. Exact schema/grant/RPC alignment remains independently re-verifiable for later schema changes | Historical manually evolved baseline; migration history untracked |
 
 > [!IMPORTANT]
 > The existing Render service configured for `Prototype/` must **NEVER** be repurposed or pointed to `apps/admin-cms`. The Admin/CMS requires an independent web service with its own environment variables and deployment pipeline. Furthermore, the Prototype Supabase project (`capstone-prototype-recovery-2026`) is completely isolated and must never be targeted by Admin/CMS operations.
@@ -260,12 +260,13 @@ Local publication, staging/test-showcase publication, and live production public
 ### A. Current Active Staging-v2 Evidence
 The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpceeltukbzxpsvinb`) has the following point-in-time read-only evidence, listed in observation order:
 - **Migration History (Gate 3) — earlier observation**: 46 rows were recorded in `supabase_migrations.schema_migrations`, from earliest `20260601035138` through latest `20260828120000`.
-- **Migration History (Gate 3) — later observation**: 48/48 repository migrations were recorded, from earliest `20260601035138` through latest `20260831090000_postgres17_maintain_privilege_alignment`. This is the most recent hosted migration-history evidence and supersedes the 46-row observation.
-- **Repository target versus hosted**: the repository contains 52 migrations through `20260906120000_public_removal_completion_reconciliation.sql`. Hosted deployment of migrations 0049 through 0052 is **NOT ASSERTED**; no hosted check has established it. The earlier 0049–0051 transition remains documented in the [Staging Migrations 0049–0051 Rollout Plan](operations/staging-migrations-49-51-rollout.md); Migration 0052 requires its own reviewed forward-deployment decision.
-- **Schema, Grants, and RPCs (Gate 4)**: Migration-history count alone does not prove exact schema, constraints, RLS, grants, or RPC parity. Those require a separate governed verification.
-- **Separate Release Gates**: Current Render deployment identity, Auth/Storage readiness, UAT, recovery, monitoring, and release acceptance are independent evidence layers.
+- **Migration History (Gate 3) — later historical observation**: 48/48 repository migrations were recorded through `20260831090000_postgres17_maintain_privilege_alignment`.
+- **Migration History (Gate 3) — current verified observation**: 52 rows were recorded, from earliest `20260601035138` through `20260906120000_public_removal_completion_reconciliation`.
+- **Schema, Grants, and RPCs (Gate 4)**: Independent structural evidence is `GATE4_MATCH` for the 52-migration contract: 44 tables, 514 columns, 387 constraints, 31 policies, 84 application RPC signatures across 83 names, 1 canonical staff-role helper, 4 dispatcher routines, and 4 Storage buckets, with zero differences and validation errors. This capture predates PR #270 and PR #271; neither changed migrations/schema, so it is not a newly captured exact-`f74c181` artifact.
+- **Current application deployment evidence**: Render service `capstone-admin-cms-staging-v2` is live at `dep-daff6v740ujc73b25ga0`, targeting `main` at exact SHA `f74c1811a0c7a74c9ead2818651d5b571124f50b`. GET/HEAD health/readiness and GET login passed without hosted mutations (`READY_FOR_SUPERVISED_UAT`).
+- **Separate Release Gates**: The evidence above does not establish production acceptance, workflow/UAT, recovery, monitoring, institutional ownership, or release acceptance.
 
-Both observations are point-in-time evidence and must be rechecked for each release candidate; neither establishes that the exact latest `main` SHA is deployed. Operators must **NOT** run `supabase migration repair` as a routine step for active staging-v2. Repair may be considered only if future read-only reconciliation demonstrates a real history mismatch and separate authorization is granted; `supabase db push` remains governed and must not be run casually.
+All observations are point-in-time evidence. The current Render identity establishes the deployed application SHA; Gate 3/4 establish the stated database contract, but each remains independently re-verifiable for a later release candidate or schema change. Operators must **NOT** run `supabase migration repair` as a routine step for active staging-v2. Repair may be considered only if future read-only reconciliation demonstrates a real history mismatch and separate authorization is granted; `supabase db push` remains governed and must not be run casually.
 
 ### B. Legacy Reconciliation Reference
 The procedures detailed in the [staging reconciliation runbook](../infra/supabase/staging-reconciliation-runbook.md) were designed specifically for diagnosing and reconciling the historical drifted staging instance (`fewcbklmbgzglfgedtvt`). That documentation is preserved as an audit trail and fallback procedure, but does not apply to routine maintenance of active staging-v2.
@@ -299,13 +300,13 @@ The checker compares against the current repository contract: 41 public applicat
 - `MANUAL_EVIDENCE_REQUIRED = YES`
 - `DEPLOYMENT_CLASSIFICATION = MANUAL_EVIDENCE_REQUIRED`
 
-A hosted target still at the historical 48-migration baseline predates migrations 0049–0051, so the four participant correction tables, the six correction RPCs, and `participant-corrections-private` do not exist there. Against that state the same checker is expected to report `INCOMPLETE` for the table set, RPC names, and Storage buckets. That is a truthful baseline difference, not a checker defect, and it must never be resolved by relaxing the repository contract. Earlier evidence recorded at the 46-row baseline observed 37 tables, 73 RPC names across 74 signatures, and 3 buckets.
+A historical target at the 48-migration baseline predates migrations 0049–0051, so the four participant correction tables, the six correction RPCs, and `participant-corrections-private` do not exist there. Against that historical state the same checker is expected to report `INCOMPLETE`; it must never be resolved by relaxing the repository contract. Earlier evidence recorded at the 46-row baseline observed 37 tables, 73 RPC names across 74 signatures, and 3 buckets.
 
 ### B. Governed Evidence Boundary
 The active staging-v2 migration history is a separate Gate 3 evidence layer from the Gate 4 schema, grant, RLS, and RPC verification that may be required for a release:
-- **Migration History (Gate 3)**: The latest point-in-time record is 48/48 rows through `20260831090000_postgres17_maintain_privilege_alignment`, beginning at `20260601035138`; an earlier observation recorded 46 rows through `20260828120000`. Repository migrations 0049–0052 are not asserted as deployed.
-- **Schema & Grants (Gate 4)**: Exact alignment remains independently re-verifiable; matching migration-history count is not schema/grant/RPC parity.
-- **Other Gates**: Storage, Auth, deployment identity, UAT, recovery, monitoring, and release acceptance require their own evidence.
+- **Migration History (Gate 3)**: Current verified history is 52 rows from `20260601035138` through `20260906120000_public_removal_completion_reconciliation`; 46-row and 48/48 records are historical observations.
+- **Schema & Grants (Gate 4)**: The supplied 52-migration structural evidence is `GATE4_MATCH`; matching migration-history count alone would not prove schema/grant/RPC parity.
+- **Other Gates**: Render deployment identity has separately matched `f74c1811a0c7a74c9ead2818651d5b571124f50b` in bounded smoke. Storage recovery, Auth/UAT, monitoring, and release acceptance require their own evidence.
 
 Auth readiness is verified via:
 

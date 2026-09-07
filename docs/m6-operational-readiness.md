@@ -11,6 +11,7 @@ Every capability in this package uses exactly one status:
 | Status | Meaning |
 | --- | --- |
 | `IMPLEMENTED_AND_TESTED` | Repository code exists and automated tests exercise the stated boundary. It is not automatically hosted proof. |
+| `VERIFIED_STAGING` | Supplied independent evidence recorded the stated bounded result on the named staging target. It is not production, recovery, monitoring, human-acceptance, or institutional-approval proof. |
 | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | Code exists, but the required current hosted or supervised evidence has not been recorded. |
 | `DOCUMENTED_ONLY` | A controlled procedure or template exists, but it has not been rehearsed. |
 | `INSTITUTION_DEPENDENT` | An institutional owner, policy, account, provider, credential, or approval is required. |
@@ -25,10 +26,10 @@ Every capability in this package uses exactly one status:
 | Repository release identity | `IMPLEMENTED_AND_TESTED` | The M6 checker records the full checkout SHA and optionally compares it with a separately reviewed SHA. |
 | `/api/health` liveness | `IMPLEMENTED_AND_TESTED` | Route and contract tests prove application-process liveness only. |
 | `/api/readiness` dependency readiness | `IMPLEMENTED_AND_TESTED` | Route and tests prove bounded configuration, staging identity, and a Supabase `HEAD` probe; they do not prove schema or workflows. |
-| Read-only hosted smoke | `IMPLEMENTED_AND_TESTED` | The existing verifier checks health, readiness, login, deployment SHA, redirects, timeouts, and migration expectation using GET/HEAD only. A current accepted hosted run is not recorded by this change. |
-| Current hosted deployment identity | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | Render can expose a valid `RENDER_GIT_COMMIT`; the exact reviewed-versus-deployed comparison still needs a supervised run. This is a separate deployment/release gate from migration-history evidence. |
-| Migration manifest and readiness inspection | `IMPLEMENTED_AND_TESTED` | The repository manifest has 52 migrations. Active staging-v2 has point-in-time evidence of 48/48 tracked rows from `20260601035138` through `20260831090000_postgres17_maintain_privilege_alignment`. Migration alignment remains independently re-verifiable for each release candidate; this evidence does not establish that the exact latest `main` SHA is deployed. |
-| Exact Gate 4 schema evidence | `IMPLEMENTED_AND_TESTED` | A repository-owned SELECT-only catalog snapshot and fail-closed comparator cover exact tables, columns, constraints, RLS/policies, schema/table grants, exposed and non-public routines, relevant roles, and canonical bucket configuration. Reviewed hosted structural schema/grant/RPC evidence completed against the 48/48 staging-v2 migration state; Migration 0048 removed only the unintended PostgreSQL 17 `MAINTAIN` grants. This does not prove latest-`main` deployment identity, row contents, Auth customizations, recovery, monitoring, or UAT. |
+| Read-only hosted smoke | `VERIFIED_STAGING` | On Render deployment `dep-daff6v740ujc73b25ga0` of `f74c1811a0c7a74c9ead2818651d5b571124f50b`, the GET/HEAD-only verifier passed `/api/health` and `/api/readiness` plus `GET /login`, with no hosted mutations. Hosted smoke classification: `READY_FOR_SUPERVISED_UAT`; M6 checker classification: `READ_ONLY_HOSTED_CHECK_PASSED`. This bounded public smoke is not production, workflow, recovery, monitoring, or human-acceptance evidence. |
+| Current hosted deployment identity | `VERIFIED_STAGING` | Active Render service `capstone-admin-cms-staging-v2`, target `main`, is live at deployment `dep-daff6v740ujc73b25ga0`; its valid deployment commit exactly matches reviewed `main` SHA `f74c1811a0c7a74c9ead2818651d5b571124f50b`. This is a separate deployment/release gate from migration-history evidence. |
+| Migration manifest and readiness inspection | `VERIFIED_STAGING` | The repository manifest and active staging-v2 migration history both contain 52 migrations, from `20260601035138` through `20260906120000_public_removal_completion_reconciliation`. Historical 46-row and 48/48 observations remain earlier evidence. Alignment must still be rechecked for each release candidate. |
+| Exact Gate 4 schema evidence | `VERIFIED_STAGING` | Independent hosted structural evidence matched the 52-migration Gate 4 contract: 44 tables, 514 columns, 387 constraints, 31 policies, 84 application RPC signatures across 83 names, 1 canonical staff-role helper, 4 dispatcher routines, and 4 Storage buckets; differences and validation errors were zero. This Gate 4 capture predates PR #270 and PR #271; neither changed migrations or schema, so it remains applicable structural evidence but is not a newly captured `f74c181` artifact. It does not prove row contents, Auth customizations, recovery, monitoring, or UAT. |
 | Historical staging reconciliation | `DOCUMENTED_ONLY` | The runbook preserves the manual-repair background for the old paused staging instance. Active staging-v2 has separate current history evidence; any future repair consideration requires read-only mismatch evidence and separate authorization. |
 | Local database recovery mechanics | `IMPLEMENTED_AND_TESTED` | The bounded verifier owns, backs up, destroys, restores, verifies, and cleans only its synthetic Local schema. |
 | Local Storage recovery mechanics | `IMPLEMENTED_AND_TESTED` | The same verifier owns and restores only its synthetic Local bucket and verifies canonical buckets remain untouched. |
@@ -40,7 +41,7 @@ Every capability in this package uses exactly one status:
 | Hosted configuration recovery | `DOCUMENTED_ONLY` | Names and categories are inventoried below; values must stay in institution-owned secret/configuration systems. |
 | RPO/RTO measurement method | `DOCUMENTED_ONLY` | The measurement contract and template exist below. |
 | Hosted RPO/RTO result | `MISSING` | No hosted measurement is recorded; Local timing must not be relabelled. |
-| Admin/CMS web deployment procedure | `DOCUMENTED_ONLY` | Install/build/start/health and evidence gates are defined. No current Admin/CMS deployment completion is claimed. |
+| Admin/CMS web deployment procedure | `VERIFIED_STAGING` | The current exact-SHA Render deployment and bounded public smoke are recorded above. Production acceptance, recovery, monitoring, workflow/UAT, and institutional release acceptance remain separate gates. |
 | Render web redeploy/rollback rehearsal | `DOCUMENTED_ONLY` | Procedure and future evidence checklist exist; no rollback was executed in this change. |
 | External monitoring and alert delivery | `INSTITUTION_DEPENDENT` | Signals and thresholds are defined, but provider, recipients, retention, and escalation route need institutional decisions. |
 | Workflow regression evidence | `IMPLEMENTED_AND_TESTED` | CI and focused runtime verifiers exist. The integrated release cohort evidence is owned by its separate workstream and is referenced, not duplicated. |
@@ -298,7 +299,7 @@ The authoritative application contract is in [Admin/CMS Hosted Staging Deploymen
 
 1. Record the exact reviewed full SHA, source branch, approval, and clean CI for that SHA.
 2. Run `npm run check:operational-readiness -- --expected-commit=<sha>`.
-3. Record hosted migration history/schema evidence against the exact reviewed 51-file manifest; do not infer applied migrations from `/api/readiness`.
+3. Record hosted migration history/schema evidence against the exact reviewed 52-file manifest; do not infer applied migrations from `/api/readiness`.
 4. Confirm backup/recovery evidence required by the change and the last known good release.
 5. Confirm environment variable **names**, target identity, secret ownership, and rotation status without exposing values.
 6. Confirm the Render web service uses the Admin/CMS root/commands and `/api/readiness`, not the Prototype service.
@@ -346,9 +347,9 @@ Unchecked means `SUPERVISED_HOSTED_REHEARSAL_REQUIRED`.
 
 Store completed evidence in the institution-approved project record or release artifact location, not in secret-bearing screenshots or local environment files. Every evidence item needs environment, full SHA, timestamp, operator role, result, and reference. Independent review should verify the evidence before KPI status changes.
 
-- **KPI-14 can use this package to prove:** repository readiness checks exist; Local recovery mechanics are bounded and reproducible; deployment/recovery/monitoring contracts and acceptance evidence requirements are defined.
-- **KPI-14 cannot yet claim:** completed Admin/CMS hosted deployment, hosted backup restoration, Render rollback rehearsal, operational external monitoring/alert routing, or hosted RPO/RTO.
+- **KPI-14 can use this package to prove:** repository readiness checks exist; the current staging Admin/CMS deployment identity and bounded read-only hosted smoke match `f74c1811a0c7a74c9ead2818651d5b571124f50b`; and Local recovery mechanics plus deployment/recovery/monitoring contracts are defined.
+- **KPI-14 cannot yet claim:** production acceptance, hosted backup restoration, Render rollback rehearsal, operational external monitoring/alert routing, or hosted RPO/RTO.
 - **KPI-15 can use this package to prove:** operator/developer documentation, an ownership template, a canonical release checklist, and an unaided routine-task measurement instrument exist.
 - **KPI-15 cannot yet claim:** named institutional ownership, credential transfer, completed training, at least 80% human unaided completion, or stakeholder sign-off.
 
-The exact next supervised actions are: assign owners; approve backup/retention/monitoring policy; capture a current exact-SHA deployment and smoke; recheck active staging-v2 migration alignment and exact schema/grant/RPC evidence; perform isolated database and Storage restore; rehearse Render redeploy/rollback; activate and test alert routing; run staff documentation-based training; and obtain independent sign-off.
+The exact next supervised actions are: assign owners; approve backup/retention/monitoring policy; retain or recapture release-specific migration/schema evidence when the schema changes; perform isolated database and Storage restore; rehearse Render redeploy/rollback; activate and test alert routing; run staff documentation-based training; and obtain independent sign-off.
