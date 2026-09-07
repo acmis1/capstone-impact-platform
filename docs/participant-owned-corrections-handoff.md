@@ -1,6 +1,6 @@
 # Participant-owned correction integration
 
-Local integration of PR #255 with current main, the PDF interaction correction from #257, the #259 evidence-only reconciliation boundary, and participant-owned complete correction packages. No hosted operation or publication is part of this work. Final UAT and stakeholder sign-off remain required.
+Historical local integration record for PR #255, the PDF interaction correction from #257, the #259 evidence-only reconciliation boundary, and participant-owned complete correction packages. No hosted operation or publication was part of that work. Final UAT and stakeholder sign-off remain required.
 
 ## Advisor concern and ownership
 
@@ -44,7 +44,7 @@ Staff compare current and proposed metadata, canonical classifications, file ide
 
 ## Database and Storage
 
-Migration **0051**, `20260903130000_participant_owned_corrections.sql`, includes both package origins. It was revised while local and unmerged; earlier migrations remain byte-identical in this follow-up. The application inventory contains 51 migrations and includes four new private tables: `participant_correction_submissions`, `participant_correction_prior_revisions`, `participant_correction_recovery_rows` and `participant_correction_events`. Six service-only RPCs provide project revision hashing, participant/staff context, reservation, completion and staff review. The obsolete staff-authored resolution-start RPC now rejects that path.
+Migration **0051**, `20260903130000_participant_owned_corrections.sql`, includes both package origins. It was revised while local and unmerged; earlier migrations remain byte-identical in this follow-up. At the time of this integration, the application inventory contained 51 migrations and included four new private tables: `participant_correction_submissions`, `participant_correction_prior_revisions`, `participant_correction_recovery_rows` and `participant_correction_events`. Six service-only RPCs provide project revision hashing, participant/staff context, reservation, completion and staff review. The obsolete staff-authored resolution-start RPC now rejects that path.
 
 Source packages use `participant-corrections-private`. Accepted media is prepared at unique immutable paths in `project-drafts-private`; copy reuse requires exact bytes. Both private buckets are included in the recovery inventory. There is no Storage deletion path in correction submission or acceptance.
 

@@ -79,12 +79,13 @@ To link an authenticated Supabase Auth user to the administrative schema in a ne
 
 1. Privately set temporary process environment variables. Note that **two independent acknowledgements** are required:
    - Environment variable `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN` is required by the script input validator.
-   - Target environment variable `CAPSTONE_RUNTIME_ENV=staging` (exact value `staging`) and `CAPSTONE_EXPECTED_SUPABASE_HOST` are required by the execution guard.
+   - Target environment variables `CAPSTONE_RUNTIME_ENV=staging` (exact value `staging`), `CAPSTONE_EXPECTED_SUPABASE_HOST=<authorized-target-host>`, and `CAPSTONE_STAGING_MUTATION_CONFIRMATION=<configured-label>` are required by the execution guard. The CLI confirmation must use the same configured label.
 
    **Bash:**
    ```bash
    export CAPSTONE_RUNTIME_ENV=staging
-   export CAPSTONE_EXPECTED_SUPABASE_HOST=app-staging.supabase.co
+   export CAPSTONE_EXPECTED_SUPABASE_HOST=<authorized-target-host>
+   export CAPSTONE_STAGING_MUTATION_CONFIRMATION=<configured-label>
    export CAPSTONE_BOOTSTRAP_ADMIN_EMAIL="admin@example.com"
    export CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME="Initial Admin"
    export CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN
@@ -93,14 +94,14 @@ To link an authenticated Supabase Auth user to the administrative schema in a ne
    **PowerShell:**
    ```powershell
    $env:CAPSTONE_RUNTIME_ENV = "staging"
-   $env:CAPSTONE_EXPECTED_SUPABASE_HOST = "app-staging.supabase.co"
-   $env:CAPSTONE_STAGING_MUTATION_CONFIRMATION = "capstone-admin-cms-staging-v2-2026"
+   $env:CAPSTONE_EXPECTED_SUPABASE_HOST = "<authorized-target-host>"
+   $env:CAPSTONE_STAGING_MUTATION_CONFIRMATION = "<configured-label>"
    $env:CAPSTONE_BOOTSTRAP_ADMIN_EMAIL = "admin@example.com"
    $env:CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME = "Initial Admin"
    $env:CAPSTONE_BOOTSTRAP_CONFIRM = "LINK_EXISTING_STAGING_ADMIN"
    ```
 
-2. Execute `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` passing CLI guard flags only after explicit operator approval.
+2. Execute `npm run link:admin-staging -- --apply --confirm-staging=<same-configured-label>` only after explicit operator approval.
 3. Clear temporary process variables immediately.
 4. Run `npm run check:admin-auth` to confirm readiness status `READY_FOR_MANUAL_LOGIN_TEST`.
 5. **Security Invariant:** Never paste Auth UUIDs into SQL queries or manually modify administrator/role rows directly in the database.

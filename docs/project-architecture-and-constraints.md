@@ -6,7 +6,7 @@ This document defines the core architecture, data flows, and immutable technical
 
 ## 1. Purpose and Status
 *   **Status**: `CONFIRMED` / `IMPLEMENTED FOUNDATION`
-*   **Purpose**: Establish the architectural framework to bridge school-managed project data with the public Duda showcase. Schema, repository, storage, validation, and publishing foundations exist for the standalone admin system, and the feasibility prototype has been successfully verified. Initial administrator authentication has been operationally verified in the isolated Admin/CMS staging environment. Broader project ingestion, review, multi-role authorization, RLS acceptance, publication, Duda cutover and staff UAT remain pending.
+*   **Purpose**: Establish the architectural framework to bridge school-managed project data with the public Duda showcase. Schema, repository, storage, validation, publication/removal, and public-renderer foundations are implemented and tested. Active staging-v2 has verified 52-migration structural evidence and a bounded exact-SHA application smoke. Hosted multi-role human UAT, recovery, monitoring, institutional ownership, Duda TEST configuration update, Duda cutover, and production acceptance remain pending.
 
 ---
 
@@ -16,7 +16,7 @@ The platform is designed to support at least **100 projects per year** and remai
 ---
 
 ## 3. Architecture Components
-*   **Duda Public Showcase Layer** (`VERIFIED PROTOTYPE`): Acts strictly as a responsive, public-facing presentation shell.
+*   **Duda Public Showcase Layer** (`REPOSITORY_IMPLEMENTED_TEST_SITE_UPDATE_PENDING`): The maintained `Prototype/duda/` renderer is a responsive public presentation shell with tested listing/detail/search behavior; the external Duda TEST configuration still uses the previous renderer.
 *   **School-Owned Admin/CMS** (`IMPLEMENTED FOUNDATION` under `apps/admin-cms`): A standalone Next.js and TypeScript application which serves as the absolute operational source of truth.
 *   **Supabase Database & Storage** (`IMPLEMENTED FOUNDATION`): PostgreSQL database storing admin records and public assets.
 *   **Approved-Only Public Feed** (`IMPLEMENTED FOUNDATION`): A schema-validated JSON payload (`capstones-latest.json`) compiled and written to a stable public Storage bucket.
@@ -45,14 +45,14 @@ Standard Project Package / Excel
 ---
 
 ## 5. Environment and Repository Isolation
-*   **Prototype Isolation**: The Prototype is isolated historical/feasibility evidence. It resides under `/Prototype` and must never share code or helper modules with `/apps/admin-cms`.
-*   **Supabase Project Isolation**: The Prototype recovery project uses its own Supabase instance. The production-oriented Admin/CMS must use the separate `capstone-admin-cms-staging-2026` environment and must **never** connect to or use the Prototype recovery Supabase project.
+*   **Prototype Isolation**: Historical/feasibility material under `/Prototype` is isolated and must never share code or helper modules with `/apps/admin-cms`. Assigned Duda/public-layer work may change the explicitly maintained `/Prototype/duda/` renderer and contract harness.
+*   **Supabase Project Isolation**: The Prototype recovery project uses its own Supabase instance. The Admin/CMS active staging target is `capstone-admin-cms-staging-v2-2026` and must **never** connect to or use the Prototype recovery Supabase project.
 
 ---
 
 ## 6. Duda Constraints
-*   **Duda Configuration and Arrangements**: No Duda upgrade has been approved. Duda native collections cannot be relied upon for the required scale of 100+ projects per year under the available arrangement. The current solution therefore uses an external approved-only JSON feed and client-side listing/detail rendering. All dynamic grids are rendered inside the listing root `#capstone-showcase-root` (generating the grid structure at `#capstone-project-grid`), and detail sections are rendered at `#project-detail` via JavaScript (`bodyend.html`) in Duda's footer. These integration-specific IDs are current Prototype Duda integration details, not permanent public API promises.
-*   **Verification Boundary**: The team currently has access only to an authenticated Duda test site. The official RMIT production website was not provided or verified.
+*   **Duda Configuration and Arrangements**: No Duda upgrade has been approved. Duda native collections cannot be relied upon for the required scale of 100+ projects per year under the available arrangement. The repository solution uses an external approved-only JSON feed and client-side listing/detail rendering, including tested Year, Program, Discipline, Industry Sector, and public-field search. The actual Duda TEST site has not yet been configured with the new search renderer. These integration-specific IDs are implementation details, not permanent public API promises.
+*   **Verification Boundary**: The team currently has access only to an authenticated Duda TEST site. The official RMIT production website was not provided or verified, and no live Duda publication is claimed.
 
 ---
 
@@ -79,9 +79,9 @@ Standard Project Package / Excel
 
 ## 10. Current Verified State
 *   The `main` branch is the repository source of truth. Verified deployment commits and historical promotion SHAs are recorded in the Prototype recovery/deployment runbooks and Git history.
-*   The Render Prototype service is verified Live with HTTP 200, serving 10 internal projects and 6 public-feed projects.
-*   The Duda authenticated test-site listing and detail pages have been manually verified by the user as functional.
-*   Initial administrator authentication (`auth.users` -> `admin_users`), `bootstrap_initial_admin` execution (`CREATED`), `npm run check:admin-auth` (`READY_FOR_MANUAL_LOGIN_TEST`), and dashboard login/logout have been operationally verified in isolated staging (`capstone-admin-cms-staging-2026`).
+*   The current Admin/CMS Render staging deployment `dep-daff6v740ujc73b25ga0` is live on exact `main` SHA `f74c1811a0c7a74c9ead2818651d5b571124f50b`; bounded read-only health/readiness/login smoke passed. This is not production, recovery, monitoring, or human-acceptance evidence.
+*   Duda TEST listing/detail verification is historical evidence. The repository search implementation passes its contract harness, but external Duda TEST search is not yet configured.
+*   Initial administrator authentication (`auth.users` -> `admin_users`), `bootstrap_initial_admin` execution (`CREATED`), `npm run check:admin-auth` (`READY_FOR_MANUAL_LOGIN_TEST`), and dashboard login/logout on `capstone-admin-cms-staging-2026` are historical activation evidence. The active target is staging-v2.
 
 ---
 
@@ -96,7 +96,7 @@ Standard Project Package / Excel
 *   **Participant Correction Requests**: Allowing participants to submit specific feedback if data is wrong.
 *   **Human Administrative Approval**: A school staff member must review and approve records before publishing.
 *   **Approved-Only Public Feed**: Stripping administrative metadata and updating the stable JSON feed.
-*   **Search & Dynamic Filters**: Custom frontend search and metadata filtering (Year, Program, Discipline, Industry).
+*   **Search & Dynamic Filters**: Repository public-renderer search plus metadata filtering (Year, Program, Discipline, Industry) is implemented and tested; Duda TEST configuration update remains pending.
 *   **Archive/Unpublish Flows**: Safe archival of database records and removal of projects from the public feed.
 *   **Measurement Metrics**: Demonstrating at least a **50% publishing time or manpower reduction** compared to manual Duda page creation.
 

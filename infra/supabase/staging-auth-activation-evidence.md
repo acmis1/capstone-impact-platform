@@ -51,7 +51,7 @@ This document records the sanitized operational verification evidence for the in
 > [!NOTE]
 > **HISTORICAL EVIDENCE VS CURRENT REQUIRED PROCEDURE:**
 > - **Historical Evidence (2026-07-21):** The historical activation recorded above occurred prior to the introduction of PR B1 shared-staging execution guardrails.
-> - **Current Required Procedure:** All future executions require target environment identity (`CAPSTONE_RUNTIME_ENV=staging`, `CAPSTONE_EXPECTED_SUPABASE_HOST`), double-acknowledgment CLI guard flags (`--apply --confirm-staging=capstone-admin-cms-staging-2026`), and process environment variable `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN`.
+> - **Current Required Procedure:** All future executions require target environment identity (`CAPSTONE_RUNTIME_ENV=staging`, `CAPSTONE_EXPECTED_SUPABASE_HOST`), `CAPSTONE_STAGING_MUTATION_CONFIRMATION=<configured-label>`, matching double-acknowledgment CLI guard flags (`--apply --confirm-staging=<same-configured-label>`), and process environment variable `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN`. The configured label and validated target identity determine authority; `capstone-admin-cms-staging-v2-2026` is only the current active-staging example.
 
 ---
 
