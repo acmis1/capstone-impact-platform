@@ -54,11 +54,12 @@ KPI-15 rules and does not turn machine evidence into human evidence.
 | Hosted database restore rehearsal | `VERIFIED_STAGING` | Current 52-migration staging-origin logical capture and isolated PostgreSQL 17 restore passed with `ZERO_COST_RECOVERY_REHEARSAL_VERIFIED`. This is staging-origin → isolated Local/self-hosted evidence, not managed hosted restore, hosted-to-hosted recovery, or PITR. |
 | Hosted Storage backup/restore | `VERIFIED_STAGING` | All four canonical buckets and 57 current objects were captured and restored with configuration/object/checksum verification. `participant-corrections-private` is empty in the actual current source state. This is staging-origin → isolated target evidence, not hosted-to-hosted Storage recovery. |
 | Hosted configuration recovery | `DOCUMENTED_ONLY` | Names and categories are inventoried below; values must stay in institution-owned secret/configuration systems. |
-| RPO/RTO measurement method | `DOCUMENTED_ONLY` | The measurement contract and template exist below. |
+| RPO/RTO measurement method | `IMPLEMENTED_AND_TESTED` | `apps/admin-cms/src/recovery/recoveryMeasurement.ts` implements the bounded staging measurement contract with fail-closed evidence validation; its focused tests preserve the canonical RPO/RTO boundaries and reject skipped application-smoke evidence. [Bounded staging recovery RPO/RTO measurement](operations/staging-recovery-rpo-rto-measurement.md) records the claim boundary. No achieved hosted/production result is implied. |
 | Hosted RPO/RTO result | `MISSING` | No hosted measurement is recorded; Local timing must not be relabelled. |
 | Admin/CMS web deployment procedure | `VERIFIED_STAGING` | The current exact-SHA Render deployment and bounded public smoke are recorded above. Production acceptance, recovery, monitoring, workflow/UAT, and institutional release acceptance remain separate gates. |
 | Render web redeploy/rollback rehearsal | `VERIFIED_STAGING` | A genuine staging forward deployment, official Render rollback, and exact-SHA redeployment were completed on 2026-09-03. Application-release timings were 145.2 s forward, 52.7 s rollback, and 145.1 s final redeploy; `/api/health` 200, `/login` 200, `/api/readiness` `READY`, and deployment identity matched at each stage. This is application-release evidence, not database recovery RTO; auto-deploy remained disabled. |
-| External monitoring and alert delivery | `INSTITUTION_DEPENDENT` | Signals and thresholds are defined, but provider, recipients, retention, and escalation route need institutional decisions. |
+| Repository-owned staging monitoring signal | `VERIFIED_STAGING` | [Zero-Cost Staging Monitoring](operations/zero-cost-staging-monitoring.md) implements a six-hour, cold-start-aware GitHub Actions probe of public `/api/health` and `/api/readiness`. A 2026-09-08 manual workflow run on merged `main` passed after 3/5 attempts. This is a best-effort technical signal, not an SLA, institutional alert-delivery proof, or production monitoring. |
+| External monitoring and alert delivery | `INSTITUTION_DEPENDENT` | The repository-owned staging signal now exists, but approved recipients, alert delivery/acknowledgement, retention, escalation route, and any institution-required monitoring provider remain institutional decisions. |
 | Workflow regression evidence | `IMPLEMENTED_AND_TESTED` | CI and focused runtime verifiers exist. The integrated release cohort evidence is owned by its separate workstream and is referenced, not duplicated. |
 | Incident record and escalation practice | `DOCUMENTED_ONLY` | Contract exists below; no real incident exercise is fabricated. |
 | Admin/operator guide | `DOCUMENTED_ONLY` | `docs/admin-operator-guide.md` provides routine operating instructions; real staff acceptance remains pending. |
@@ -266,6 +267,8 @@ Use UTC ISO 8601 timestamps from an agreed authoritative clock.
 - **Measured RPO** = `failure start − newest successfully restored recoverable backup timestamp`. It is the observed recoverable data-loss window for that scenario and mechanism, not a marketing target.
 - **Measured RTO** = `application smoke completion − recovery start`. Recovery is not complete when a restore command finishes; it is complete when the agreed post-restore smoke passes.
 
+The executable bounded measurement contract is in `apps/admin-cms/src/recovery/recoveryMeasurement.ts` and is described in [Bounded staging recovery RPO/RTO measurement](operations/staging-recovery-rpo-rto-measurement.md). It requires an authoritative complete-recovery-set watermark, recovery-start/service-acceptance timestamps, explicit evidence that the application-smoke contract matched, and a final `ZERO_COST_RECOVERY_REHEARSAL_VERIFIED` classification. The existing 2026-09-08 capture/restore/verifier durations do not satisfy that evidence contract and remain operational timings only; no achieved RPO/RTO is recorded from them.
+
 If exact last-write evidence exists, also record the newest restored application write and calculate the observed write-loss interval. If the provider exposes only backup time, state that limitation. Do not round down or substitute a plan-advertised value for a measurement.
 
 ### RPO/RTO evidence template
@@ -293,7 +296,9 @@ If exact last-write evidence exists, also record the newest restored application
 
 ## Monitoring and incident contract
 
-These are initial proposed operating checks, not evidence that an external service is configured.
+The repository now has a bounded zero-cost staging signal in [Zero-Cost Staging Monitoring](operations/zero-cost-staging-monitoring.md): a six-hour GitHub Actions check with bounded cold-start convergence. Its 2026-09-08 manual merged-`main` run passed after 3/5 attempts. GitHub scheduling remains best-effort and the workflow does not prove recipient delivery, acknowledgement, retention, escalation, production monitoring, or an SLA.
+
+The table below remains the proposed institution-level operating target, not a claim that an external service is configured or that the current six-hour free-tier signal meets the proposed one-minute cadence.
 
 | Signal | What it proves | Proposed check | Alert threshold | Recovery confirmation |
 | --- | --- | --- | --- | --- |
@@ -379,9 +384,9 @@ Unchecked means `SUPERVISED_HOSTED_REHEARSAL_REQUIRED`.
 
 Store completed evidence in the institution-approved project record or release artifact location, not in secret-bearing screenshots or local environment files. Every evidence item needs environment, full SHA, timestamp, operator role, result, and reference. Independent review should verify the evidence before KPI status changes.
 
-- **KPI-14 can use this package to prove:** repository readiness checks exist; a bounded read-only hosted smoke verified staging deployment `dep-dafimfn9l3cc73c8blog` at application commit `50d02632f4403f3acb5620d6b9a2e482e8ac5688`; current 52-migration staging-origin → isolated PostgreSQL 17 recovery is `VERIFIED_STAGING`; the four-bucket/57-object Storage recovery surface, Auth, Gate 4, cleanup, and bundle-preservation evidence are recorded; and the 2026-09-03 Render application-release rehearsal is `VERIFIED_STAGING`.
+- **KPI-14 can use this package to prove:** repository readiness checks exist; a bounded read-only hosted smoke verified staging deployment `dep-dafimfn9l3cc73c8blog` at application commit `50d02632f4403f3acb5620d6b9a2e482e8ac5688`; current 52-migration staging-origin → isolated PostgreSQL 17 recovery is `VERIFIED_STAGING`; the four-bucket/57-object Storage recovery surface, Auth, Gate 4, cleanup, and bundle-preservation evidence are recorded; the bounded RPO/RTO measurement method is implemented/tested without claiming an achieved result; the repository-owned zero-cost staging monitoring signal has a successful merged-`main` run; and the 2026-09-03 Render application-release rehearsal is `VERIFIED_STAGING`.
 - **KPI-14 cannot yet claim:** managed hosted PITR, hosted-to-hosted restoration, production acceptance/recovery/SLA, operational external monitoring/alert routing, approved backup ownership/policy, or formal hosted/production RPO/RTO.
 - **KPI-15 can use this package to prove:** operator/developer documentation, an ownership template, a canonical release checklist, and an unaided routine-task measurement instrument exist.
 - **KPI-15 cannot yet claim:** named institutional ownership, credential transfer, completed training, at least 80% human unaided completion, or stakeholder sign-off.
 
-The exact next supervised actions are: assign owners; approve backup/retention/monitoring policy; retain or recapture release-specific migration/schema evidence when the schema changes; satisfy any managed hosted or hosted-to-hosted recovery requirement; activate and test alert routing; run staff documentation-based training; and obtain independent sign-off.
+The exact next supervised actions are: assign owners; approve backup/retention/monitoring policy; retain or recapture release-specific migration/schema evidence when the schema changes; capture a qualifying RPO/RTO measurement with the required authoritative timestamps and smoke evidence; satisfy any managed hosted or hosted-to-hosted recovery requirement; activate and test alert routing; run staff documentation-based training; and obtain independent sign-off.
