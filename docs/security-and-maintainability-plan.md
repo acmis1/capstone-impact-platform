@@ -16,7 +16,7 @@ Ensure that administrative workflows, participant project data, and public showc
                                                                                            │
 [Duda Shell (Public UI)] ◄── (HTTPS GET) ◄── [Stable Public JSON Feed] ◄── [Approved Public Feed Storage]
 ```
-*(Note: The complete HTTPS participant-upload workflow is a target design and is not currently operational. The repository-owned `Prototype/duda/` renderer implements and tests the public-feed listing/detail contract, including search and public-URL policy. The actual authenticated Duda TEST configuration still has the previous renderer and has not been updated with search; no live Duda site was touched. Any Admin/CMS-to-Duda cutover requires separate authorization and verification. The current authorization implementation uses the server-only `requireAdmin` helper, protected admin layout, protected API routes, and permission checks.)*
+*(Note: The complete HTTPS participant-upload workflow is a target design and is not currently operational. The repository-owned `Prototype/duda/` renderer implements and tests the public-feed listing/detail contract, including search and public-URL policy, and is now saved in the authorized Duda TEST editor. Synthetic data-backed acceptance passed through the governed staging feed; no Duda Publish/Republish or live RMIT/Impact publication occurred. Any Admin/CMS-to-production Duda cutover requires separate authorization and verification. The current authorization implementation uses the server-only `requireAdmin` helper, protected admin layout, protected API routes, and permission checks.)*
 
 ---
 
@@ -45,7 +45,7 @@ Ensure that administrative workflows, participant project data, and public showc
 
 ## 5. Authentication and Authorization Status
 *   **CMS Authentication**: Initial administrator authentication in `capstone-admin-cms-staging-2026` is historical evidence, not a current staging-v2 acceptance claim. Automated disposable-Local acceptance verifies real Admin/Reviewer/Editor sign-in, exact role and multi-role permission unions, RLS/Data API denial, service-only RPC denial, 3600-second issued-session timing, sign-out browser-session removal, CSRF mutation boundaries, and server-derived audit attribution. Human reviewer/editor UAT, hosted multi-role acceptance, institutional provisioning, and staff handover remain pending.
-*   **Environment Lock**: The current active target is `capstone-admin-cms-staging-v2-2026`; the old `capstone-admin-cms-staging-2026` activation is historical. The Prototype recovery project **must not be used** for Admin/CMS authentication.
+*   **Environment Lock**: The active Admin/CMS staging stack uses Render service `capstone-admin-cms-staging-v2` with the active Supabase staging-v2 project `capstone-admin-cms-staging-v2-2026`; the old `capstone-admin-cms-staging-2026` activation is historical. The Prototype recovery project **must not be used** for Admin/CMS authentication.
 *   **Least Privilege Credentials**: Supabase `service_role` keys are backend-only and their usage is isolated in server-only modules (`import 'server-only'`). Static client bundle scanning confirmed zero service-role keys or secret names exist in frontend assets.
 *   **Migration Contract**: The repository and active staging-v2 migration history contain 52 versioned migrations. Independent Gate 4 evidence structurally matches that contract. This does not authorize routine migration repair, `db push`, reset, or hosted mutation; repair requires a proven history mismatch and separate authorization.
 
@@ -64,7 +64,7 @@ Ensure that administrative workflows, participant project data, and public showc
 
 ## 7. Feed and Duda Public-Layer Protection
 *   **Feed Validation Gate**: The feed validation script (`validatePublicFeed.ts`) operates as a security boundary, rejecting any payload containing administrative metadata or unexpected properties.
-*   **Output Sanitization and URL Policy**: The repository Duda renderer validates public URLs, rejects private/signed/authenticated Storage paths, token-bearing URLs, unsafe schemes, malformed encodings, and embedded credentials; its Chrome contract harness passed 40 scenarios, with paired browser/server contract cases exercising this boundary. The actual Duda TEST site still serves the prior renderer, so this repository implementation is `REPOSITORY_IMPLEMENTED_TEST_SITE_UPDATE_PENDING`, not a statement about an external site.
+*   **Output Sanitization and URL Policy**: The repository Duda renderer validates public URLs, rejects private/signed/authenticated Storage paths, token-bearing URLs, unsafe schemes, malformed encodings, and embedded credentials; its Chrome contract harness passed 40 scenarios, with paired browser/server contract cases exercising this boundary. The authorized Duda TEST editor now contains the saved repository renderer and passed bounded synthetic data-backed listing/search/filter/detail/mobile-listing acceptance. This is `VERIFIED_TEST`, not production or institutional acceptance.
 *   **Workflow Integrity**:
     *   Participant preview rendering should be isolated from the administrative UI where practical.
     *   Feed publication/removal uses immutable public-feed snapshot/history and a controlled ledger; rollback is tested only in disposable Local execution, not hosted recovery.
