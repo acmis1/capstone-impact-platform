@@ -23,8 +23,11 @@ reported durations are isolated Local/self-hosted recovery timings.
 - No recovery command publishes, contacts Duda, sends email, signs in as a copied user, or restores
   over active staging.
 
-The real hosted capture remains a separately authorized operator action. Coding and CI agents run
-only the synthetic Local rehearsal.
+The current authorized staging-origin capture and isolated restore are recorded in
+[Current-52 Recovery Evidence — 2026-09-08](../m6-current52-recovery-evidence-2026-09-08.md)
+as bounded `VERIFIED_STAGING` evidence. This procedure still separates that
+staging-origin → isolated target result from any future managed hosted or
+hosted-to-hosted rehearsal.
 
 ## Private bundle contract
 
@@ -217,6 +220,15 @@ it is not provider PITR and cannot claim cross-service point-in-time atomicity.
 
 ## Phase B — disposable restore and verification
 
+### Port-collision troubleshooting
+
+Preflight every required port before starting a disposable stack. If the
+default block is unavailable, use an explicitly preflighted safe block, for
+example `--port-base=55000`. If a partial restoration has started, do not retry
+until disposable cleanup is independently proved. A port collision must never
+change the source identity, target isolation, or loopback-only binding
+requirements.
+
 Move to a machine that can run the repository-pinned Node, Supabase CLI, and Docker toolchain. Keep
 the bundle outside every Git worktree, then run:
 
@@ -352,6 +364,8 @@ Record only:
 - `ZERO_COST_ISOLATED_RESTORE_DURATION_MS`; and
 - `FULL_RECOVERY_VERIFICATION_DURATION_MS`.
 
-Never relabel them as `HOSTED_RTO`, `PRODUCTION_RTO`, `MANAGED_RESTORE_RTO`, or provider RPO. A real
-hosted-origin capture and independently reviewed isolated restore are still required before PP1 can
-claim a supervised hosted-origin rehearsal.
+Never relabel them as `HOSTED_RTO`, `PRODUCTION_RTO`, `MANAGED_RESTORE_RTO`, or provider RPO. The
+current staging-origin capture and independently reviewed isolated restore are
+`VERIFIED_STAGING` within that bounded destination; they do not establish
+managed hosted PITR, hosted-to-hosted recovery, production recovery, or formal
+RPO/RTO.
