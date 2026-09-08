@@ -19,6 +19,21 @@ Every capability in this package uses exactly one status:
 
 `LOCAL`, `STAGING`, and `PRODUCTION` evidence are never interchangeable. `PROCEDURE DEFINED` is not `REHEARSAL PASSED`.
 
+## Current constrained human-evidence boundary — 2026-09-08
+
+Stakeholder/staff availability is constrained near the deadline. Completion
+Plan risk R1 is therefore `R1_TRIGGERED` with `MITIGATION_ACTIVE`; it is not
+closed. See the [stakeholder and constrained human-evidence audit](stakeholder-and-constrained-human-evidence-2026-09-08.md)
+for the source-grounded distinction between historical industry requirements,
+academic-supervisor demonstrations, and formal intended-user UAT.
+
+Technical M6 and E3 evaluation may continue independently with synthetic data
+where human participation is not required. Formal human acceptance remains
+pending: KPI-01 has no comparable human measurement, KPI-12 has
+`FORMAL_INTENDED_USER_UAT_PENDING`, and KPI-15 has
+`HUMAN_TRAINING_AND_OWNERSHIP_PENDING`. This note does not weaken KPI-14 or
+KPI-15 rules and does not turn machine evidence into human evidence.
+
 ## Current M6 / KPI-14 / KPI-15 gap matrix
 
 | Capability | Status | Current evidence and remaining gap |

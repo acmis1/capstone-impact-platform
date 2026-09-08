@@ -2,6 +2,14 @@
 
 This document is the KPI-15 handover instrument. It defines role ownership and a documentation-based routine-task test. It contains no credential values and records no fabricated human result.
 
+Deadline-constrained stakeholder feedback, academic-supervisor demonstrations,
+and any `TEAM_PROXY` exercise are supplementary evidence only. They do not
+substitute for KPI-15's intended-administrator unaided routine-task run,
+which retains the `>=80%` rule, or for successful institutional ownership and
+credential-policy transfer. Until that evidence exists, the formal training
+result remains `NOT RUN` and handover remains pending. See the [constrained
+human-evidence audit](stakeholder-and-constrained-human-evidence-2026-09-08.md).
+
 ## Ownership principles
 
 - Use institution-controlled role accounts/aliases and approved identity governance. Do not make continued operation depend on a participant’s personal account.

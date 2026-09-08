@@ -32,6 +32,8 @@ When verifying system behavior or planning extensions, information must be refer
 *   **[Operational Ownership & Training](operational-handover-and-training.md)**: Role ownership matrix, credential-policy transfer record, escalation acceptance, and KPI-15 unaided routine-task instrument.
 *   **[Integrated Release Evaluation Harness](release-evaluation-harness.md)**: Disposable-Local 132-case evaluation, evidence boundaries, cleanup, repeatability, and report interpretation.
 *   **[Manual Efficiency Template](templates/release-evaluation-manual-efficiency.md)**: Unfilled comparison template for later staff-effort measurement.
+*   **[Stakeholder and Constrained Human-Evidence Audit](stakeholder-and-constrained-human-evidence-2026-09-08.md)**: Source-grounded human-evidence boundary, current KPI statuses, R1 mitigation, and technical-evidence separation.
+*   **[Abbreviated Stakeholder UAT Contingency](templates/abbreviated-stakeholder-uat-contingency.md)**: Short supplementary instrument for a 10–15 minute intended-staff session; it does not replace formal UAT or handover evidence.
 
 ---
 
