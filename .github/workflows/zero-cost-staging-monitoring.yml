@@ -1,0 +1,33 @@
+name: Zero-Cost Staging Monitoring
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zero-cost-staging-monitoring
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Probe staging health and readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24.14.1
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+
+      - name: Run monitor unit tests
+        run: node --test tools/zero-cost-staging-monitoring/monitor.test.mjs
+
+      - name: Run bounded staging probe
+        run: node tools/zero-cost-staging-monitoring/monitor.mjs https://capstone-admin-cms-staging-v2.onrender.com
