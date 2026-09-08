@@ -264,6 +264,8 @@ The active Admin/CMS staging stack uses Render service `capstone-admin-cms-stagi
 - **Migration History (Gate 3) — current verified observation**: 52 rows were recorded, from earliest `20260601035138` through `20260906120000_public_removal_completion_reconciliation`.
 - **Schema, Grants, and RPCs (Gate 4)**: Independent structural evidence is `GATE4_MATCH` for the 52-migration contract: 44 tables, 514 columns, 387 constraints, 31 policies, 84 application RPC signatures across 83 names, 1 canonical staff-role helper, 4 dispatcher routines, and 4 Storage buckets, with zero differences and validation errors. This is a separate structural evidence layer from the current deployment identity.
 - **Latest verified application deployment evidence (2026-09-08)**: Render service `capstone-admin-cms-staging-v2` targets branch `main` and is authoritative at deployment `dep-dafimfn9l3cc73c8blog`, with deployed application commit `50d02632f4403f3acb5620d6b9a2e482e8ac5688`. GET `/api/health` and `/api/readiness` returned 200 with that deployment identity, readiness `READY`, and canonical feed `[]`; the publication gate was restored to disabled. Later documentation-only repository commits do not by themselves change this deployed application baseline.
+- **Render application-release rehearsal (2026-09-03)**: A genuine staging forward deployment, official Render rollback, and exact-SHA redeployment completed with `/api/health` 200, `/login` 200, `/api/readiness` `READY`, and deployment identity matching at every stage. Timings were 145.2 s forward, 52.7 s rollback, and 145.1 s final redeploy; auto-deploy remained disabled. This is `VERIFIED_STAGING` application-release evidence, not database recovery RTO.
+- **Current-52 recovery evidence (2026-09-08)**: The current staging-origin logical capture and isolated PostgreSQL 17 restore are recorded as bounded `VERIFIED_STAGING` evidence in [Current-52 Recovery Evidence](m6-current52-recovery-evidence-2026-09-08.md). This does not establish managed hosted PITR or hosted-to-hosted recovery.
 - **Separate Release Gates**: The evidence above does not establish production acceptance, workflow/UAT, recovery, monitoring, institutional ownership, or release acceptance.
 
 All observations are point-in-time evidence. The current Render identity establishes the deployed application SHA; Gate 3/4 establish the stated database contract, but each remains independently re-verifiable for a later release candidate or schema change. Operators must **NOT** run `supabase migration repair` as a routine step for active staging-v2. Repair may be considered only if future read-only reconciliation demonstrates a real history mismatch and separate authorization is granted; `supabase db push` remains governed and must not be run casually.
@@ -306,7 +308,7 @@ A historical target at the 48-migration baseline predates migrations 0049–0051
 The active staging-v2 migration history is a separate Gate 3 evidence layer from the Gate 4 schema, grant, RLS, and RPC verification that may be required for a release:
 - **Migration History (Gate 3)**: Current verified history is 52 rows from `20260601035138` through `20260906120000_public_removal_completion_reconciliation`; 46-row and 48/48 records are historical observations.
 - **Schema & Grants (Gate 4)**: The supplied 52-migration structural evidence is `GATE4_MATCH`; matching migration-history count alone would not prove schema/grant/RPC parity.
-- **Other Gates**: Render deployment identity has separately matched `50d02632f4403f3acb5620d6b9a2e482e8ac5688` in bounded read-only smoke. Storage recovery, Auth/UAT, monitoring, and release acceptance require their own evidence.
+- **Other Gates**: Render deployment identity has separately matched `50d02632f4403f3acb5620d6b9a2e482e8ac5688` in bounded read-only smoke. Current-52 Auth/Storage recovery is separately documented above; UAT, monitoring, formal RPO/RTO, and release acceptance remain their own gates.
 
 Auth readiness is verified via:
 
@@ -338,5 +340,5 @@ A green hosted smoke result is only an application/configuration/dependency and 
 
 The complete M6 release, backup/restore, RPO/RTO, monitoring, incident, and Render web-service
 redeploy/rollback acceptance contract is in [M6 Operational Readiness and Recovery](m6-operational-readiness.md).
-No Render redeploy or rollback is considered rehearsed until its supervised evidence checklist is
-completed against exact reviewed commits.
+The 2026-09-03 Render application-release rehearsal is already `VERIFIED_STAGING`; any
+future release still requires the supervised evidence checklist against exact reviewed commits.

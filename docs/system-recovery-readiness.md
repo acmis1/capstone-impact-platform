@@ -2,7 +2,7 @@
 
 This runbook covers repository/disposable-Local recovery evidence for the active Admin/CMS. It does not authorize or perform hosted Supabase, Render, Duda, email, public-feed history, or public-feed rollback operations.
 
-The hosted database, Storage, configuration, RPO/RTO, monitoring, Render redeploy/rollback, ownership, and supervised-rehearsal contract is defined in [M6 Operational Readiness and Recovery](m6-operational-readiness.md). The older bounded probe below remains labelled `LOCAL_RECOVERY_MECHANICS_VERIFIED`. The complete zero-cost logical capture/restore implementation and synthetic hosted-origin-equivalent proof are documented separately in [Zero-Cost Hosted-Origin Recovery Rehearsal](operations/zero-cost-recovery-rehearsal.md); no real hosted-origin capture has been executed by the coding workflow.
+The hosted database, Storage, configuration, RPO/RTO, monitoring, Render redeploy/rollback, ownership, and supervised-rehearsal contract is defined in [M6 Operational Readiness and Recovery](m6-operational-readiness.md). The current 52-migration staging-origin → isolated PostgreSQL 17 result is recorded in [Current-52 Recovery Evidence — 2026-09-08](m6-current52-recovery-evidence-2026-09-08.md) as bounded `VERIFIED_STAGING` evidence. The older bounded probe below remains labelled `LOCAL_RECOVERY_MECHANICS_VERIFIED`, and the synthetic proof remains documented separately in [Zero-Cost Hosted-Origin Recovery Rehearsal](operations/zero-cost-recovery-rehearsal.md). Neither result proves managed hosted PITR or hosted-to-hosted recovery.
 
 ## Complete zero-cost portable recovery proof
 
@@ -19,7 +19,8 @@ requires Gate 4 and `MANAGED_SCHEMA_CUSTOMIZATIONS = MATCH`. It then verifies
 database/Auth/execution-control/Storage integrity and application health/login before cleaning only
 its marked resources. It contacts no hosted project and uses no paid service. The resulting
 evidence is `ZERO_COST_RECOVERY_REHEARSAL_VERIFIED`, not a managed-hosted restore or hosted RTO
-claim.
+claim. The current real staging-origin capture and isolated restore are separately
+recorded in the current-52 evidence document linked above.
 
 ## Bounded Local probe evidence boundary
 
@@ -167,10 +168,9 @@ ordinary database backup scope.
 This bounded verifier is recovery-mechanics evidence, not a production backup system. The following remain required before operational acceptance:
 
 - an institutionally approved hosted database backup cadence, retention period, encryption/access policy, and restore target;
-- hosted database restore rehearsal and recovery-point/recovery-time measurements;
-- complete export and restore of the four canonical Storage buckets and their object metadata;
+- managed hosted PITR or hosted-to-hosted database/Storage restoration and formal recovery-point/recovery-time measurements;
 - provider configuration, environment-variable, DNS, and secret inventory recovery from an institution-owned secret manager;
-- Render deployment/redeployment and rollback rehearsal;
+- hosted Render deployment/redeployment and rollback is separately evidenced as an application-release rehearsal; this does not prove database recovery RTO;
 - external uptime monitoring, alert routing, escalation ownership, and retained health evidence;
 - a real hosted post-restore application smoke test; and
 - named institutional owners with credentials and incident-response authority.

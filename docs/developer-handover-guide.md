@@ -102,7 +102,7 @@ Live Duda cutover is not authorized by normal application work. Public-feed writ
 
 The Local recovery verifier is intentionally narrow. It may destroy only the randomly named schema and bucket whose current execution proves ownership. It never resets the database, mutates canonical tables/buckets, writes backups to the repository, or contacts hosted Supabase.
 
-Run it only under `docs/system-recovery-readiness.md`, preserve the pre-task stack state, and label the result `LOCAL_RECOVERY_MECHANICS_VERIFIED`. Hosted database, Storage, configuration, Render, DNS, and Duda recovery require the supervised M6 plan and must not be inferred from the Local result.
+Run it only under `docs/system-recovery-readiness.md`, preserve the pre-task stack state, and label the bounded probe result `LOCAL_RECOVERY_MECHANICS_VERIFIED`. The current 52-migration staging-origin → isolated PostgreSQL 17 recovery is separately recorded as `VERIFIED_STAGING` in [Current-52 Recovery Evidence](m6-current52-recovery-evidence-2026-09-08.md). Managed hosted PITR, hosted-to-hosted recovery, production recovery, configuration, DNS, and Duda recovery still require their supervised M6 boundaries and must not be inferred from either Local result.
 
 When changing the verifier, preserve and test ownership proof, post-loss authority revocation, competitor-resource refusal, cleanup-on-failure, canonical-resource non-mutation, repeat execution, and loopback-only targeting.
 
@@ -124,7 +124,7 @@ The repository does not select or own:
 - institutional GitHub, Render, Supabase, DNS, Duda, email/provider, and monitoring accounts;
 - production backup cadence/retention, encryption/access policy, or restore target;
 - real secret values, rotation custody, billing, support windows, or alert destinations;
-- hosted restore, redeploy/rollback, alert-routing, and RPO/RTO evidence;
+- managed hosted or hosted-to-hosted restore, alert-routing, formal RPO/RTO, and any future release-specific redeploy/rollback evidence;
 - staff account approvals, human training results, or named operational owners.
 
 Track these as `TBD — STAKEHOLDER DECISION REQUIRED` in the handover template. Do not invent names or use a participant-owned personal account as the institutional owner.

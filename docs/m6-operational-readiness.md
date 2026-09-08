@@ -48,16 +48,16 @@ KPI-15 rules and does not turn machine evidence into human evidence.
 | Historical staging reconciliation | `DOCUMENTED_ONLY` | The runbook preserves the manual-repair background for the old paused staging instance. Active staging-v2 has separate current history evidence; any future repair consideration requires read-only mismatch evidence and separate authorization. |
 | Local database recovery mechanics | `IMPLEMENTED_AND_TESTED` | The bounded verifier owns, backs up, destroys, restores, verifies, and cleans only its synthetic Local schema. |
 | Local Storage recovery mechanics | `IMPLEMENTED_AND_TESTED` | The same verifier owns and restores only its synthetic Local bucket and verifies canonical buckets remain untouched. |
-| Zero-cost portable database/Storage recovery | `IMPLEMENTED_AND_TESTED` | The repository captures a five-artifact logical database bundle, the two PP1-owned Auth triggers omitted by the standard schema dump, and all four canonical Storage buckets, including the migration-owned `participant-corrections-private` bucket created by Migration 0051. It restores a synthetic PostgreSQL 15 source into a disposable PostgreSQL 17 target, requires both Gate 4 and `MANAGED_SCHEMA_CUSTOMIZATIONS = MATCH`, verifies data/Auth/cost-fence/Storage checksums and application smoke, and cleans only marked resources. Real hosted-origin capture remains separately authorized and unexecuted. |
+| Zero-cost portable database/Storage recovery | `IMPLEMENTED_AND_TESTED` | The repository captures a five-artifact logical database bundle, the two PP1-owned Auth triggers omitted by the standard schema dump, and all four canonical Storage buckets, including the migration-owned `participant-corrections-private` bucket created by Migration 0051. It restores a synthetic PostgreSQL 15 source into a disposable PostgreSQL 17 target, requires both Gate 4 and `MANAGED_SCHEMA_CUSTOMIZATIONS = MATCH`, verifies data/Auth/cost-fence/Storage checksums and application smoke, and cleans only marked resources. The current staging-origin result is recorded separately as bounded `VERIFIED_STAGING` evidence. |
 | Public-feed artifact rollback | `IMPLEMENTED_AND_TESTED` | Disposable-Local deployment history rollback is tested. It is not database, Storage, configuration, or hosted disaster recovery. |
 | Hosted database backup policy | `INSTITUTION_DEPENDENT` | Provider capability, cadence, retention, encryption/access, owner, and cost are not approved. |
-| Hosted database restore rehearsal | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | The zero-cost logical restore path is implemented and passes a complete synthetic disposable rehearsal. An authorized read-only staging-origin capture and independent isolated restore are still required. |
-| Hosted Storage backup/restore | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | The four canonical buckets, including private participant correction source packages, are captured and restored through Storage API with exact object/config/checksum verification in the synthetic rehearsal. No real hosted object was accessed by this change. |
+| Hosted database restore rehearsal | `VERIFIED_STAGING` | Current 52-migration staging-origin logical capture and isolated PostgreSQL 17 restore passed with `ZERO_COST_RECOVERY_REHEARSAL_VERIFIED`. This is staging-origin → isolated Local/self-hosted evidence, not managed hosted restore, hosted-to-hosted recovery, or PITR. |
+| Hosted Storage backup/restore | `VERIFIED_STAGING` | All four canonical buckets and 57 current objects were captured and restored with configuration/object/checksum verification. `participant-corrections-private` is empty in the actual current source state. This is staging-origin → isolated target evidence, not hosted-to-hosted Storage recovery. |
 | Hosted configuration recovery | `DOCUMENTED_ONLY` | Names and categories are inventoried below; values must stay in institution-owned secret/configuration systems. |
 | RPO/RTO measurement method | `DOCUMENTED_ONLY` | The measurement contract and template exist below. |
 | Hosted RPO/RTO result | `MISSING` | No hosted measurement is recorded; Local timing must not be relabelled. |
 | Admin/CMS web deployment procedure | `VERIFIED_STAGING` | The current exact-SHA Render deployment and bounded public smoke are recorded above. Production acceptance, recovery, monitoring, workflow/UAT, and institutional release acceptance remain separate gates. |
-| Render web redeploy/rollback rehearsal | `DOCUMENTED_ONLY` | Procedure and future evidence checklist exist; no rollback was executed in this change. |
+| Render web redeploy/rollback rehearsal | `VERIFIED_STAGING` | A genuine staging forward deployment, official Render rollback, and exact-SHA redeployment were completed on 2026-09-03. Application-release timings were 145.2 s forward, 52.7 s rollback, and 145.1 s final redeploy; `/api/health` 200, `/login` 200, `/api/readiness` `READY`, and deployment identity matched at each stage. This is application-release evidence, not database recovery RTO; auto-deploy remained disabled. |
 | External monitoring and alert delivery | `INSTITUTION_DEPENDENT` | Signals and thresholds are defined, but provider, recipients, retention, and escalation route need institutional decisions. |
 | Workflow regression evidence | `IMPLEMENTED_AND_TESTED` | CI and focused runtime verifiers exist. The integrated release cohort evidence is owned by its separate workstream and is referenced, not duplicated. |
 | Incident record and escalation practice | `DOCUMENTED_ONLY` | Contract exists below; no real incident exercise is fabricated. |
@@ -229,8 +229,13 @@ labelled:
 
 ```text
 ZERO_COST_RECOVERY_REHEARSAL_VERIFIED
-REAL_HOSTED_ORIGIN_CAPTURE_NOT_YET_EXECUTED
+VERIFIED_STAGING: staging-origin → isolated Local/self-hosted PostgreSQL 17
 ```
+
+The current-52 capture and isolated restore are recorded in [Current-52 Recovery
+Evidence — 2026-09-08](m6-current52-recovery-evidence-2026-09-08.md). This bounded
+result does not prove managed hosted PITR, hosted-to-hosted restoration, or
+production recovery.
 
 Local duration and backup age may be recorded as `LOCAL`, but never reported as hosted RPO/RTO.
 
@@ -249,7 +254,10 @@ An authorized recovery lead should perform this later in an approved change wind
 9. record RPO/RTO, deviations, and evidence references; and
 10. destroy or retain the isolated target only under the approved retention/change record.
 
-Until that procedure is completed and independently reviewed, record `SUPERVISED_HOSTED_REHEARSAL_REQUIRED`.
+Until a separately authorized hosted-to-hosted or managed-provider rehearsal
+satisfies the full contract, record `SUPERVISED_HOSTED_REHEARSAL_REQUIRED` for
+that broader claim. The current bounded staging-origin → isolated result is
+already recorded as `VERIFIED_STAGING`.
 
 ## RPO and RTO measurement contract
 
@@ -342,6 +350,15 @@ Only an authorized Render operator may execute this later:
 
 Application rollback is insufficient when data is corrupt/missing, Storage bytes or metadata are lost, an incompatible migration changed schema/data, credentials/configuration are lost, DNS/TLS is wrong, or Duda/public-feed state requires its own governed recovery. In those cases stop and invoke the relevant database, Storage, configuration, or integration recovery plan.
 
+### Historical staging application-release rehearsal — 2026-09-03
+
+The supervised staging rehearsal proved exact-SHA forward deployment, official
+Render rollback, exact-SHA redeployment, `/api/health` 200, `/login` 200,
+`/api/readiness` `READY`, and deployment identity matched at every stage.
+Timings were 145.2 s forward, 52.7 s rollback, and 145.1 s final redeploy;
+auto-deploy remained disabled. This is `VERIFIED_STAGING` application-release
+evidence only, not database recovery RTO.
+
 ### Hosted rehearsal evidence checklist
 
 - [ ] Exact source and target SHA recorded.
@@ -362,9 +379,9 @@ Unchecked means `SUPERVISED_HOSTED_REHEARSAL_REQUIRED`.
 
 Store completed evidence in the institution-approved project record or release artifact location, not in secret-bearing screenshots or local environment files. Every evidence item needs environment, full SHA, timestamp, operator role, result, and reference. Independent review should verify the evidence before KPI status changes.
 
-- **KPI-14 can use this package to prove:** repository readiness checks exist; a bounded read-only hosted smoke verified staging deployment `dep-dafimfn9l3cc73c8blog` at application commit `50d02632f4403f3acb5620d6b9a2e482e8ac5688`; and Local recovery mechanics plus deployment/recovery/monitoring contracts are defined.
-- **KPI-14 cannot yet claim:** production acceptance, hosted backup restoration, Render rollback rehearsal, operational external monitoring/alert routing, or hosted RPO/RTO.
+- **KPI-14 can use this package to prove:** repository readiness checks exist; a bounded read-only hosted smoke verified staging deployment `dep-dafimfn9l3cc73c8blog` at application commit `50d02632f4403f3acb5620d6b9a2e482e8ac5688`; current 52-migration staging-origin → isolated PostgreSQL 17 recovery is `VERIFIED_STAGING`; the four-bucket/57-object Storage recovery surface, Auth, Gate 4, cleanup, and bundle-preservation evidence are recorded; and the 2026-09-03 Render application-release rehearsal is `VERIFIED_STAGING`.
+- **KPI-14 cannot yet claim:** managed hosted PITR, hosted-to-hosted restoration, production acceptance/recovery/SLA, operational external monitoring/alert routing, approved backup ownership/policy, or formal hosted/production RPO/RTO.
 - **KPI-15 can use this package to prove:** operator/developer documentation, an ownership template, a canonical release checklist, and an unaided routine-task measurement instrument exist.
 - **KPI-15 cannot yet claim:** named institutional ownership, credential transfer, completed training, at least 80% human unaided completion, or stakeholder sign-off.
 
-The exact next supervised actions are: assign owners; approve backup/retention/monitoring policy; retain or recapture release-specific migration/schema evidence when the schema changes; perform isolated database and Storage restore; rehearse Render redeploy/rollback; activate and test alert routing; run staff documentation-based training; and obtain independent sign-off.
+The exact next supervised actions are: assign owners; approve backup/retention/monitoring policy; retain or recapture release-specific migration/schema evidence when the schema changes; satisfy any managed hosted or hosted-to-hosted recovery requirement; activate and test alert routing; run staff documentation-based training; and obtain independent sign-off.
