@@ -2,6 +2,8 @@
 
 Use one copy per candidate release. Leave every item unchecked until its stated evidence exists and has been reviewed. A checked box is an index entry, not proof by itself; record an immutable CI, release, change, run, or signed evidence reference. Never paste secrets, environment values, private URLs, user identities, tokens, or credential screenshots.
 
+Human-evidence boundary: [Stakeholder and Constrained Human-Evidence Audit](stakeholder-and-constrained-human-evidence-2026-09-08.md) distinguishes historical requirements feedback and supervisor demonstrations from formal intended-user UAT, comparable staff-effort measurement, training, ownership transfer, and stakeholder acceptance. It does not change this checklist: leave every box unchecked until its stated evidence exists. The abbreviated contingency instrument is supplementary only. The release template remains the unchecked `0/67` contract.
+
 ## Release record
 
 | Field | Value |

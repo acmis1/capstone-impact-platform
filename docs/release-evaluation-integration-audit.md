@@ -8,6 +8,20 @@ This section and the requirement matrix supersede the historical observations be
 
 **F and G are PASS. KPI-01 remains NOT TESTED / PENDING HUMAN MEASUREMENT; overall release acceptance remains INCOMPLETE.**
 
+## Current human-evidence boundary — 2026-09-08
+
+The machine evaluation recorded in this audit remains technical evidence only:
+it is not staff-effort timing, intended-user UAT, training, ownership
+transfer, or stakeholder acceptance. Historical industry requirements feedback
+and academic-supervisor demonstrations are recorded separately in the
+[stakeholder and constrained human-evidence audit](stakeholder-and-constrained-human-evidence-2026-09-08.md).
+They do not close the formal human gaps. Current status is KPI-01
+`NOT TESTED / PENDING COMPARABLE HUMAN MEASUREMENT`, KPI-12
+`FORMAL_INTENDED_USER_UAT_PENDING`, and KPI-15
+`HUMAN_TRAINING_AND_OWNERSHIP_PENDING`. R1 is
+`R1_TRIGGERED` / `MITIGATION_ACTIVE`; technical evaluation continues
+independently of the scheduling constraint.
+
 Retained sanitized evidence (outside Git):
 
 `C:/Users/Admin/.codex/visualizations/2026/09/04/01a06d01-75f6-7030-b767-8caf9d6b52dd/binh-final`
