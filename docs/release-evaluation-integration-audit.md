@@ -58,6 +58,25 @@ The earlier `browser-runtime.json` is explicitly incomplete: its interactive aut
 
 No full-suite or exact-head CI pass is claimed by this focused final run; historical full-suite observations below remain historical. The manual template now specifies comparable activities/counts, interruptions/exclusions and total-time reduction calculation, without human measurements or a >=50% claim. The release checklist remains unchecked/INCOMPLETE. No migration, schema, RLS, Auth, validation/reconciliation semantics or publication-authority changes; no hosted Supabase, Duda, publication endpoint, public promotion or removal. Hosted capacity/recovery, stakeholder UAT, production SLA, staff-effort reduction and institutional sign-off remain outside this pass.
 
+## Current exact-main machine recheck — 2026-09-08
+
+On exact current `main` SHA `50d02632f4403f3acb5620d6b9a2e482e8ac5688` with 52 migrations, the integrated Local release evaluator was rerun using repository-supported Local synthetic staff provisioning with `npm run verify:release-evaluation`. The accessibility evidence integrity recheck used `npm run verify:accessibility-uat-evidence`. This is machine evidence only, not a production performance benchmark or human-effort measurement.
+
+| Result | Observation |
+| --- | --- |
+| Local harness gate | PASS |
+| Complete runs | 2; comparable `true`; `mismatchFields=[]` |
+| Corpus / persisted / deliberate rejects / unaccounted | 132 / 120 / 12 / 0 |
+| Seeded critical / non-critical / total | 32/32 / 20/20 / 52/52 |
+| Blocking false positives / observed controls | 0/110 / 110/110 |
+| Audit rows / publication candidates | 180/180 / 20 |
+| Evaluator-owned records in ordinary feed | 0 |
+| Cleanup / owned residue | complete / 0 across all evaluator-owned scopes |
+| Baseline checks | all true |
+| Migration count observed | 52 |
+
+The evaluator explicitly does not prove hosted Supabase, Render/Duda production capacity, production SLA, high concurrency, institutional UAT, or human staff-effort savings. KPI-01 remains `NOT TESTED`. The separate accessibility evidence recheck also passed: 112 files scanned, 57 text files, 0 findings, 54 screenshots, 54 unique hashes, and 0 duplicate groups; this is evidence-integrity verification, not institutional accessibility acceptance.
+
 ## Historical source and integration (2026-09-03)
 
 - Audited Binh head: `f004d39d9e4f5744018dd17efd9094afa77acb7f`.

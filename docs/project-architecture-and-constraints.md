@@ -6,7 +6,7 @@ This document defines the core architecture, data flows, and immutable technical
 
 ## 1. Purpose and Status
 *   **Status**: `CONFIRMED` / `IMPLEMENTED FOUNDATION`
-*   **Purpose**: Establish the architectural framework to bridge school-managed project data with the public Duda showcase. Schema, repository, storage, validation, publication/removal, and public-renderer foundations are implemented and tested. Active staging-v2 has verified 52-migration structural evidence and a bounded exact-SHA application smoke. Hosted multi-role human UAT, recovery, monitoring, institutional ownership, Duda TEST configuration update, Duda cutover, and production acceptance remain pending.
+*   **Purpose**: Establish the architectural framework to bridge school-managed project data with the public Duda showcase. Schema, repository, storage, validation, publication/removal, and public-renderer foundations are implemented and tested. Active staging-v2 has verified 52-migration structural evidence and a bounded exact-SHA application smoke. The authorized Duda TEST editor now has the repository renderer saved and has passed bounded synthetic data-backed acceptance; hosted multi-role human UAT, recovery, monitoring, institutional ownership, Duda cutover, and production acceptance remain pending.
 
 ---
 
@@ -16,7 +16,7 @@ The platform is designed to support at least **100 projects per year** and remai
 ---
 
 ## 3. Architecture Components
-*   **Duda Public Showcase Layer** (`REPOSITORY_IMPLEMENTED_TEST_SITE_UPDATE_PENDING`): The maintained `Prototype/duda/` renderer is a responsive public presentation shell with tested listing/detail/search behavior; the external Duda TEST configuration still uses the previous renderer.
+*   **Duda Public Showcase Layer** (`VERIFIED_TEST` / `TEST_SITE_DATA_BACKED_ACCEPTANCE`): The maintained `Prototype/duda/` renderer is a responsive public presentation shell with tested listing/detail/search behavior and is saved in the authorized Duda TEST editor. The synthetic acceptance used the governed staging feed; live Duda/Impact publication was not performed.
 *   **School-Owned Admin/CMS** (`IMPLEMENTED FOUNDATION` under `apps/admin-cms`): A standalone Next.js and TypeScript application which serves as the absolute operational source of truth.
 *   **Supabase Database & Storage** (`IMPLEMENTED FOUNDATION`): PostgreSQL database storing admin records and public assets.
 *   **Approved-Only Public Feed** (`IMPLEMENTED FOUNDATION`): A schema-validated JSON payload (`capstones-latest.json`) compiled and written to a stable public Storage bucket.
@@ -51,7 +51,7 @@ Standard Project Package / Excel
 ---
 
 ## 6. Duda Constraints
-*   **Duda Configuration and Arrangements**: No Duda upgrade has been approved. Duda native collections cannot be relied upon for the required scale of 100+ projects per year under the available arrangement. The repository solution uses an external approved-only JSON feed and client-side listing/detail rendering, including tested Year, Program, Discipline, Industry Sector, and public-field search. The actual Duda TEST site has not yet been configured with the new search renderer. These integration-specific IDs are implementation details, not permanent public API promises.
+*   **Duda Configuration and Arrangements**: No Duda upgrade has been approved. Duda native collections cannot be relied upon for the required scale of 100+ projects per year under the available arrangement. The repository solution uses an external approved-only JSON feed and client-side listing/detail rendering, including tested Year, Program, Discipline, Industry Sector, and public-field search. The authorized Duda TEST editor now has the saved search renderer and passed bounded synthetic acceptance; production/live Duda cutover remains unperformed. These integration-specific IDs are implementation details, not permanent public API promises.
 *   **Verification Boundary**: The team currently has access only to an authenticated Duda TEST site. The official RMIT production website was not provided or verified, and no live Duda publication is claimed.
 
 ---
@@ -79,8 +79,8 @@ Standard Project Package / Excel
 
 ## 10. Current Verified State
 *   The `main` branch is the repository source of truth. Verified deployment commits and historical promotion SHAs are recorded in the Prototype recovery/deployment runbooks and Git history.
-*   The current Admin/CMS Render staging deployment `dep-daff6v740ujc73b25ga0` is live on exact `main` SHA `f74c1811a0c7a74c9ead2818651d5b571124f50b`; bounded read-only health/readiness/login smoke passed. This is not production, recovery, monitoring, or human-acceptance evidence.
-*   Duda TEST listing/detail verification is historical evidence. The repository search implementation passes its contract harness, but external Duda TEST search is not yet configured.
+*   The latest verified Admin/CMS Render staging application baseline (2026-09-08) is deployment `dep-dafimfn9l3cc73c8blog` at deployed commit `50d02632f4403f3acb5620d6b9a2e482e8ac5688`; bounded read-only health/readiness checks passed, readiness was `READY`, the canonical feed was `[]`, and the publication gate was restored to disabled. Later documentation-only repository commits do not by themselves change this deployed application baseline. This is not production, recovery, monitoring, or human-acceptance evidence.
+*   Duda TEST has `TEST_SITE_DATA_BACKED_ACCEPTANCE` for one synthetic project: listing, public-field search, all four facets, reusable detail navigation, and populated-listing mobile no-overflow passed; governed cleanup removed the project from the TEST presentation. The detail screenshot proves navigation only, not mobile detail accessibility.
 *   Initial administrator authentication (`auth.users` -> `admin_users`), `bootstrap_initial_admin` execution (`CREATED`), `npm run check:admin-auth` (`READY_FOR_MANUAL_LOGIN_TEST`), and dashboard login/logout on `capstone-admin-cms-staging-2026` are historical activation evidence. The active target is staging-v2.
 
 ---
@@ -96,7 +96,7 @@ Standard Project Package / Excel
 *   **Participant Correction Requests**: Allowing participants to submit specific feedback if data is wrong.
 *   **Human Administrative Approval**: A school staff member must review and approve records before publishing.
 *   **Approved-Only Public Feed**: Stripping administrative metadata and updating the stable JSON feed.
-*   **Search & Dynamic Filters**: Repository public-renderer search plus metadata filtering (Year, Program, Discipline, Industry) is implemented and tested; Duda TEST configuration update remains pending.
+*   **Search & Dynamic Filters**: Repository public-renderer search plus metadata filtering (Year, Program, Discipline, Industry) is implemented and tested; the authorized Duda TEST configuration passed bounded synthetic acceptance, while production/live cutover remains pending.
 *   **Archive/Unpublish Flows**: Safe archival of database records and removal of projects from the public feed.
 *   **Measurement Metrics**: Demonstrating at least a **50% publishing time or manpower reduction** compared to manual Duda page creation.
 
