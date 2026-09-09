@@ -56,7 +56,7 @@ export const assistiveEnqueueResponseSchema = z.discriminatedUnion('resultCode',
     runId: z.uuid(),
     status: runStatus,
   }).strict(),
-  z.object({ resultCode: z.enum(['VALIDATION_FAILED', 'PERMISSION_DENIED', 'PROJECT_NOT_FOUND']) }).strict(),
+  z.object({ resultCode: z.enum(['VALIDATION_FAILED', 'PERMISSION_DENIED', 'PROJECT_NOT_FOUND', 'INPUT_CHANGED']) }).strict(),
 ]);
 
 export const assistiveStatusResponseSchema = z.discriminatedUnion('resultCode', [

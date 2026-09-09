@@ -63,6 +63,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const canImport = hasPermission(authContext.permissions, 'projects.edit');
   const canSubmitBulk = hasPermission(authContext.permissions, 'projects.edit');
   const canReviewBulk = hasPermission(authContext.permissions, 'projects.review');
+  const canRunAssistiveBulk = hasPermission(authContext.permissions, 'projects.edit');
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -180,6 +181,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   result={clientResult}
                   canSubmitBulk={canSubmitBulk}
                   canReviewBulk={canReviewBulk}
+                  canRunAssistiveBulk={canRunAssistiveBulk}
                 />
               )}
             </BulkProjectReviewBusyProvider>

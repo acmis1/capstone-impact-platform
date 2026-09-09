@@ -330,6 +330,78 @@ describe('ProjectTableContainer preference integration', () => {
     expect(within(screen.getByRole('table')).getAllByRole('checkbox', { name: /Select Synthetic UI project/ }).filter((checkbox) => (checkbox as HTMLInputElement).checked)).toHaveLength(50);
   });
 
+  it('processes a 100-project two-page cohort as two bounded 50-project actions', async () => {
+    const hash = 'a'.repeat(64);
+    const makeRows = (page: number) => Array.from({ length: 50 }, (_, index) => ({
+      ...baseRow,
+      id: `page-${page}-${index}`,
+      publicId: `release-page-${page}-${String(index).padStart(3, '0')}`,
+      title: `Page ${page} project ${index + 1}`,
+    }));
+    const pageOneRows = makeRows(1);
+    const pageTwoRows = makeRows(2);
+    const pageOne: ProjectIndexResult = { rows: pageOneRows, total: 100, page: 1, pageSize: 50, pageCount: 2 };
+    const pageTwo: ProjectIndexResult = { rows: pageTwoRows, total: 100, page: 2, pageSize: 50, pageCount: 2 };
+    const responseFor = (ids: string[], outcome: 'preflight' | 'execute') => new Response(JSON.stringify(outcome === 'preflight'
+      ? {
+        summary: { total: ids.length, eligible: ids.length, alreadyActiveOrCurrent: 0, blocked: 0, invalidStale: 0 },
+        items: ids.map((publicId) => ({ publicId, title: publicId, runId: null, status: null, inputHash: hash, disposition: 'eligible', reasons: [], additionalReasonCount: 0 })),
+      }
+      : {
+        summary: { total: ids.length, enqueued: ids.length, alreadyActiveOrCurrent: 0, blocked: 0, invalidStale: 0, failed: 0 },
+        items: ids.map((publicId) => ({ publicId, title: publicId, runId: '22222222-2222-4222-8222-222222222222', status: 'QUEUED', inputHash: hash, disposition: 'eligible', outcome: 'ENQUEUED', reasons: [], additionalReasonCount: 0 })),
+      }), { status: 200 });
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+
+    const view = render(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer query={parseProjectListQuery({})} result={pageOne} canRunAssistiveBulk />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select current page' }))[0]);
+    await waitFor(() => expect(screen.getAllByText('50 selected').length).toBeGreaterThan(0));
+    const firstIds = pageOneRows.map((row) => row.publicId as string);
+    fetchMock
+      .mockResolvedValueOnce(responseFor(firstIds, 'preflight'))
+      .mockResolvedValueOnce(responseFor(firstIds, 'execute'));
+    fireEvent.click(screen.getByRole('button', { name: 'Check eligibility' }));
+    await waitFor(() => expect(screen.getByText((_, element) => element?.tagName === 'P' && (element.textContent?.includes('50 ready') ?? false))).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and enqueue ready projects' }));
+    await waitFor(() => expect(screen.getByText((_, element) => element?.tagName === 'P' && (element.textContent?.includes('50 enqueued') ?? false))).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go to next page' }));
+    navigation.search = 'page=2';
+    view.rerender(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer query={parseProjectListQuery({ page: '2' })} result={pageTwo} canRunAssistiveBulk />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+    const secondIds = pageTwoRows.map((row) => row.publicId as string);
+    fetchMock
+      .mockResolvedValueOnce(responseFor(secondIds, 'preflight'))
+      .mockResolvedValueOnce(responseFor(secondIds, 'execute'));
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select current page' }))[0]);
+    await waitFor(() => expect(screen.getAllByText('50 selected').length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: 'Check eligibility' }));
+    await waitFor(() => expect(screen.getByText((_, element) => element?.tagName === 'P' && (element.textContent?.includes('50 ready') ?? false))).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and enqueue ready projects' }));
+    await waitFor(() => expect(screen.getByText((_, element) => element?.tagName === 'P' && (element.textContent?.includes('50 enqueued') ?? false))).toBeTruthy());
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    for (const call of fetchMock.mock.calls) {
+      const body = JSON.parse(String(call[1]?.body));
+      expect(body.publicIds).toHaveLength(50);
+    }
+    fetchMock.mockRestore();
+  // This intentionally renders and exercises two 50-row pages; allow extra Windows CI
+  // scheduling headroom beyond Vitest's 5-second default without changing the test scope.
+  }, 15_000);
+
   it('moves from page one to page two and never carries hidden page-one selection forward', async () => {
     const pageOneRows = [
       { ...baseRow, id: 'page-one-a', publicId: 'release-page-one-a', title: 'Page one project A' },
@@ -389,7 +461,6 @@ describe('ProjectTableContainer preference integration', () => {
     ['search', 'q=atlas'],
     ['filter', 'status=approved'],
     ['sort', 'sort=title&direction=asc'],
-    ['pagination', 'page=2'],
     ['page size', 'pageSize=25'],
   ])('clears selection when the %s query scope changes', async (_label, nextSearch) => {
     const view = renderTable();
