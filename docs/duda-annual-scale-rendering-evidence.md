@@ -18,7 +18,7 @@ the repository renderer consuming an annual-scale 100+ record feed.
 
 ## Test design
 
-`Prototype/scripts/test-duda-annual-scale-browser.js` derives exactly 120
+The active `apps/public-layer/scripts/test-duda-annual-scale-browser.js` derives exactly 120
 synthetic records programmatically from the valid current three-record fixture
 shape. It does not add a large duplicated JSON fixture. Generated records have
 unique positive numeric IDs (`260001` through `260120`), unique public IDs and
@@ -42,10 +42,16 @@ The browser scenarios are:
 
 ## Results
 
-Command:
+Historical evidence command:
 
 ```text
 node Prototype/scripts/test-duda-annual-scale-browser.js
+```
+
+The active equivalent is:
+
+```text
+npm run test:public-layer-annual-scale-browser
 ```
 
 Observed result:

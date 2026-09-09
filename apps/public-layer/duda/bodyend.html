@@ -1,0 +1,1369 @@
+<script>
+(function() {
+    // 1. Duplicate execution guard
+    if (window.__capstoneShowcaseInitialized) {
+        console.log('[Showcase] Capstone script already initialized, skipping duplicate execution');
+        return;
+    }
+    window.__capstoneShowcaseInitialized = true;
+
+    // --- CONFIGURATION ---
+    const validateFeedUrl = (rawUrl) => {
+        if (!rawUrl || typeof rawUrl !== 'string') return null;
+        try {
+            const match = rawUrl.match(/^https:\/\/([^\/]+)/);
+            if (!match) return null;
+            const originalHost = match[1];
+            if (originalHost !== originalHost.toLowerCase()) return null;
+
+            const parsed = new URL(rawUrl);
+            if (parsed.protocol !== 'https:') return null;
+            if (parsed.username || parsed.password) return null;
+            if (parsed.port) return null;
+            if (parsed.search || parsed.hash) return null;
+
+            const hostname = parsed.hostname;
+            const hostParts = hostname.split('.');
+            if (hostParts.length !== 3 || hostParts[1] !== 'supabase' || hostParts[2] !== 'co') {
+                return null;
+            }
+            const ref = hostParts[0];
+            if (!/^[a-z0-9]+$/.test(ref)) return null;
+
+            if (ref === 'xojnnhilqaldxoilmxli') return null;
+
+            const allowedFeedPaths = [
+                '/storage/v1/object/public/feeds/capstones-latest.json',
+                '/storage/v1/object/public/public-feeds/capstones-latest.json'
+            ];
+            const rawPath = rawUrl.slice(match[0].length).split(/[?#]/, 1)[0];
+            if (!allowedFeedPaths.includes(parsed.pathname) || !allowedFeedPaths.includes(rawPath)) return null;
+
+            return rawUrl;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const CAPSTONE_FEED_URL = validateFeedUrl(window.CAPSTONE_FEED_URL);
+    if (!CAPSTONE_FEED_URL) {
+        console.warn('FEED_CONFIGURATION_INVALID');
+    }
+
+    const PUBLIC_FEED_ERROR_CODES = new Set([
+        'FEED_CONFIGURATION_INVALID',
+        'FEED_REQUEST_FAILED',
+        'FEED_RESPONSE_INVALID',
+        'FEED_PARSE_FAILED',
+        'FEED_RECORD_INVALID'
+    ]);
+
+    const createPublicFeedError = (code) => {
+        const error = new Error(code);
+        error.publicReason = code;
+        return error;
+    };
+
+    // --- STATE ---
+    let allProjects = [];
+    let currentFilters = {
+        search: '',
+        year: 'All',
+        program: 'All',
+        discipline: 'All',
+        industry: 'All'
+    };
+
+    // --- LIGHTBOX STATE ---
+    let currentSnapshotIndex = 0;
+    let lightboxKeyHandler = null;
+    let lightboxOpener = null;
+    let previousBodyOverflow = "";
+
+    // --- UTILS ---
+    const escapeHTML = (str) => {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = String(str);
+        return div.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+    };
+
+    const normalizeSearchInput = (rawSearch) => {
+        if (typeof rawSearch !== 'string') return '';
+
+        let cleaned = rawSearch.normalize('NFC').trim().slice(0, 100);
+        cleaned = cleaned.replace(/[\x00-\x1F\x7F]/g, '');
+        cleaned = cleaned.replace(/[^\p{L}\p{N}\s-]/gu, ' ');
+
+        return cleaned.replace(/\s+/g, ' ').trim();
+    };
+
+    const normalizeSearchField = (value) => String(value || '')
+        .normalize('NFC')
+        .replace(/[\x00-\x1F\x7F]/g, '')
+        .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+
+    const getQueryParam = (name) => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get(name);
+    };
+
+    const parseProjectId = (value) => {
+        if (Number.isSafeInteger(value) && value > 0) return value;
+        if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return null;
+        const numericId = Number(value);
+        return Number.isSafeInteger(numericId) ? numericId : null;
+    };
+
+    const buildDetailUrl = (projectId) => {
+        // Standardizing on /project-detail?id=...
+        const path = window.location.pathname.includes('project-detail') ? '' : 'project-detail';
+        return `${path}?id=${projectId}`;
+    };
+
+    const saveSelectedProject = (id) => {
+        localStorage.setItem('selectedProjectId', id);
+    };
+
+    const isMp4 = (url) => {
+        if (!url) return false;
+        return url.toLowerCase().split('?')[0].endsWith('.mp4');
+    };
+
+    const getEmbedUrl = (url) => {
+        if (!url) return "";
+        if (url.includes("youtube.com") || url.includes("youtu.be")) {
+            const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
+            if (match && match[2] && match[2].length === 11) {
+                return `https://www.youtube.com/embed/${match[2]}`;
+            }
+        }
+        if (url.includes("vimeo.com")) {
+            const match = url.match(/^.*(vimeo\.com\/|video\/)([^#\&\?]*).*/);
+            if (match && match[2]) {
+                const id = match[2].split('/')[0].trim();
+                if (/^\d+$/.test(id)) {
+                    return `https://player.vimeo.com/video/${id}`;
+                }
+            }
+        }
+        return "";
+    };
+
+    // --- PUBLIC RECORD POLICY (start: extracted verbatim by repository tests) ---
+    const MAX_POLICY_PATH_DECODE_PASSES = 3;
+
+    const STORAGE_API_PATH_MARKER = '/storage/v1/';
+    const PRIVATE_INGESTION_BUCKET = 'project-drafts-private';
+    const PRIVATE_ACCESS_QUERY_KEYS = new Set([
+        'token', 'jwt', 'apikey', 'api_key', 'access_token', 'authorization'
+    ]);
+    const PRIVATE_ACCESS_TEXT_PATTERN = /(?:^|[?&#;])(?:token|jwt|apikey|api_key|access_token|authorization)(?:=|&|$)/i;
+    const PUBLIC_URL_FORBIDDEN_CHARACTERS = /[\u0000-\u0020\u007f<>"'`]/;
+
+    const inspectPercentEncoding = (value) => {
+        let hasPercent = false;
+        let hasEncodedByte = false;
+        let hasMalformedPercent = false;
+        for (let index = 0; index < value.length; index += 1) {
+            if (value[index] !== '%') continue;
+            hasPercent = true;
+            if (/^[0-9a-f]{2}$/i.test(value.slice(index + 1, index + 3))) {
+                hasEncodedByte = true;
+                index += 2;
+            } else {
+                hasMalformedPercent = true;
+            }
+        }
+        return { hasPercent, hasEncodedByte, hasMalformedPercent };
+    };
+
+    /**
+     * Bounded, explicit path canonicalization for URL policy decisions.
+     *
+     * A private identifier can survive inside `URL.pathname` in percent-encoded form, so policy
+     * markers are matched against the raw path and against a bounded number of decoded forms.
+     * This is deliberately not an unbounded recursive decoder: at most
+     * MAX_POLICY_PATH_DECODE_PASSES passes run. Malformed encoding in the original path fails
+     * closed, as does another complete encoded layer beyond the fixed budget. A literal percent
+     * produced by decoding `%25` is not itself treated as a malformed extra layer.
+     *
+     * Returns lower-cased candidate forms, or null when the URL must be rejected.
+     */
+    const canonicalPathForms = (pathname) => {
+        let current = String(pathname);
+        const forms = [current.toLowerCase()];
+        for (let pass = 0; pass < MAX_POLICY_PATH_DECODE_PASSES; pass += 1) {
+            const encoding = inspectPercentEncoding(current);
+            if (!encoding.hasPercent) return forms;
+            if (encoding.hasMalformedPercent) {
+                return pass > 0 && !encoding.hasEncodedByte ? forms : null;
+            }
+            let decoded;
+            try {
+                decoded = decodeURIComponent(current);
+            } catch (e) {
+                return null;
+            }
+            if (decoded === current) return forms;
+            current = decoded;
+            forms.push(current.toLowerCase());
+        }
+        return inspectPercentEncoding(current).hasEncodedByte ? null : forms;
+    };
+
+    const containsPrivateAccessMaterial = (parsed) => {
+        for (const key of parsed.searchParams.keys()) {
+            if (PRIVATE_ACCESS_QUERY_KEYS.has(key.toLowerCase())) return true;
+        }
+
+        for (const value of [parsed.search, parsed.hash.slice(1)]) {
+            let current = value;
+            for (let pass = 0; pass <= MAX_POLICY_PATH_DECODE_PASSES; pass += 1) {
+                if (PRIVATE_ACCESS_TEXT_PATTERN.test(current)) return true;
+                if (!current.includes('%')) break;
+                try {
+                    const decoded = decodeURIComponent(current);
+                    if (decoded === current) break;
+                    current = decoded;
+                } catch (e) {
+                    break;
+                }
+            }
+        }
+        return false;
+    };
+
+    const hasPathSegment = (pathname, segment) => pathname.split('/').includes(segment);
+    const hasStorageObjectRoute = (pathname, route) => {
+        const marker = `/storage/v1/object/${route}`;
+        return pathname === marker || pathname.endsWith(marker) || pathname.includes(`${marker}/`);
+    };
+
+    /**
+     * One coherent public URL policy for every active URL this showcase renders.
+     *
+     * Every URL must be an absolute, credential-free HTTP(S) URL. General external links keep
+     * their query strings, so ordinary demo and repository links and YouTube `watch?v=` URLs stay
+     * usable. A Storage object URL is identified from the canonical parsed `/storage/v1/` path,
+     * never arbitrary host/query text, and is additionally never allowed to expose a signed object
+     * route, an authenticated object route, a private or draft bucket, or token-bearing access, no
+     * matter which field carried it. The unused second argument remains accepted for compatibility
+     * with the extracted contract helper; every active field now follows this same policy.
+     */
+    const isSafePublicUrl = (rawUrl, _enforcePublicAssetBoundary = false) => {
+        if (typeof rawUrl !== "string" || rawUrl.trim() !== rawUrl || !rawUrl) return false;
+        if (PUBLIC_URL_FORBIDDEN_CHARACTERS.test(rawUrl)) return false;
+        let parsed;
+        try {
+            parsed = new URL(rawUrl);
+        } catch (e) {
+            return false;
+        }
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+        if (parsed.username || parsed.password || !parsed.hostname) return false;
+
+        const pathForms = canonicalPathForms(parsed.pathname);
+        if (!pathForms) return false;
+
+        const isStorageObjectUrl = pathForms.some(form => form.includes(STORAGE_API_PATH_MARKER));
+        if (!isStorageObjectUrl) return true;
+
+        if (pathForms.some(form => (
+            hasPathSegment(form, 'drafts') ||
+            hasPathSegment(form, PRIVATE_INGESTION_BUCKET) ||
+            hasStorageObjectRoute(form, 'sign') ||
+            hasStorageObjectRoute(form, 'authenticated')
+        ))) return false;
+        if (containsPrivateAccessMaterial(parsed)) return false;
+        return true;
+    };
+
+    const isPublicSnapshotUrl = (rawUrl) => isSafePublicUrl(rawUrl, true);
+
+    /**
+     * Resolves the rendered gallery from the authoritative current-feed contract.
+     *
+     * `snapshots` supplies display order; `snapshotMedia` supplies the governed alternative and the
+     * authoritative `galleryPosition`. The server contract requires each position to be a unique
+     * integer from 1 through 10 in increasing order - it does not require positions to be
+     * contiguous or to equal an array index, so sparse patterns such as [2] or [2, 5] are valid and
+     * stay visible. Positions are never fabricated here. An entry is dropped only when the server
+     * contract also treats it as invalid, or when rendering it would be unsafe.
+     */
+    const getSnapshotItems = (project) => {
+        const snapshotUrls = Array.isArray(project && project.snapshots) ? project.snapshots : [];
+        const snapshotMedia = Array.isArray(project && project.snapshotMedia) ? project.snapshotMedia : [];
+        const snapshotUrlCounts = new Map();
+        const mediaByUrl = new Map();
+        const duplicateMediaUrls = new Set();
+
+        snapshotUrls.forEach(url => {
+            if (typeof url === "string") {
+                snapshotUrlCounts.set(url, (snapshotUrlCounts.get(url) || 0) + 1);
+            }
+        });
+
+        snapshotMedia.forEach(item => {
+            if (!item || typeof item !== "object" || Array.isArray(item) || typeof item.url !== "string") {
+                return;
+            }
+            if (mediaByUrl.has(item.url)) {
+                duplicateMediaUrls.add(item.url);
+                return;
+            }
+            if (
+                typeof item.altText !== "string" ||
+                !item.altText.trim() ||
+                !Number.isInteger(item.galleryPosition) ||
+                item.galleryPosition < 1 ||
+                item.galleryPosition > 10
+            ) {
+                mediaByUrl.set(item.url, null);
+                return;
+            }
+            mediaByUrl.set(item.url, item);
+        });
+
+        const candidates = snapshotUrls.flatMap(url => {
+            if (!isPublicSnapshotUrl(url) || snapshotUrlCounts.get(url) !== 1 || duplicateMediaUrls.has(url)) {
+                return [];
+            }
+            const media = mediaByUrl.get(url);
+            return media ? [{ url, altText: media.altText, galleryPosition: media.galleryPosition }] : [];
+        });
+
+        // A gallery position identifies exactly one image in the governed contract. When two
+        // surviving entries claim the same position the pairing is contradictory, so neither is
+        // rendered rather than guessing which alternative describes which image.
+        const seenPositions = new Set();
+        const contestedPositions = new Set();
+        candidates.forEach(({ galleryPosition }) => {
+            if (seenPositions.has(galleryPosition)) contestedPositions.add(galleryPosition);
+            seenPositions.add(galleryPosition);
+        });
+
+        return candidates.filter(({ galleryPosition }) => !contestedPositions.has(galleryPosition));
+    };
+
+    const normalizeProjectRecord = (record) => {
+        if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
+        if (!Number.isSafeInteger(record.id) || record.id <= 0) return null;
+
+        const textOrEmpty = (value) => typeof value === 'string' ? value : '';
+        const stringArrayOrEmpty = (value) => Array.isArray(value)
+            ? value.filter(item => typeof item === 'string')
+            : [];
+        const safeUrlOrEmpty = (value) => typeof value === 'string' && isSafePublicUrl(value)
+            ? value
+            : '';
+
+        const discipline = textOrEmpty(record.discipline);
+        const disciplines = stringArrayOrEmpty(record.disciplines);
+        if (disciplines.length === 0 && discipline) disciplines.push(discipline);
+
+        const externalLinks = Array.isArray(record.externalLinks)
+            ? record.externalLinks.flatMap(link => {
+                if (!link || typeof link !== 'object' || Array.isArray(link) || !isSafePublicUrl(link.url)) {
+                    return [];
+                }
+                return [{ label: textOrEmpty(link.label) || 'Project Link', url: link.url }];
+            })
+            : [];
+
+        const layoutConfig = record.layoutConfig && typeof record.layoutConfig === 'object' && !Array.isArray(record.layoutConfig)
+            ? record.layoutConfig
+            : {};
+        const validTemplates = ['poster_showcase', 'technical_detail', 'media_rich'];
+        const validFeaturedMedia = ['auto', 'poster', 'snapshots', 'gallery', 'video', 'none'];
+        const defaultSectionOrder = ['background', 'solution', 'snapshots', 'video', 'team', 'links'];
+        const validSections = new Set([
+            'background', 'solution', 'snapshots', 'video', 'team', 'links',
+            'externalLinks', 'citations', 'accessibilityText', 'summary',
+            'poster', 'posterPdf', 'metadata'
+        ]);
+
+        // Presentation preferences are inert layout hints that the server contract deliberately does
+        // not type-check, and they are never interpolated into markup. Rejecting an entire public
+        // feed because of one is not a safety boundary, so an unrecognized value resolves to the
+        // renderer's documented automatic selection and unrecognized section names are dropped -
+        // exactly how the renderer already treats them.
+        const featuredMedia = validFeaturedMedia.includes(layoutConfig.featuredMedia)
+            ? layoutConfig.featuredMedia
+            : 'auto';
+        const sectionOrder = Array.isArray(layoutConfig.sectionOrder)
+            ? layoutConfig.sectionOrder.filter(section => typeof section === 'string' && validSections.has(section))
+            : [];
+        const hiddenSections = Array.isArray(layoutConfig.hiddenSections)
+            ? layoutConfig.hiddenSections.filter(section => typeof section === 'string' && validSections.has(section))
+            : null;
+
+        // `galleryPosition` is authoritative feed data, not a display index. It is carried through
+        // untouched so a server-valid sparse gallery such as [2] or [2, 5] keeps its exact governed
+        // positions instead of being renumbered.
+        const normalizedSnapshotMedia = getSnapshotItems(record).map(({ url, altText, galleryPosition }) => ({
+            url,
+            altText,
+            galleryPosition
+        }));
+
+        return {
+            id: record.id,
+            publicId: textOrEmpty(record.publicId),
+            title: textOrEmpty(record.title) || 'Untitled project',
+            summary: textOrEmpty(record.summary),
+            background: textOrEmpty(record.background),
+            solution: textOrEmpty(record.solution),
+            year: textOrEmpty(record.year),
+            program: textOrEmpty(record.program),
+            studyProgram: textOrEmpty(record.studyProgram),
+            discipline,
+            disciplines,
+            industry: textOrEmpty(record.industry),
+            industryPartner: textOrEmpty(record.industryPartner),
+            academicSupervisor: textOrEmpty(record.academicSupervisor),
+            groupName: textOrEmpty(record.groupName),
+            teamMembers: stringArrayOrEmpty(record.teamMembers),
+            poster: safeUrlOrEmpty(record.poster),
+            posterPdf: safeUrlOrEmpty(record.posterPdf),
+            posterText: textOrEmpty(record.posterText),
+            accessibilityText: textOrEmpty(record.accessibilityText),
+            snapshots: normalizedSnapshotMedia.map(item => item.url),
+            snapshotMedia: normalizedSnapshotMedia,
+            ...(safeUrlOrEmpty(record.videoUrl) ? { videoUrl: record.videoUrl } : {}),
+            ...(safeUrlOrEmpty(record.demoUrl) ? { demoUrl: record.demoUrl } : {}),
+            ...(safeUrlOrEmpty(record.repositoryUrl) ? { repositoryUrl: record.repositoryUrl } : {}),
+            externalLinks,
+            citations: stringArrayOrEmpty(record.citations),
+            layoutConfig: {
+                templateId: validTemplates.includes(layoutConfig.templateId) ? layoutConfig.templateId : 'poster_showcase',
+                featuredMedia,
+                sectionOrder: sectionOrder.length > 0 ? sectionOrder : [...defaultSectionOrder],
+                ...(hiddenSections
+                    ? { hiddenSections }
+                    : {})
+            }
+        };
+    };
+    // --- PUBLIC RECORD POLICY (end) ---
+
+    const normalizeFeedRecords = (feed) => {
+        if (!Array.isArray(feed)) throw createPublicFeedError('FEED_RESPONSE_INVALID');
+        const normalizedRecords = [];
+        const ids = new Set();
+        let omittedRecord = false;
+        for (const record of feed) {
+            const normalized = normalizeProjectRecord(record);
+            if (!normalized || ids.has(normalized.id)) {
+                omittedRecord = true;
+                continue;
+            }
+            ids.add(normalized.id);
+            normalizedRecords.push(normalized);
+        }
+        if (omittedRecord) console.warn('[Showcase] FEED_RECORD_OMITTED');
+        if (feed.length > 0 && normalizedRecords.length === 0) {
+            throw createPublicFeedError('FEED_RECORD_INVALID');
+        }
+        return normalizedRecords;
+    };
+
+    const renderVideo = (url) => {
+        if (!url) return '';
+        const escapedUrl = escapeHTML(url);
+        if (isMp4(url)) {
+            return `
+                <div class="cip-video-frame">
+                    <video class="capstone-video-player" src="${escapedUrl}" controls preload="metadata"></video>
+                </div>
+            `;
+        }
+        const embed = getEmbedUrl(url);
+        if (embed) {
+            const escapedEmbed = escapeHTML(embed);
+            return `
+                <div class="cip-video-frame">
+                    <iframe class="capstone-video-iframe" src="${escapedEmbed}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                </div>
+            `;
+        }
+        return `
+            <p class="section-text">
+                <a href="${escapedUrl}" class="btn-cta btn-cta-link" style="width: auto; padding: 10px 20px;" target="_blank" rel="noopener noreferrer">
+                    View Project Presentation Video
+                </a>
+            </p>
+        `;
+    };
+
+    const getFilterOptions = () => {
+        const years = new Set();
+        const programs = new Set();
+        const disciplines = new Set();
+        const industries = new Set();
+
+        allProjects.forEach(p => {
+            if (p.year) years.add(String(p.year).trim());
+
+            const prog = String(p.program || p.studyProgram || '').trim();
+            if (prog) programs.add(prog);
+
+            if (Array.isArray(p.disciplines)) {
+                p.disciplines.forEach(d => {
+                    if (d) disciplines.add(String(d).trim());
+                });
+            } else if (p.discipline) {
+                disciplines.add(String(p.discipline).trim());
+            }
+
+            if (p.industry) industries.add(String(p.industry).trim());
+        });
+
+        return {
+            years: ['All', ...Array.from(years).sort((a, b) => b - a)],
+            programs: ['All', ...Array.from(programs).sort()],
+            disciplines: ['All', ...Array.from(disciplines).sort()],
+            industries: ['All', ...Array.from(industries).sort()]
+        };
+    };
+
+    // --- CORE LOGIC ---
+
+    const ensureListingContainers = () => {
+        const root = document.getElementById('capstone-showcase-root');
+        if (root) {
+            let grid = document.getElementById('capstone-project-grid');
+            if (!grid) {
+                grid = document.createElement('div');
+                grid.id = 'capstone-project-grid';
+                root.appendChild(grid);
+            }
+            return grid;
+        }
+        return null;
+    };
+
+    const initShowcase = async (retryCount = 0) => {
+        const root = document.getElementById('capstone-showcase-root');
+        const detailContainer = document.getElementById('project-detail');
+
+        const isListingPage = !!root;
+        const isDetailPage = !!(detailContainer && (getQueryParam('id') || localStorage.getItem('selectedProjectId')));
+
+        if (!isListingPage && !isDetailPage) {
+            if (retryCount < 16) { // Retry every 300ms for up to 4.8 seconds
+                setTimeout(() => initShowcase(retryCount + 1), 300);
+            } else {
+                console.warn('[Showcase] Neither capstone-showcase-root nor project-detail containers found after retries. Stopping gracefully.');
+            }
+            return;
+        }
+
+        console.log(`[Showcase] Capstone script initializing... (Page: ${isDetailPage ? 'Detail' : 'Listing'}, Retry: ${retryCount})`);
+
+        if (!CAPSTONE_FEED_URL) {
+            const errorHtml = `
+                <div class="capstone-inline-error" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 25px; border-radius: 12px; border: 1px solid #ef4444; text-align: center; margin: 30px auto; max-width: 600px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6;">
+                    <strong style="font-size: 1.15rem; display: block; margin-bottom: 5px; color: #f87171;">Projects could not be loaded.</strong>
+                    Please check the public feed connection.<br>
+                    <small style="opacity: 0.75; font-size: 0.8em; display: block; margin-top: 10px; color: #fca5a5;">Reason: FEED_CONFIGURATION_INVALID</small>
+                </div>
+            `;
+            if (isDetailPage && detailContainer) {
+                detailContainer.innerHTML = errorHtml;
+            } else if (isListingPage) {
+                const grid = ensureListingContainers() || root;
+                grid.innerHTML = errorHtml;
+            }
+            return;
+        }
+
+        try {
+            const feedRequestUrl = `${CAPSTONE_FEED_URL}?v=${Date.now()}`;
+            console.log('[Showcase] Fetching feed:', feedRequestUrl);
+
+            let response;
+            try {
+                response = await fetch(feedRequestUrl, { cache: "no-store" });
+            } catch (error) {
+                throw createPublicFeedError('FEED_REQUEST_FAILED');
+            }
+            if (!response.ok) throw createPublicFeedError('FEED_REQUEST_FAILED');
+
+            let feed;
+            try {
+                feed = await response.json();
+            } catch (error) {
+                throw createPublicFeedError('FEED_PARSE_FAILED');
+            }
+            if (!Array.isArray(feed)) {
+                throw createPublicFeedError('FEED_RESPONSE_INVALID');
+            }
+            allProjects = normalizeFeedRecords(feed);
+            console.log(`[Showcase] Records received: ${allProjects.length}`);
+
+            if (isDetailPage) {
+                const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
+                if (projectId) {
+                    showDetail(projectId);
+                } else {
+                    detailContainer.innerHTML = '<p style="color:#ffffff; text-align:center; padding:50px;">Project not specified. <a href="sst-school-projects" style="color:#E61E2A;">Return to Showcase</a></p>';
+                }
+            } else if (isListingPage) {
+                const grid = ensureListingContainers();
+                if (grid) {
+                    localStorage.removeItem('selectedProjectId');
+                    renderListing();
+                } else {
+                    console.error('[Showcase] Listing root found, but grid container could not be created/found');
+                }
+            }
+        } catch (err) {
+            const publicReason = err && PUBLIC_FEED_ERROR_CODES.has(err.publicReason)
+                ? err.publicReason
+                : 'FEED_RESPONSE_INVALID';
+            console.warn(`[Showcase] ${publicReason}`);
+            const errorHtml = `
+                <div class="capstone-inline-error" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 25px; border-radius: 12px; border: 1px solid #ef4444; text-align: center; margin: 30px auto; max-width: 600px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6;">
+                    <strong style="font-size: 1.15rem; display: block; margin-bottom: 5px; color: #f87171;">Projects could not be loaded.</strong>
+                    Please check the public feed connection.<br>
+                    <small style="opacity: 0.75; font-size: 0.8em; display: block; margin-top: 10px; color: #fca5a5;">Reason: ${publicReason}</small>
+                </div>
+            `;
+            if (isDetailPage && detailContainer) {
+                detailContainer.innerHTML = errorHtml;
+            } else if (isListingPage) {
+                const grid = ensureListingContainers() || root;
+                grid.innerHTML = errorHtml;
+            }
+        }
+    };
+
+    const renderFilters = () => {
+        const root = document.getElementById('capstone-showcase-root');
+        if (!root) return;
+
+        let filtersContainer = document.getElementById('capstone-filters-container');
+        if (!filtersContainer) {
+            filtersContainer = document.createElement('div');
+            filtersContainer.id = 'capstone-filters-container';
+
+            const grid = document.getElementById('capstone-project-grid');
+            if (grid && grid.parentNode === root) {
+                root.insertBefore(filtersContainer, grid);
+            } else {
+                root.appendChild(filtersContainer);
+            }
+        }
+
+        const options = getFilterOptions();
+
+        filtersContainer.innerHTML = `
+            <div class="capstone-filter-group">
+                <label for="filter-search">Search projects</label>
+                <input id="filter-search" type="search" maxlength="100" placeholder="Search by title, project ID, partner, or team" value="${escapeHTML(currentFilters.search)}" oninput="handleSearchChange(this.value)">
+            </div>
+            <div class="capstone-filter-group">
+                <label for="filter-year">Year</label>
+                <select id="filter-year" onchange="handleFilterChange('year', this.value)">
+                    ${options.years.map(y => `<option value="${escapeHTML(y)}" ${currentFilters.year === y ? 'selected' : ''}>${escapeHTML(y)}</option>`).join('')}
+                </select>
+            </div>
+            <div class="capstone-filter-group">
+                <label for="filter-program">Program</label>
+                <select id="filter-program" onchange="handleFilterChange('program', this.value)">
+                    ${options.programs.map(p => `<option value="${escapeHTML(p)}" ${currentFilters.program === p ? 'selected' : ''}>${escapeHTML(p)}</option>`).join('')}
+                </select>
+            </div>
+            <div class="capstone-filter-group">
+                <label for="filter-discipline">Discipline</label>
+                <select id="filter-discipline" onchange="handleFilterChange('discipline', this.value)">
+                    ${options.disciplines.map(d => `<option value="${escapeHTML(d)}" ${currentFilters.discipline === d ? 'selected' : ''}>${escapeHTML(d)}</option>`).join('')}
+                </select>
+            </div>
+            <div class="capstone-filter-group">
+                <label for="filter-industry">Industry Sector</label>
+                <select id="filter-industry" onchange="handleFilterChange('industry', this.value)">
+                    ${options.industries.map(i => `<option value="${escapeHTML(i)}" ${currentFilters.industry === i ? 'selected' : ''}>${escapeHTML(i)}</option>`).join('')}
+                </select>
+            </div>
+        `;
+    };
+
+    const renderListingCards = () => {
+        const grid = document.getElementById('capstone-project-grid');
+        if (!grid) return;
+
+        const filteredProjects = allProjects.filter(p => {
+            const search = normalizeSearchField(currentFilters.search);
+            if (search) {
+                const searchableFields = [p.title, p.publicId, p.industryPartner, p.groupName];
+                if (!searchableFields.some(field => normalizeSearchField(field).includes(search))) return false;
+            }
+
+            if (currentFilters.year !== 'All' && String(p.year) !== currentFilters.year) return false;
+
+            if (currentFilters.program !== 'All') {
+                const prog = String(p.program || p.studyProgram || '').trim();
+                if (prog !== currentFilters.program) return false;
+            }
+
+            if (currentFilters.discipline !== 'All') {
+                if (Array.isArray(p.disciplines)) {
+                    if (!p.disciplines.map(d => String(d).trim()).includes(currentFilters.discipline)) return false;
+                } else {
+                    const disc = String(p.discipline || '').trim();
+                    if (disc !== currentFilters.discipline) return false;
+                }
+            }
+
+            if (currentFilters.industry !== 'All' && String(p.industry || '') !== currentFilters.industry) return false;
+
+            return true;
+        });
+
+        if (filteredProjects.length === 0) {
+            grid.innerHTML = '<p style="text-align:center; padding: 60px 10px; color: #ffffff; font-size: 1.15rem; width: 100%;">No projects match the current search or filters.</p>';
+            return;
+        }
+
+        const groups = filteredProjects.reduce((acc, p) => {
+            const year = p.year || 'Unknown';
+            acc[year] = acc[year] || [];
+            acc[year].push(p);
+            return acc;
+        }, {});
+
+        const sortedYears = Object.keys(groups).sort((a, b) => b - a);
+
+        grid.innerHTML = sortedYears.map(year => `
+            <div class="capstone-year-section">
+                <h2 class="capstone-year-heading">${escapeHTML(year)} Projects</h2>
+                <div class="capstone-projects-grid">
+                    ${groups[year].map(p => `
+                        <div class="capstone-card">
+                            <button class="capstone-poster-link" type="button" onclick="handleProjectClick(${p.id})" aria-label="View ${escapeHTML(p.title)} project detail">
+                                <img class="capstone-card-image" src="${escapeHTML(p.poster || 'https://via.placeholder.com/400x600?text=No+Poster')}" alt="${escapeHTML(p.title)}" loading="lazy">
+                            </button>
+                            <button class="capstone-card-btn" type="button" onclick="handleProjectClick(${p.id})" aria-label="Learn more about ${escapeHTML(p.title)}">Learn More</button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+    };
+
+    const renderListing = () => {
+        renderFilters();
+        renderListingCards();
+    };
+
+    const showDetail = (id) => {
+        const container = document.getElementById('project-detail');
+        if (!container) return;
+
+        const numericId = parseProjectId(id);
+        const project = numericId === null ? null : allProjects.find(p => p.id === numericId);
+        if (!project) {
+            container.innerHTML = '<p style="color:#ffffff; text-align:center; padding:50px;">Project not found. <a href="sst-school-projects" style="color:#E61E2A;">Back to Showcase</a></p>';
+            return;
+        }
+
+        window.scrollTo(0, 0);
+        container.innerHTML = renderProjectDetail(project);
+    };
+
+    const renderProjectDetail = (project) => {
+        const layoutConfig = project.layoutConfig || {};
+        const validTemplates = ["poster_showcase", "technical_detail", "media_rich"];
+        const templateId = validTemplates.includes(layoutConfig.templateId) ? layoutConfig.templateId : "poster_showcase";
+        const featuredMedia = layoutConfig.featuredMedia || "poster";
+        const sectionOrder = Array.isArray(layoutConfig.sectionOrder) ? layoutConfig.sectionOrder : ["background", "solution", "snapshots", "video", "team", "links"];
+        const hiddenSections = Array.isArray(layoutConfig.hiddenSections) ? layoutConfig.hiddenSections : [];
+
+        const isHidden = (sec) => {
+            if (hiddenSections.includes(sec)) return true;
+            if (sec === "links" && hiddenSections.includes("externalLinks")) return true;
+            if (sec === "externalLinks" && hiddenSections.includes("links")) return true;
+            return false;
+        };
+
+        const canShowVideo = !!(project.videoUrl && !isHidden("video"));
+        const snapshotItems = getSnapshotItems(project);
+        const canShowSnapshots = !!(snapshotItems.length > 0 && !isHidden("snapshots"));
+        const canShowPoster = !!(project.poster && !isHidden("poster"));
+
+        // "auto" is a first-class authoritative value, and any value this renderer does not
+        // recognize resolves the same way: through the documented automatic preference order
+        // below - video first, then the governed gallery, then the poster.
+        let elevatedMedia = "none";
+        if (featuredMedia !== "none") {
+            if (featuredMedia === "video" && canShowVideo) elevatedMedia = "video";
+            else if ((featuredMedia === "gallery" || featuredMedia === "snapshots") && canShowSnapshots) elevatedMedia = "snapshots";
+            else if (featuredMedia === "poster" && canShowPoster) elevatedMedia = "poster";
+            else {
+                if (canShowVideo) elevatedMedia = "video";
+                else if (canShowSnapshots) elevatedMedia = "snapshots";
+                else if (canShowPoster) elevatedMedia = "poster";
+            }
+        }
+
+        if (elevatedMedia === "none" && canShowPoster && !canShowVideo && !canShowSnapshots) {
+            elevatedMedia = "poster";
+        }
+
+        const renderMetadataChips = (light = false) => {
+            if (isHidden("metadata")) return "";
+            const chipValues = [
+                project.program || project.studyProgram || "",
+                project.year ? `Class of ${project.year}` : "",
+                Array.isArray(project.disciplines) ? project.disciplines.join(", ") : (project.discipline || ""),
+                project.industryPartner || "",
+                project.academicSupervisor ? `Supervisor: ${project.academicSupervisor}` : ""
+            ].filter(Boolean);
+
+            if (chipValues.length === 0) return "";
+
+            return `
+                <div class="metadata-chips ${light ? "chips-light" : ""}">
+                    ${chipValues.map(value => `<span>${escapeHTML(value)}</span>`).join("")}
+                </div>
+            `;
+        };
+
+        const renderMetadata = (light = false) => {
+            if (isHidden("metadata")) return "";
+            const rows = [
+                ["Academic Supervisor", project.academicSupervisor || project.supervisor || "N/A"],
+                ["Industry Partner", project.industryPartner || "N/A"],
+                ["Disciplines", Array.isArray(project.disciplines) ? project.disciplines.join(", ") : (project.disciplines || project.discipline || "N/A")],
+                ["Program", project.program || project.studyProgram || "N/A"],
+                ["Year", project.year || "N/A"]
+            ];
+            return `
+                <dl class="metadata-list ${light ? "metadata-light" : "metadata-dark"}">
+                    ${rows.map(([label, value]) => `
+                        <div>
+                            <dt>${escapeHTML(label)}</dt>
+                            <dd>${escapeHTML(value)}</dd>
+                        </div>
+                    `).join("")}
+                </dl>
+            `;
+        };
+
+        const renderLinks = (large = false) => {
+            const showPosterPdf = !!(project.posterPdf && !isHidden("posterPdf"));
+            const showPosterImgLink = !!(!showPosterPdf && project.poster && !isHidden("poster"));
+            const showExternal = !isHidden("externalLinks") && !isHidden("links");
+            const extLinks = Array.isArray(project.externalLinks) ? project.externalLinks : [];
+            const hasExternal = showExternal && (project.demoUrl || project.repositoryUrl || extLinks.length > 0);
+            if (!hasExternal && !showPosterPdf && !showPosterImgLink) return "";
+
+            return `
+                <div class="cip-links ${large ? "cip-links-large" : ""}">
+                    ${showExternal && project.demoUrl ? `<a href="${escapeHTML(project.demoUrl)}" class="btn-cta btn-cta-demo" target="_blank" rel="noopener noreferrer">Open Live Demo</a>` : ""}
+                    ${showExternal && project.repositoryUrl ? `<a href="${escapeHTML(project.repositoryUrl)}" class="btn-cta btn-cta-code" target="_blank" rel="noopener noreferrer">View Code Repository</a>` : ""}
+                    ${showExternal ? extLinks.map(lnk => `<a href="${escapeHTML(lnk.url)}" class="btn-cta btn-cta-link" target="_blank" rel="noopener noreferrer">${escapeHTML(lnk.label || "Project Link")}</a>`).join("") : ""}
+                    ${showPosterPdf ? `<a href="${escapeHTML(project.posterPdf)}" class="btn-cta poster-download" target="_blank" rel="noopener noreferrer">Download Poster PDF</a>` : ""}
+                    ${showPosterImgLink ? `<a href="${escapeHTML(project.poster)}" class="btn-cta btn-cta-link" target="_blank" rel="noopener noreferrer">View Poster</a>` : ""}
+                </div>
+            `;
+        };
+
+        const renderTeam = (light = false) => {
+            if (isHidden("team")) return "";
+            const teamMembers = Array.isArray(project.teamMembers) ? project.teamMembers : (project.teamMembers ? [project.teamMembers] : []);
+            if (teamMembers.length === 0) return "";
+            return `
+                <div class="team-container ${light ? "team-light" : ""}">
+                    ${project.groupName ? `<p class="group-name">${escapeHTML(project.groupName)}</p>` : ""}
+                    <ul class="team-chips">
+                        ${teamMembers.map(m => `<li class="team-chip">${escapeHTML(m)}</li>`).join("")}
+                    </ul>
+                </div>
+            `;
+        };
+
+        const renderCitations = (light = false) => {
+            if (isHidden("citations")) return "";
+            const citations = Array.isArray(project.citations) ? project.citations : (project.citations ? [project.citations] : []);
+            if (citations.length === 0) return "";
+            return `
+                <div class="team-container ${light ? "team-light" : ""}" style="padding: 1.5rem 2rem;">
+                    <ul class="metadata-list ${light ? "metadata-light" : "metadata-dark"}" style="gap: 1rem; padding: 0; margin: 0;">
+                        ${citations.map(c => `
+                            <li style="font-size: 0.95rem; list-style: none; padding: 0; margin: 0; color: ${light ? "#0f172a" : "#cbd5e1"};">&bull; ${escapeHTML(c)}</li>
+                        `).join("")}
+                    </ul>
+                </div>
+            `;
+        };
+
+        const renderSectionContent = (sec) => {
+            if (sec === "background" && project.background) return `<p class="section-text">${escapeHTML(project.background)}</p>`;
+            if (sec === "solution" && project.solution) return `<p class="section-text">${escapeHTML(project.solution)}</p>`;
+            if (sec === "snapshots" && snapshotItems.length > 0) {
+                return `
+                    <div class="snapshot-grid">
+                        ${snapshotItems.map(({ url, altText }, idx) => `
+                            <button type="button" class="snapshot-card" onclick="openLightbox(${idx}, this)" aria-label="Open ${escapeHTML(altText)}">
+                                <div class="snapshot-inner">
+                                    <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
+                                    <div class="snapshot-overlay">
+                                        <span class="view-icon">&#128269;</span>
+                                    </div>
+                                </div>
+                            </button>
+                        `).join("")}
+                    </div>
+                `;
+            }
+            if (sec === "video" && project.videoUrl) return renderVideo(project.videoUrl);
+            if (sec === "links" || sec === "externalLinks") return renderLinks(false);
+            if (sec === "accessibilityText" && project.accessibilityText) return `<p class="section-text">${escapeHTML(project.accessibilityText)}</p>`;
+            if (sec === "team") return renderTeam(templateId === "technical_detail");
+            if (sec === "citations") return renderCitations(templateId === "technical_detail");
+            return "";
+        };
+
+        const sectionLabels = {
+            background: "Background",
+            solution: "The Solution",
+            snapshots: "Project Snapshots",
+            video: "Project Video",
+            links: "Resources",
+            externalLinks: "Resources",
+            accessibilityText: "Accessibility Text",
+            team: "The Team",
+            citations: "Citations"
+        };
+
+        const renderSection = (sec, numbered = false) => {
+            if (isHidden(sec)) return "";
+            if (sec === "video" && elevatedMedia === "video") return "";
+            if (sec === "snapshots" && elevatedMedia === "snapshots") return "";
+
+            const content = renderSectionContent(sec);
+            if (!content) return "";
+
+            const sectionIndex = activeNumberedSections.indexOf(sec) + 1;
+            return `
+                <section class="detail-section ${numbered ? "report-row" : ""}">
+                    ${numbered && sectionIndex > 0 ? `<span class="report-number">${sectionIndex}</span>` : ""}
+                    <div>
+                        <h2 class="section-title">${sectionLabels[sec] || sec}</h2>
+                        ${content}
+                    </div>
+                </section>
+            `;
+        };
+
+        const allPossibleSections = ["background", "solution", "snapshots", "video", "team", "links", "externalLinks", "citations", "accessibilityText"];
+        const fullOrder = [...sectionOrder];
+        allPossibleSections.forEach(sec => {
+            if (!fullOrder.includes(sec)) {
+                if (sec === "links" && fullOrder.includes("externalLinks")) return;
+                if (sec === "externalLinks" && fullOrder.includes("links")) return;
+                fullOrder.push(sec);
+            }
+        });
+
+        const consumedSections = [];
+        if (elevatedMedia === "video") consumedSections.push("video");
+        if (elevatedMedia === "snapshots") consumedSections.push("snapshots");
+        if (elevatedMedia === "poster") consumedSections.push("poster");
+        if (templateId === "poster_showcase" && snapshotItems.length > 0 && !isHidden("snapshots")) consumedSections.push("snapshots");
+
+        const bodySections = fullOrder.filter(sec => {
+            if (sec === "summary") return false;
+            if (sec === "poster" || sec === "posterPdf" || sec === "metadata") return false;
+            if (consumedSections.includes(sec)) return false;
+            return !!renderSectionContent(sec);
+        });
+
+        const numberedKeys = ["background", "solution", "links", "externalLinks", "snapshots", "video", "citations"];
+        const activeNumberedSections = [];
+        bodySections.forEach(sec => {
+            if (numberedKeys.includes(sec) && !isHidden(sec)) {
+                const isLinkSec = sec === "links" || sec === "externalLinks";
+                if (isLinkSec && activeNumberedSections.some(s => s === "links" || s === "externalLinks")) {
+                    return;
+                }
+                activeNumberedSections.push(sec);
+            }
+        });
+
+        const posterAlt = project.accessibilityText || project.imageAlt || project.title || "Project Poster";
+        const posterTextHTML = typeof project.posterText === "string" && project.posterText.trim()
+            ? `
+                <details class="poster-text-disclosure">
+                    <summary>Read full poster text</summary>
+                    <p class="section-text poster-text-content">${escapeHTML(project.posterText)}</p>
+                </details>
+            `
+            : "";
+        const heroMediaHTML = elevatedMedia === "video"
+            ? renderVideo(project.videoUrl)
+            : elevatedMedia === "snapshots"
+                ? `
+                    <div class="snapshot-grid snapshot-hero-grid">
+                        ${snapshotItems.map(({ url, altText }, idx) => `
+                            <button type="button" class="snapshot-card" onclick="openLightbox(${idx}, this)" aria-label="Open ${escapeHTML(altText)}">
+                                <div class="snapshot-inner">
+                                    <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
+                                    <div class="snapshot-overlay">
+                                        <span class="view-icon">&#128269;</span>
+                                    </div>
+                                </div>
+                            </button>
+                        `).join("")}
+                    </div>
+                `
+                : elevatedMedia === "poster"
+                    ? `<img src="${escapeHTML(project.poster || 'https://via.placeholder.com/400x600?text=No+Poster')}" alt="${escapeHTML(posterAlt)}" class="poster-hero-image">`
+                    : "";
+
+        const sidebarMediaHTML = templateId !== "technical_detail" ? "" : (() => {
+            if (elevatedMedia === "video") {
+                return `
+                    <div class="technical-aside-card">
+                        <h2>Featured Video</h2>
+                        ${renderVideo(project.videoUrl)}
+                    </div>
+                `;
+            }
+            if (elevatedMedia === "snapshots") {
+                return `
+                    <div class="technical-aside-card">
+                        <h2>Featured Snapshots</h2>
+                        <div class="snapshot-grid">
+                            ${snapshotItems.slice(0, 4).map(({ url, altText }, idx) => `
+                                <button type="button" class="snapshot-card" onclick="openLightbox(${idx}, this)" aria-label="Open ${escapeHTML(altText)}">
+                                    <div class="snapshot-inner">
+                                        <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
+                                        <div class="snapshot-overlay">
+                                            <span class="view-icon">&#128269;</span>
+                                        </div>
+                                    </div>
+                                </button>
+                            `).join("")}
+                        </div>
+                    </div>
+                `;
+            }
+            if (canShowPoster) {
+                return `
+                    <div class="technical-poster-card">
+                        <p class="technical-poster-eyebrow">Appendix Poster</p>
+                        <img src="${escapeHTML(project.poster || 'https://via.placeholder.com/400x600?text=No+Poster')}" alt="${escapeHTML(posterAlt)}" class="technical-poster-image">
+                        ${project.posterPdf ? `<a href="${escapeHTML(project.posterPdf)}" class="btn-cta btn-cta-demo technical-poster-button" target="_blank" rel="noopener noreferrer">Download Poster PDF</a>` : ""}
+                    </div>
+                `;
+            }
+            return "";
+        })();
+
+        const snapshotStripHTML = templateId === "poster_showcase" && snapshotItems.length > 0 && elevatedMedia !== "snapshots"
+            ? `
+                <div class="exhibition-strip">
+                    <div>
+                        ${snapshotItems.map(({ url, altText }, idx) => `
+                            <button type="button" onclick="openLightbox(${idx}, this)" aria-label="Open ${escapeHTML(altText)}">
+                                <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
+                            </button>
+                        `).join("")}
+                    </div>
+                </div>
+            `
+            : "";
+
+        if (templateId === "technical_detail") {
+            return `
+                <div class="cip-module layout-preset-technical_detail">
+                        <button class="cip-back" onclick="goBack()">
+                            <span class="back-icon">&larr;</span> Return to Showcase
+                        </button>
+                        <div style="background:#fffdf8; border:1px solid #e4dccf; border-radius:8px; padding:2.5rem; box-shadow:0 8px 24px rgba(31,41,55,.06);">
+                            <div class="detail-header technical-header">
+                                <span style="background:#0f766e; color:#fff; padding:.35rem .85rem; border-radius:3px; font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.08em; font-family:system-ui,-apple-system,sans-serif;">Formal Project Report</span>
+                                <h1>${escapeHTML(project.title)}</h1>
+                                ${renderMetadataChips(true)}
+                                ${project.summary ? `<p class="lead-summary section-text">${escapeHTML(project.summary)}</p>` : ""}
+                            </div>
+                            <div class="detail-content-grid report-grid">
+                                <main class="detail-main">
+                                    ${posterTextHTML}
+                                    ${bodySections.map(sec => renderSection(sec, activeNumberedSections.includes(sec))).join("")}
+                                </main>
+                                <aside class="detail-sidebar technical-side-col">
+                                    ${activeNumberedSections.length > 0 ? `
+                                        <div class="technical-aside-card">
+                                            <h2>Contents</h2>
+                                            <ol>
+                                                ${activeNumberedSections.map(sec => `<li>${escapeHTML(sectionLabels[sec] || sec)}</li>`).join("")}
+                                            </ol>
+                                        </div>
+                                    ` : ""}
+                                    <div class="technical-aside-card">
+                                        <h2>Report Metadata</h2>
+                                        ${renderMetadata(true)}
+                                    </div>
+                                    ${sidebarMediaHTML}
+                                </aside>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (templateId === "media_rich") {
+            const launchpadHTML = renderLinks(true);
+            return `
+                <div class="cip-module layout-preset-media_rich">
+                        <button class="cip-back" onclick="goBack()">
+                            <span class="back-icon">&larr;</span> Return to Showcase
+                        </button>
+                        <div class="detail-header media-header">
+                            <span style="background:#2563eb; color:#fff; padding:.35rem .85rem; border-radius:4px; font-size:.75rem; font-weight:850; text-transform:uppercase; letter-spacing:.08em;">Demo and Media</span>
+                            <h1>${escapeHTML(project.title)}</h1>
+                            ${renderMetadataChips(false)}
+                            ${project.summary ? `<p class="lead-summary section-text">${escapeHTML(project.summary)}</p>` : ""}
+                        </div>
+                        ${heroMediaHTML ? `<section class="media-hero-shell">${heroMediaHTML}</section>` : ""}
+                        ${launchpadHTML ? `<section class="media-launchpad"><h2>Project Launchpad</h2>${launchpadHTML}</section>` : ""}
+                        <div class="detail-content-grid media-grid">
+                            <main class="detail-main">
+                                ${posterTextHTML}
+                                ${bodySections.map(sec => renderSection(sec, false)).join("")}
+                            </main>
+                            <aside class="detail-sidebar media-side-col">
+                                <div class="media-spec-card">
+                                    <h2>Quick Specifications</h2>
+                                    ${renderMetadata(false)}
+                                </div>
+                                ${elevatedMedia !== "poster" && canShowPoster ? `
+                                    <div class="media-poster-thumb">
+                                        <img src="${escapeHTML(project.poster)}" alt="${escapeHTML(posterAlt)}">
+                                    </div>
+                                ` : ""}
+                            </aside>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="cip-module layout-preset-poster_showcase">
+                    <button class="cip-back" onclick="goBack()">
+                        <span class="back-icon">&larr;</span> Return to Showcase
+                    </button>
+                    <div class="detail-header poster-header">
+                        <span style="background:#b91c1c; color:#fff; padding:.35rem .85rem; border-radius:4px; font-size:.75rem; font-weight:850; text-transform:uppercase; letter-spacing:.08em;">Capstone Exhibition</span>
+                    </div>
+                    <div class="poster-wall">
+                        ${heroMediaHTML ? `
+                            <div class="poster-hero-shell">
+                                ${heroMediaHTML}
+                            </div>
+                        ` : ""}
+                        <div class="hero-right-col">
+                            <h1>${escapeHTML(project.title)}</h1>
+                            ${renderMetadataChips(false)}
+                            ${project.summary ? `<p class="lead-summary section-text">${escapeHTML(project.summary)}</p>` : ""}
+                            ${!isHidden("posterPdf") && project.posterPdf ? `<a href="${escapeHTML(project.posterPdf)}" class="poster-download" target="_blank" rel="noopener noreferrer">Download Poster PDF</a>` : (!isHidden("poster") && project.poster ? `<a href="${escapeHTML(project.poster)}" class="poster-download" target="_blank" rel="noopener noreferrer">View Poster</a>` : "")}
+                        </div>
+                    </div>
+                    ${snapshotStripHTML}
+                    <main class="poster-body">
+                        ${posterTextHTML}
+                        ${bodySections.map(sec => renderSection(sec, false)).join("")}
+                    </main>
+                </div>
+            </div>
+        `;
+    };
+
+    // --- LIGHTBOX LOGIC ---
+    const ensureLightbox = () => {
+        let lb = document.getElementById('capstone-lightbox');
+        if (lb) return lb;
+
+        lb = document.createElement('div');
+        lb.id = 'capstone-lightbox';
+        lb.setAttribute('role', 'dialog');
+        lb.setAttribute('aria-modal', 'true');
+        lb.setAttribute('aria-label', 'Snapshot viewer');
+        lb.style.cssText = "position:fixed; inset:0; z-index:2147483647; display:none; align-items:center; justify-content:center; background:rgba(2, 6, 23, 0.9); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); font-family:sans-serif; transition: all 0.3s ease;";
+        lb.innerHTML = `
+            <div class="capstone-lightbox-backdrop" style="position:absolute; inset:0; cursor:zoom-out;" onclick="closeLightbox()"></div>
+            <div class="capstone-lightbox-content" style="position:relative; z-index:10; width:100%; height:100%; display:flex; align-items:center; justify-content:center; pointer-events:none;">
+                <button type="button" class="capstone-lightbox-close" style="position:absolute; top:24px; right:24px; width:48px; height:48px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; z-index:20; pointer-events:auto; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="closeLightbox()" aria-label="Close snapshot viewer" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">&times;</button>
+
+                <div class="capstone-lightbox-nav-wrapper" style="position:relative; display:flex; align-items:center; justify-content:center; width:100%; height:100%; pointer-events:auto;">
+                    <button type="button" class="capstone-lightbox-prev" style="position:absolute; left:24px; width:64px; height:64px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="event.stopPropagation(); changeSnapshot(-1)" aria-label="Previous snapshot" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">‹</button>
+
+                    <div id="capstone-lightbox-img-container" style="max-width:90vw; max-height:85vh; display:flex; align-items:center; justify-content:center; position:relative;">
+                        <img id="capstone-lightbox-img" style="max-width:100%; max-height:85vh; object-fit:contain; border-radius:12px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.1); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);" onclick="event.stopPropagation()">
+                        <div id="capstone-lightbox-error" style="display:none; color:#fff; text-align:center; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.5); padding:24px; border-radius:12px; backdrop-filter:blur(8px);">Snapshot image failed to load.</div>
+                    </div>
+
+                    <button type="button" class="capstone-lightbox-next" style="position:absolute; right:24px; width:64px; height:64px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="event.stopPropagation(); changeSnapshot(1)" aria-label="Next snapshot" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">›</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(lb);
+
+        const img = document.getElementById('capstone-lightbox-img');
+        if (img) {
+            img.onerror = () => {
+                console.error("[Showcase] Snapshot failed to load:", img.src);
+                const errorEl = document.getElementById('capstone-lightbox-error');
+                if (errorEl) errorEl.style.display = 'block';
+                img.style.display = 'none';
+            };
+            img.onload = () => {
+                const errorEl = document.getElementById('capstone-lightbox-error');
+                if (errorEl) errorEl.style.display = 'none';
+                img.style.display = 'block';
+            };
+        }
+
+        return lb;
+    };
+
+    const openLightbox = (index, opener = null) => {
+        const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
+        const numericId = parseProjectId(projectId);
+        const project = numericId === null ? null : allProjects.find(p => p.id === numericId);
+        if (!project) return;
+
+        const snapshotItems = getSnapshotItems(project);
+        if (index < 0 || index >= snapshotItems.length) return;
+
+        currentSnapshotIndex = index;
+        console.log(`[Showcase] Opening lightbox for snapshot ${index + 1} of ${snapshotItems.length}`);
+
+        const lb = ensureLightbox();
+        lightboxOpener = opener instanceof HTMLElement
+            ? opener
+            : (document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+                ? document.activeElement
+                : null);
+
+        updateLightbox(project);
+        lb.style.display = 'flex';
+
+        previousBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        if (lightboxKeyHandler) document.removeEventListener('keydown', lightboxKeyHandler);
+        lightboxKeyHandler = (e) => {
+            if (e.key === 'Tab') {
+                const focusable = Array.from(lb.querySelectorAll('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'));
+                if (focusable.length === 0) {
+                    e.preventDefault();
+                    return;
+                }
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey && (document.activeElement === first || !lb.contains(document.activeElement))) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && (document.activeElement === last || !lb.contains(document.activeElement))) {
+                    e.preventDefault();
+                    first.focus();
+                }
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeLightbox();
+            }
+            if (e.key === 'ArrowLeft') changeSnapshot(-1);
+            if (e.key === 'ArrowRight') changeSnapshot(1);
+        };
+        document.addEventListener('keydown', lightboxKeyHandler);
+        lb.querySelector('.capstone-lightbox-close')?.focus();
+    };
+
+    const updateLightbox = (project) => {
+        const img = document.getElementById('capstone-lightbox-img');
+        const snapshotItem = getSnapshotItems(project)[currentSnapshotIndex];
+        if (img && snapshotItem) {
+            img.src = snapshotItem.url;
+            img.alt = snapshotItem.altText;
+        }
+    };
+
+    const changeSnapshot = (dir) => {
+        const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
+        const numericId = parseProjectId(projectId);
+        const project = numericId === null ? null : allProjects.find(p => p.id === numericId);
+        if (!project) return;
+        const snapshotItems = getSnapshotItems(project);
+        if (snapshotItems.length === 0) return;
+        ensureLightbox();
+        currentSnapshotIndex = (currentSnapshotIndex + dir + snapshotItems.length) % snapshotItems.length;
+        updateLightbox(project);
+    };
+
+    const closeLightbox = () => {
+        console.log("[Showcase] Closing lightbox");
+        const lb = document.getElementById('capstone-lightbox');
+        if (!lb) return;
+        lb.style.display = 'none';
+
+        document.body.style.overflow = previousBodyOverflow;
+
+        if (lightboxKeyHandler) {
+            document.removeEventListener('keydown', lightboxKeyHandler);
+            lightboxKeyHandler = null;
+        }
+
+        const opener = lightboxOpener;
+        lightboxOpener = null;
+        if (opener?.isConnected) opener.focus();
+    };
+
+    const handleProjectClick = (id) => {
+        const numericId = parseProjectId(id);
+        if (numericId === null || !allProjects.some(project => project.id === numericId)) return;
+        saveSelectedProject(numericId);
+        window.location.href = buildDetailUrl(numericId);
+    };
+
+    const goBack = () => {
+        window.location.href = 'sst-school-projects';
+    };
+
+    const handleFilterChange = (type, value) => {
+        currentFilters[type] = value;
+        renderListingCards();
+    };
+
+    const handleSearchChange = (value) => {
+        currentFilters.search = normalizeSearchInput(value);
+        renderListingCards();
+    };
+
+    // --- GLOBAL ATTACHMENTS FOR DUDA SCOPED RESOLUTION ---
+    window.handleFilterChange = handleFilterChange;
+    window.handleSearchChange = handleSearchChange;
+    window.handleProjectClick = handleProjectClick;
+    window.goBack = goBack;
+    window.openLightbox = openLightbox;
+    window.closeLightbox = closeLightbox;
+    window.changeSnapshot = changeSnapshot;
+    window.navigateLightbox = changeSnapshot;
+
+    // --- RUNTIME ---
+    document.addEventListener('DOMContentLoaded', () => initShowcase());
+    window.addEventListener('load', () => initShowcase());
+})();
+</script>

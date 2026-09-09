@@ -16,7 +16,7 @@ The platform is designed to support at least **100 projects per year** and remai
 ---
 
 ## 3. Architecture Components
-*   **Duda Public Showcase Layer** (`VERIFIED_TEST` / `TEST_SITE_DATA_BACKED_ACCEPTANCE`): The maintained `Prototype/duda/` renderer is a responsive public presentation shell with tested listing/detail/search behavior and is saved in the authorized Duda TEST editor. The synthetic acceptance used the governed staging feed; live Duda/Impact publication was not performed.
+*   **Duda Public Showcase Layer** (`VERIFIED_TEST` / `TEST_SITE_DATA_BACKED_ACCEPTANCE`): The maintained `apps/public-layer/duda/` renderer is a responsive public presentation shell with tested listing/detail/search behavior. The synthetic acceptance used the governed staging feed; live Duda/Impact publication was not performed.
 *   **School-Owned Admin/CMS** (`IMPLEMENTED FOUNDATION` under `apps/admin-cms`): A standalone Next.js and TypeScript application which serves as the absolute operational source of truth.
 *   **Supabase Database & Storage** (`IMPLEMENTED FOUNDATION`): PostgreSQL database storing admin records and public assets.
 *   **Approved-Only Public Feed** (`IMPLEMENTED FOUNDATION`): A schema-validated JSON payload (`capstones-latest.json`) compiled and written to a stable public Storage bucket.
@@ -45,7 +45,7 @@ Standard Project Package / Excel
 ---
 
 ## 5. Environment and Repository Isolation
-*   **Prototype Isolation**: Historical/feasibility material under `/Prototype` is isolated and must never share code or helper modules with `/apps/admin-cms`. Assigned Duda/public-layer work may change the explicitly maintained `/Prototype/duda/` renderer and contract harness.
+*   **Prototype Isolation**: Historical/feasibility material under `/Prototype` is isolated and immutable for current public-layer work. The maintained Duda renderer and contract harness live under `/apps/public-layer`; it must not share code or helper modules with `/apps/admin-cms`.
 *   **Supabase Project Isolation**: The Prototype recovery project uses its own Supabase instance. The Admin/CMS active staging target is `capstone-admin-cms-staging-v2-2026` and must **never** connect to or use the Prototype recovery Supabase project.
 
 ---

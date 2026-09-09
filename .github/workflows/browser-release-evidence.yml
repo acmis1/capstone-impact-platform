@@ -17,9 +17,9 @@ on:
       - 'apps/admin-cms/src/**'
       - 'docs/accessibility-uat-evidence/**'
       - 'infra/supabase/**'
-      - 'Prototype/duda/**'
-      - 'Prototype/package.json'
-      - 'Prototype/scripts/test-duda-*.js'
+      - 'apps/public-layer/duda/**'
+      - 'apps/public-layer/package.json'
+      - 'apps/public-layer/scripts/test-duda-*.js'
   pull_request:
     branches: [main]
     paths:
@@ -31,9 +31,9 @@ on:
       - 'apps/admin-cms/src/**'
       - 'docs/accessibility-uat-evidence/**'
       - 'infra/supabase/**'
-      - 'Prototype/duda/**'
-      - 'Prototype/package.json'
-      - 'Prototype/scripts/test-duda-*.js'
+      - 'apps/public-layer/duda/**'
+      - 'apps/public-layer/package.json'
+      - 'apps/public-layer/scripts/test-duda-*.js'
 
 permissions:
   contents: read
@@ -94,11 +94,14 @@ jobs:
       - name: Verify retained accessibility UAT evidence integrity
         run: npm run verify:accessibility-uat-evidence
 
-      - name: Verify exact Duda current-feed Chrome contract harness
-        run: npm --prefix Prototype run test:duda-current-feed-browser
+      - name: Verify active public-layer feed URL validator
+        run: npm run test:public-layer-feed-url-validator
 
-      - name: Verify 120-record Duda annual-scale renderer
-        run: node Prototype/scripts/test-duda-annual-scale-browser.js
+      - name: Verify exact active public-layer Duda current-feed Chrome contract harness
+        run: npm run test:public-layer-current-feed-browser
+
+      - name: Verify 120-record active public-layer Duda annual-scale renderer
+        run: npm run test:public-layer-annual-scale-browser
 
   annual-publication:
     name: Disposable 120-Project Publication Evidence

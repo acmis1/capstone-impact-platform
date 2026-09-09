@@ -4,11 +4,11 @@ The Capstone Impact Platform is a school-owned Admin/CMS and automation layer fo
 
 Manual email, spreadsheet, poster and Duda publishing workflows are difficult to validate and repeat at scale. This project introduces structured project records, validation, review controls and a stable publishing boundary while preserving the existing public showcase as the presentation layer.
 
-The current hybrid design is: staff operate the Admin/CMS, authenticated server-side services manage source data in Supabase, and `published` records are compiled into stable JSON for Duda. `Prototype/` is retained as historical feasibility evidence, not as the active application.
+The current hybrid design is: staff operate the Admin/CMS, authenticated server-side services manage source data in Supabase, and `published` records are compiled into stable JSON for the active `apps/public-layer/` Duda presentation package. `Prototype/` is retained as historical feasibility evidence, not as the active application.
 
 > [!IMPORTANT]
 > **NEW DEVELOPERS / CONTRIBUTORS**: Start with [`START_HERE.md`](./START_HERE.md) for a zero-instruction setup guide, prerequisite installation, daily commands, and synthetic login steps.
-> Active development is in [`apps/admin-cms/`](./apps/admin-cms/). It is a production-oriented staging implementation. Staging operations are isolated from the live public showcase, synthetic data is required, and production cutover plus full reviewer/editor UAT remain pending.
+> Active development is in [`apps/admin-cms/`](./apps/admin-cms/) and [`apps/public-layer/`](./apps/public-layer/). The Admin/CMS is the production-oriented staging implementation and the public-layer package owns the maintained Duda renderer and loopback harnesses. Staging operations are isolated from the live public showcase, synthetic data is required, and production cutover plus full reviewer/editor UAT remain pending.
 
 ## Why the project exists
 
@@ -47,6 +47,7 @@ Staff use the protected Next.js application. Server-side authentication and auth
 | Path | Purpose | Status |
 | --- | --- | --- |
 | [`apps/admin-cms/`](./apps/admin-cms/) | Active Next.js Admin/CMS application. | Active implementation and staging operations |
+| [`apps/public-layer/`](./apps/public-layer/) | Maintained Duda renderer, synthetic fixtures, and loopback browser harnesses. | Active presentation package; no feed or publication authority |
 | [`infra/supabase/`](./infra/supabase/) | Versioned schema, RLS, grants and database runbooks. | Operational infrastructure documentation |
 | [`docs/`](./docs/) | Architecture, UI, integration and project constraints. | Operational and planning documentation |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Contributor workflow, branch rules, and safety contract. | Authoritative developer governance guide |

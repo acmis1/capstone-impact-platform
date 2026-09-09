@@ -16,7 +16,7 @@ Ensure that administrative workflows, participant project data, and public showc
                                                                                            │
 [Duda Shell (Public UI)] ◄── (HTTPS GET) ◄── [Stable Public JSON Feed] ◄── [Approved Public Feed Storage]
 ```
-*(Note: The complete HTTPS participant-upload workflow is a target design and is not currently operational. The repository-owned `Prototype/duda/` renderer implements and tests the public-feed listing/detail contract, including search and public-URL policy, and is now saved in the authorized Duda TEST editor. Synthetic data-backed acceptance passed through the governed staging feed; no Duda Publish/Republish or live RMIT/Impact publication occurred. Any Admin/CMS-to-production Duda cutover requires separate authorization and verification. The current authorization implementation uses the server-only `requireAdmin` helper, protected admin layout, protected API routes, and permission checks.)*
+*(Note: The complete HTTPS participant-upload workflow is a target design and is not currently operational. The repository-owned `apps/public-layer/duda/` renderer implements and tests the public-feed listing/detail contract, including search and public-URL policy, and is now saved in the authorized Duda TEST editor. Synthetic data-backed acceptance passed through the governed staging feed; no Duda Publish/Republish or live RMIT/Impact publication occurred. Any Admin/CMS-to-production Duda cutover requires separate authorization and verification. The current authorization implementation uses the server-only `requireAdmin` helper, protected admin layout, protected API routes, and permission checks.)*
 
 ---
 
@@ -38,7 +38,7 @@ Ensure that administrative workflows, participant project data, and public showc
 ---
 
 ## 4. Prototype Preservation Rules
-*   **Complete Isolation**: Historical Prototype material remains isolated. The explicitly maintained `Prototype/duda/` public renderer and contract harness may be changed only by assigned Duda/public-layer integration work.
+*   **Complete Isolation**: Historical Prototype material remains isolated and immutable. The explicitly maintained `apps/public-layer/` Duda presentation package owns the renderer and contract harness; it has no feed-authority or live-publication capability.
 *   **No Helper Sharing**: Under no circumstances should `/apps/admin-cms` import helper code or utilities directly from `/Prototype`. Common modules must be built independently within the Next.js app directory.
 
 ---

@@ -10,17 +10,17 @@ import { validatePublicFeed } from './validatePublicFeed';
 /**
  * Server/client compatibility proof for the Duda public showcase.
  *
- * The Duda renderer is plain browser script inside `Prototype/duda/bodyend.html`, so its record
+ * The Duda renderer is plain browser script inside `apps/public-layer/duda/bodyend.html`, so its record
  * policy is extracted verbatim from the delimited region of that file and executed here. That keeps
  * a single implementation: this suite cannot drift from what the browser actually runs, and every
  * case below is asserted against BOTH the authoritative `validatePublicFeed` and that exact
  * renderer code.
  */
 const bodyEndPath = fileURLToPath(
-  new URL('../../../../Prototype/duda/bodyend.html', import.meta.url),
+  new URL('../../../../apps/public-layer/duda/bodyend.html', import.meta.url),
 );
 const contractCasesPath = fileURLToPath(
-  new URL('../../../../Prototype/duda/current-feed-contract-cases.json', import.meta.url),
+  new URL('../../../../apps/public-layer/duda/current-feed-contract-cases.json', import.meta.url),
 );
 
 const POLICY_START = '// --- PUBLIC RECORD POLICY (start: extracted verbatim by repository tests) ---';
