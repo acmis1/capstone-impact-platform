@@ -39,6 +39,9 @@ const DIRECTORY = {
       email: 'administrator@capstone.test',
       roles: ['admin' as const],
       status: 'active' as const,
+      version: 1,
+      providerSync: 'synchronized' as const,
+      lastChangedAt: '2026-08-13T12:00:00.000Z',
       requestedAt: '2026-08-13T12:00:00.000Z',
     },
     {
@@ -46,6 +49,9 @@ const DIRECTORY = {
       email: 'pending@capstone.test',
       roles: ['reviewer' as const],
       status: 'pending_activation' as const,
+      version: 1,
+      providerSync: 'synchronized' as const,
+      lastChangedAt: '2026-08-14T12:00:00.000Z',
       requestedAt: '2026-08-14T12:00:00.000Z',
     },
   ],
@@ -66,6 +72,7 @@ describe('StaffAccessPage', () => {
     vi.clearAllMocks();
     mocks.requireAdmin.mockResolvedValue({
       adminUserId: 'bounded-admin-id',
+      email: 'administrator@capstone.test',
       permissions: ['projects.read', 'staff.manage'],
     });
     mocks.canManageStaff.mockReturnValue(true);

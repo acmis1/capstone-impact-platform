@@ -36,6 +36,16 @@ export const REVIEWED_CONSTRAINT_RENDERING_PAIRS = [
     sourceDefinition: "CHECK ((((cardinality(requested_roles) >= 1) AND (cardinality(requested_roles) <= 3)) AND (array_position(requested_roles, NULL::text) IS NULL) AND (requested_roles <@ ARRAY['admin'::text, 'reviewer'::text, 'editor'::text])))",
     restoredDefinition: "CHECK (((cardinality(requested_roles) >= 1) AND (cardinality(requested_roles) <= 3) AND (array_position(requested_roles, NULL::text) IS NULL) AND (requested_roles <@ ARRAY['admin'::text, 'reviewer'::text, 'editor'::text])))",
   },
+  {
+    key: 'public.staff_lifecycle_events.check_staff_lifecycle_event_previous_roles',
+    sourceDefinition: "CHECK ((((cardinality(previous_roles) >= 0) AND (cardinality(previous_roles) <= 3)) AND (array_position(previous_roles, NULL::text) IS NULL) AND (previous_roles <@ ARRAY['admin'::text, 'reviewer'::text, 'editor'::text])))",
+    restoredDefinition: "CHECK (((cardinality(previous_roles) >= 0) AND (cardinality(previous_roles) <= 3) AND (array_position(previous_roles, NULL::text) IS NULL) AND (previous_roles <@ ARRAY['admin'::text, 'reviewer'::text, 'editor'::text])))",
+  },
+  {
+    key: 'public.staff_lifecycle_events.check_staff_lifecycle_event_next_roles',
+    sourceDefinition: "CHECK ((((cardinality(next_roles) >= 0) AND (cardinality(next_roles) <= 3)) AND (array_position(next_roles, NULL::text) IS NULL) AND (next_roles <@ ARRAY['admin'::text, 'reviewer'::text, 'editor'::text])))",
+    restoredDefinition: "CHECK (((cardinality(next_roles) >= 0) AND (cardinality(next_roles) <= 3) AND (array_position(next_roles, NULL::text) IS NULL) AND (next_roles <@ ARRAY['admin'::text, 'reviewer'::text, 'editor'::text])))",
+  },
 ] as const;
 
 /** Recovery overlay only. The ordinary Gate 4 comparator remains exact, including table grants. */

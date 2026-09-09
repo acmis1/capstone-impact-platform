@@ -17,15 +17,15 @@ import { collectLocalGate4Evidence } from './checkGate4SchemaEvidence';
 import { MIGRATION_MANAGED_BUCKETS } from '../local-development/localSupabaseFixtures';
 
 /**
- * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 migration transition on a stack this verifier
+ * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 migration transition on a stack this verifier
  * owns outright.
  *
  * The known hosted staging-v2 baseline is 48 migrations through
- * 20260831090000_postgres17_maintain_privilege_alignment. A clean 52-migration install proves the
+ * 20260831090000_postgres17_maintain_privilege_alignment. A clean 53-migration install proves the
  * end state but not the transition, and the existing deployment-ledger upgrade proves a different
  * single migration. This rehearsal provisions exactly the 48-migration baseline, seeds the minimum
  * representative synthetic evidence a real 48-state database would hold, applies 0049 through
- * 0052 one at a time in deterministic order, and asserts after each step that nothing existing was
+ * 0053 one at a time in deterministic order, and asserts after each step that nothing existing was
  * rewritten and that the new authority is exactly what the migration declares.
  *
  * Everything is disposable and loopback-only: its own project id, port block, Docker network,
@@ -38,6 +38,7 @@ const RELEASE_MIGRATIONS = [
   { ordinal: 50, version: '20260903120000', file: '20260903120000_participant_preview_controlled_links.sql' },
   { ordinal: 51, version: '20260903130000', file: '20260903130000_participant_owned_corrections.sql' },
   { ordinal: 52, version: '20260906120000', file: '20260906120000_public_removal_completion_reconciliation.sql' },
+  { ordinal: 53, version: '20260909120000', file: '20260909120000_staff_lifecycle_readiness.sql' },
 ] as const;
 
 const BASELINE_MIGRATION_COUNT = 48;
@@ -78,7 +79,8 @@ const CORRECTION_RPC_SIGNATURES = [
 // The 41-table release inventory minus the four tables first created by 0051 is the exact
 // 37-table public contract at 6125bb56 (0048). Assert the live baseline set before fingerprinting.
 export const PRESERVED_PUBLIC_TABLES = ALL_REQUIRED_TABLES.filter(
-  (table) => !(CORRECTION_TABLES as readonly string[]).includes(table),
+  (table) => table !== 'staff_lifecycle_events'
+    && !(CORRECTION_TABLES as readonly string[]).includes(table),
 );
 export const PRESERVED_EXECUTION_CONTROL_TABLES = [
   'assistive_execution_control.launch_budget_guard',
@@ -219,6 +221,17 @@ function tableFingerprint(table: string): string {
     "SELECT pg_catalog.count(*)::text || ':' || pg_catalog.encode(pg_catalog.sha256("
     + "pg_catalog.convert_to(COALESCE(pg_catalog.string_agg(row_text, chr(10) ORDER BY row_text), ''), 'UTF8')), 'hex')"
     + ` FROM (SELECT pg_catalog.to_jsonb(t)::text AS row_text FROM ${table} AS t) AS s;`,
+  );
+}
+
+/** Digest only the pre-0053 staff profile columns so additive lifecycle metadata cannot mask drift. */
+function historicalAdminUserFingerprint(): string {
+  return psql(
+    "SELECT pg_catalog.count(*)::text || ':' || pg_catalog.encode(pg_catalog.sha256("
+    + "pg_catalog.convert_to(COALESCE(pg_catalog.string_agg(row_text, chr(10) ORDER BY row_text), ''), 'UTF8')), 'hex')"
+    + " FROM (SELECT pg_catalog.jsonb_build_object("
+    + "'id',staff.id,'email',staff.email,'full_name',staff.full_name,'created_at',staff.created_at,"
+    + "'auth_user_id',staff.auth_user_id)::text AS row_text FROM public.admin_users AS staff) AS s;",
   );
 }
 
@@ -850,6 +863,88 @@ function assertAfter52(baseline: BaselineEvidence, publicTableGrantsBefore52: st
   console.log('PASS: Migration 0052 installed atomic removal completion without changing unrelated rows or privileges');
 }
 
+function assertAfter53(
+  baseline: BaselineEvidence,
+  historicalAdminUsersBefore53: string,
+): void {
+  for (const table of PRESERVED_TABLES.filter((candidate) => candidate !== 'public.admin_users')) {
+    assert.equal(
+      tableFingerprint(table),
+      baseline.tables[table],
+      `Migration 0053 changed existing rows in ${table}.`,
+    );
+  }
+  assert.equal(
+    historicalAdminUserFingerprint(),
+    historicalAdminUsersBefore53,
+    'Migration 0053 changed existing staff profile identity/history columns.',
+  );
+  assert.equal(
+    psql("SELECT lifecycle_status || '|' || lifecycle_version::text || '|'"
+      + " || COALESCE(deactivated_at::text, '') FROM public.admin_users"
+      + ` WHERE id = '${ADMIN_ID}'::uuid;`),
+    'active|1|',
+  );
+  assert.equal(psql("SELECT pg_catalog.to_regclass('public.staff_lifecycle_events') IS NOT NULL;"), 't');
+  assert.equal(
+    psql("SELECT relrowsecurity::text || '|' || relforcerowsecurity::text"
+      + " FROM pg_catalog.pg_class WHERE oid = 'public.staff_lifecycle_events'::regclass;"),
+    'true|true',
+  );
+  assert.equal(tableGrantsFor('staff_lifecycle_events'), 'service_role:SELECT');
+
+  for (const [signature, trustedRole] of [
+    ['public.manage_staff_lifecycle(uuid,text,text,text[],bigint)', 'service_role'],
+    ['public.claim_staff_provider_reconciliation(uuid,text,bigint)', 'service_role'],
+    ['public.complete_staff_provider_reconciliation(uuid,uuid,boolean,text)', 'service_role'],
+    ['public.staff_session_is_active()', 'authenticated'],
+    ['public.get_release_capability_sentinel()', 'service_role'],
+  ] as const) {
+    assert.equal(
+      psql(`SELECT has_function_privilege('${trustedRole}', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('anon', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('${trustedRole === 'service_role' ? 'authenticated' : 'service_role'}', '${signature}', 'EXECUTE')::text;`),
+      'true|false|false',
+      `${signature} has an unsafe runtime EXECUTE grant.`,
+    );
+  }
+  for (const signature of [
+    'public.manage_staff_lifecycle(uuid,text,text,text[],bigint)',
+    'public.claim_staff_provider_reconciliation(uuid,text,bigint)',
+    'public.complete_staff_provider_reconciliation(uuid,uuid,boolean,text)',
+    'public.staff_session_is_active()',
+  ]) {
+    assert.equal(
+      psql(`SELECT prosecdef::text || '|' || pg_catalog.array_to_string(proconfig, ',')`
+        + ` FROM pg_catalog.pg_proc WHERE oid = '${signature}'::regprocedure;`),
+      'true|search_path=""',
+      `${signature} is not a search-path-pinned SECURITY DEFINER function.`,
+    );
+  }
+  assert.equal(
+    psql("SELECT prosecdef::text || '|' || provolatile::text || '|' || proparallel::text || '|'"
+      + " || pg_catalog.array_to_string(proconfig, ',') FROM pg_catalog.pg_proc"
+      + " WHERE oid = 'public.get_release_capability_sentinel()'::regprocedure;"),
+    'false|i|s|search_path=""',
+  );
+  assert.equal(
+    psql('SELECT public.get_release_capability_sentinel();'),
+    '20260909120000_staff_lifecycle_readiness|active_staff_catalog_rls_v1|staff_lifecycle_v1',
+  );
+  for (const table of ['programs', 'disciplines', 'industry_categories']) {
+    assert.ok(
+      psql(`SELECT pg_catalog.pg_get_expr(polqual, polrelid) FROM pg_catalog.pg_policy`
+        + ` WHERE polrelid = 'public.${table}'::regclass`
+        + ` AND polname = 'select_${table}_authenticated';`).includes('staff_session_is_active'),
+      `public.${table} does not enforce the durable active-staff predicate.`,
+    );
+  }
+  assert.ok(
+    untrustedRoutineExecuteGrants().split('\n').includes('staff_session_is_active()=authenticated'),
+  );
+  console.log('PASS: Migration 0053 installed lifecycle, retained-token RLS, and immutable readiness authority without rewriting existing records');
+}
+
 async function verifyUpgrade(workdir: string, networkId: string): Promise<void> {
   assertBaseline();
   seedBaselineEvidence();
@@ -859,7 +954,7 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   const baselineGate4Errors = gate4ContractErrors();
   assert.ok(
     baselineGate4Errors.length > 0,
-    'The current 52-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
+    'The current 53-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
   );
   console.log(
     `PASS: current Gate 4 contract refuses the 48-state source (${baselineGate4Errors.length} findings)`,
@@ -891,6 +986,10 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   applyRelease(workdir, networkId, 52);
   assertAfter52(baseline, publicTableGrantsBefore52);
   await assertStorageUnchanged(storageClient, baseline, 'Migration 0052');
+  const historicalAdminUsersBefore53 = historicalAdminUserFingerprint();
+  applyRelease(workdir, networkId, 53);
+  assertAfter53(baseline, historicalAdminUsersBefore53);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0053');
 
   const applied = appliedMigrations();
   assert.equal(applied.length, RELEASE_MIGRATION_COUNT, 'The upgraded head is not the full release migration set.');
@@ -937,7 +1036,7 @@ async function main(): Promise<void> {
     startAttempted = true;
     runSupabase('start', workdir, networkId);
     await verifyUpgrade(workdir, networkId);
-    console.log('PASS: staging migration 0048 -> 0052 upgrade rehearsal');
+    console.log('PASS: staging migration 0048 -> 0053 upgrade rehearsal');
     console.log('HOSTED_SYSTEMS_CONTACTED = NO');
     exitCode = 0;
   } catch (error) {

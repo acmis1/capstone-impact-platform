@@ -120,7 +120,7 @@ capstone-impact-platform/
 │   └── developer-troubleshooting.md # Developer setup troubleshooting guide
 ├── infra/
 │   └── supabase/             # Database migrations, seed SQL, runbooks
-│       └── migrations/       # 52 timestamped PostgreSQL migration files
+│       └── migrations/       # 53 timestamped PostgreSQL migration files
 ├── Prototype/                # Historical material; maintained Duda renderer is under duda/
 ├── AGENTS.md                 # Agent governance & repository rules
 ├── CONTRIBUTING.md           # Contributor workflow & safety rules
@@ -289,7 +289,7 @@ Do not select broad roadmap topics directly from `docs/implementation-backlog.md
 - ❌ **DO NOT** hardcode or commit API keys, secrets, credentials, passwords, or connection strings.
 - ❌ **DO NOT** use real participant, staff, or supervisor personal identity data (use synthetic data only).
 - ❌ **DO NOT** casually modify historical `Prototype/` material; only authorized Duda/public-layer work may change the maintained `Prototype/duda/` renderer and contract harness.
-- ❌ **DO NOT** edit merged migrations `0001` through `0052`.
+- ❌ **DO NOT** edit, rename, or delete existing migration files `0001` through the current repository candidate `0053`; migrations are append-only after merge. The latest hosted evidence remains at `0052` until candidate `0053` is separately verified there.
 - ❌ **DO NOT** self-merge Pull Requests without maintainer sign-off.
 
 ---

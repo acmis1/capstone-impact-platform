@@ -9,6 +9,7 @@ import type {
   TransitionOutcome,
 } from './staffProvisioningService';
 import type { StaffPasswordIdentityGateway } from './staffTestAccountService';
+import type { StaffLifecycleStatus, StaffProviderSync } from './staffLifecycle';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -250,7 +251,10 @@ export interface StaffDirectoryEntry {
   fullName: string;
   email: string;
   roles: AdminRole[];
-  status: 'active' | 'pending_activation';
+  status: StaffLifecycleStatus;
+  version: number;
+  providerSync: StaffProviderSync;
+  lastChangedAt: string | null;
   requestedAt: string | null;
 }
 

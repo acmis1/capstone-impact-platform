@@ -2,7 +2,9 @@
 
 import * as React from 'react';
 import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 import { StaffDirectoryTable } from './StaffDirectoryTable';
 import type {
@@ -19,6 +21,9 @@ const staff: StaffDirectoryEntry[] = [
     email: 'active.admin@capstone.test',
     roles: ['admin'],
     status: 'active',
+    version: 1,
+    providerSync: 'synchronized',
+    lastChangedAt: '2026-08-13T12:00:00.000Z',
     requestedAt: '2026-08-13T12:00:00.000Z',
   },
   {
@@ -26,6 +31,9 @@ const staff: StaffDirectoryEntry[] = [
     email: LONG_EMAIL,
     roles: ['reviewer', 'editor'],
     status: 'pending_activation',
+    version: 1,
+    providerSync: 'synchronized',
+    lastChangedAt: '2026-08-13T12:00:00.000Z',
     requestedAt: 'not-a-timestamp',
   },
   {
@@ -33,6 +41,9 @@ const staff: StaffDirectoryEntry[] = [
     email: 'unrecognized@capstone.test',
     roles: [],
     status: 'active',
+    version: 1,
+    providerSync: 'synchronized',
+    lastChangedAt: null,
     requestedAt: null,
   },
 ];
@@ -68,7 +79,7 @@ afterEach(() => cleanup());
 
 describe('StaffDirectoryTable', () => {
   it('renders active, pending, zero-role, multi-role and timestamp states semantically', () => {
-    render(<StaffDirectoryTable staff={staff} incidents={[]} />);
+    render(<StaffDirectoryTable staff={staff} incidents={[]} currentUserEmail={staff[0].email} />);
 
     expect(screen.getByRole('heading', { level: 2, name: 'Staff directory' })).toBeDefined();
     expect(screen.getByRole('region', { name: 'Staff directory' }).className).toContain('border-border-structural');
@@ -80,8 +91,8 @@ describe('StaffDirectoryTable', () => {
     expect(within(mobileDirectory).getByText(LONG_EMAIL)).toBeDefined();
     expect(within(mobileDirectory).getByText('Awaiting account setup')).toBeDefined();
     expect(within(mobileDirectory).getByText('No recognized role')).toBeDefined();
-    expect(within(mobileDirectory).getByText('Reviewer')).toBeDefined();
-    expect(within(mobileDirectory).getByText('Editor')).toBeDefined();
+    expect(within(mobileDirectory).getAllByText('Reviewer').length).toBeGreaterThan(0);
+    expect(within(mobileDirectory).getAllByText('Editor').length).toBeGreaterThan(0);
 
     const validTime = within(mobileDirectory).getByText(/13 Aug 2026/i);
     expect(validTime.tagName).toBe('TIME');
@@ -90,7 +101,13 @@ describe('StaffDirectoryTable', () => {
   });
 
   it('retains all three provisioning outcomes with plain-language follow-up context', () => {
-    render(<StaffDirectoryTable staff={staff.slice(0, 1)} incidents={incidents} />);
+    render(
+      <StaffDirectoryTable
+        staff={staff.slice(0, 1)}
+        incidents={incidents}
+        currentUserEmail={staff[0].email}
+      />,
+    );
 
     expect(screen.getByRole('heading', { level: 2, name: 'Invitations that did not complete' })).toBeDefined();
     expect(screen.getByRole('region', { name: 'Invitations that did not complete' }).className).toContain('border-warning/30');
@@ -103,7 +120,7 @@ describe('StaffDirectoryTable', () => {
     expect(within(mobileIncidents).getByText(/No cleanup action is pending/i)).toBeDefined();
   });
 
-  it('does not expose identifiers, failure detail, secrets, provider data or unsupported actions', () => {
+  it('does not expose identifiers, failure detail, secrets or provider data', () => {
     const unsafeStaff = [{
       ...staff[0],
       authUserId: 'auth-uuid-should-not-render',
@@ -112,7 +129,13 @@ describe('StaffDirectoryTable', () => {
       providerDetail: 'raw-provider-detail-should-not-render',
     }] as unknown as StaffDirectoryEntry[];
 
-    render(<StaffDirectoryTable staff={unsafeStaff} incidents={incidents} />);
+    render(
+      <StaffDirectoryTable
+        staff={unsafeStaff}
+        incidents={incidents}
+        currentUserEmail={staff[0].email}
+      />,
+    );
 
     expect(document.body.textContent).not.toContain('auth-uuid-should-not-render');
     expect(document.body.textContent).not.toContain('profile-uuid-should-not-render');
@@ -120,12 +143,13 @@ describe('StaffDirectoryTable', () => {
     expect(document.body.textContent).not.toContain('raw-provider-detail-should-not-render');
     expect(document.body.textContent).not.toContain('BOUNDED_INTERNAL_FAILURE');
     expect(document.body.textContent).not.toContain('BOUNDED_PROVIDER_CLASSIFICATION');
+    expect(screen.getAllByText('Your own access cannot be changed here.')).toHaveLength(2);
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.queryByRole('link')).toBeNull();
   });
 
   it('renders a useful empty state without a redundant incident section', () => {
-    render(<StaffDirectoryTable staff={[]} incidents={[]} />);
+    render(<StaffDirectoryTable staff={[]} incidents={[]} currentUserEmail="admin@capstone.test" />);
 
     expect(screen.getByRole('heading', { level: 3, name: 'No staff accounts' })).toBeDefined();
     expect(screen.queryByRole('region', { name: 'Invitations that did not complete' })).toBeNull();

@@ -7,7 +7,12 @@ const AUTH_ID = '11111111-1111-1111-1111-111111111111';
 const ADMIN_ID = '22222222-2222-2222-2222-222222222222';
 
 function client(options: {
-  profile?: { id: string; email: string; full_name: string | null } | null;
+  profile?: {
+    id: string;
+    email: string;
+    full_name: string | null;
+    lifecycle_status: unknown;
+  } | null;
   roles?: unknown[];
   pendingProvisioning?: boolean;
   profileError?: boolean;
@@ -27,7 +32,12 @@ function client(options: {
         if (table === 'admin_users') {
           builder.maybeSingle = async () => ({
             data: options.profile === undefined
-              ? { id: ADMIN_ID, email: 'staff@example.test', full_name: 'Synthetic Staff' }
+              ? {
+                id: ADMIN_ID,
+                email: 'staff@example.test',
+                full_name: 'Synthetic Staff',
+                lifecycle_status: 'active',
+              }
               : options.profile,
             error: options.profileError ? new Error('private profile failure') : null,
           });
@@ -107,6 +117,20 @@ describe('resolveAdminContextFromAuthUser', () => {
       type: 'PERMISSION_DENIED',
     } satisfies Partial<AdminAuthError>);
   });
+
+  it.each(['deactivated', 'unexpected', null])(
+    'denies lifecycle state %s before reading roles',
+    async (lifecycleStatus) => {
+      await expect(resolveAdminContextFromAuthUser(AUTH_ID, client({
+        profile: {
+          id: ADMIN_ID,
+          email: 'staff@example.test',
+          full_name: 'Synthetic Staff',
+          lifecycle_status: lifecycleStatus,
+        },
+      }))).rejects.toMatchObject({ type: 'STAFF_DEACTIVATED', message: 'Access denied.' });
+    },
+  );
 
   it.each([
     { profileError: true },

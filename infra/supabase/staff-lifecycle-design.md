@@ -1,71 +1,97 @@
-# Staff Lifecycle Architecture & Governance Design
+# Staff Lifecycle Operations and Recovery
 
-> [!NOTE]
-> **DESIGN DOCUMENT ONLY**: Hosted staff provisioning code is **DEFERRED** in this PR. Executable staff provisioning tooling will be implemented in a subsequent security phase after shared-staging database reconciliation and project-owner authorization.
+This runbook describes the executable staff lifecycle introduced by
+`20260909120000_staff_lifecycle_readiness.sql`. PostgreSQL is the authoritative Admin/CMS
+authorization boundary. Supabase Auth disable/enable is a separate provider synchronization step.
 
-## Core Governance Principles
+## Lifecycle contract
 
-1. **Historical Attribution Integrity**:
-   - `admin_users` profile rows must be preserved indefinitely to maintain audit references in `approval_records` and project change histories.
-   - Normal offboarding must **NEVER** delete `admin_users` profile records from the database.
-2. **Auth User Preservation**:
-   - Auth identities (`auth.users`) are preserved by default during offboarding to prevent broken foreign key references across identity stores.
-   - Disabling or revoking access is accomplished by setting `banned_until` or deactivating operational roles, rather than hard-deleting Auth accounts.
-3. **Single Operational Role Enforcement**:
-   - Each staff identity must hold exactly **one** active operational role (`admin`, `reviewer`, or `editor`) in `user_roles`.
-   - Assigning a new role automatically replaces or deactivates any existing role assignments.
-4. **Dry-Run by Default**:
-   - All CLI staff management tooling must run in dry-run mode unless explicit `--apply` and confirmation flags are passed.
-5. **Project-Owner Approval Required**:
-   - Modifying staff privileges or provisioning new administrative accounts on shared staging requires prior authorization from project owners.
+- Only a live, active Administrator whose resolved permissions include `staff.manage` may use the
+  same-origin lifecycle API. The database repeats the active-Administrator check before writing.
+- A role replacement is the complete recognized role set, not an additive patch. The only roles
+  are `admin`, `reviewer`, and `editor`; duplicates are canonicalized and unknown roles fail closed.
+- Deactivation atomically sets `admin_users.lifecycle_status = 'deactivated'`, removes all effective
+  role rows, advances `lifecycle_version`, and appends an audit event. Every Admin request resolves
+  this database state, so retained or still-valid Auth tokens cannot grant Admin/CMS access.
+- Reactivation is a distinct authorized action and requires a non-empty recognized role set. It
+  restores database authorization before attempting to re-enable provider sign-in.
+- Staff, Auth linkage history, and lifecycle audit rows are not hard-deleted. If an Auth identity is
+  independently deleted, its staff profile remains and the linkage becomes null.
+- Self-role changes and self-deactivation are denied. There is no bypass in this workflow: another
+  effective Administrator must perform the change.
+- Removing or deactivating an effective Administrator is globally serialized and cannot reduce the
+  effective Administrator population below one. Pending invitations and profiles without a linked
+  Auth identity do not count as effective and cannot act.
+- Every real transition requires the displayed `lifecycle_version`. A stale writer receives a
+  deterministic conflict; an exact repeat receives a no-change/already-current result.
+- Every real role or lifecycle transition appends one durable operational event. Its identity,
+  actor/target snapshots, action, before/after roles and status, lifecycle version, and creation
+  timestamp are immutable. Only the bounded provider-reconciliation fields on that row may change,
+  and only through the token-fenced claim/completion routines. Ordinary UI and logs never expose
+  profile IDs, Auth IDs, provider response detail, or reconciliation tokens.
 
----
+Existing invitation and staging test-account flows remain unchanged. An invitation that is still
+`pending_activation` remains denied by the existing activation gate.
 
-## Controlled Staff Lifecycle Workflows
+## Provider synchronization semantics
 
-```mermaid
-stateDiagram-v2
-    [*] --> Unprovisioned
-    Unprovisioned --> Invited: Invite / Link (Dry-Run Guarded)
-    Invited --> Active: Password Set / Linkage Complete
-    Active --> RoleChanged: Role Reassignment (Single Role)
-    RoleChanged --> Active: Updated User Role
-    Active --> Offboarded: Disable / Soft Deactivate
-    Offboarded --> Active: Re-enable / Restore Role
-```
+For deactivation, the server attempts a long-duration Supabase Auth ban. For reactivation, it
+attempts an explicit unban. Provider work starts only after the authoritative database transaction
+commits.
 
-### 1. Provisioning & Linkage (`create` / `invite` / `link`)
-- **Input**: Email, Full Name, Initial Role (`admin`, `reviewer`, `editor`).
-- **Preconditions**: Checks for existing `auth.users` identity or `admin_users` profile.
-- **Action**: Idempotently creates or links Auth user to `admin_users` profile and assigns a single operational role in `user_roles`.
-- **Audit**: Inserts an audit record documenting the provisioning event.
+The lifecycle event has one of four provider states:
 
-### 2. Role Transition (`reassign`)
-- **Input**: Staff Email/ID, New Target Role.
-- **Preconditions**: Checks that target staff identity exists and has an active profile.
-- **Action**: Transactionally removes existing role assignments in `user_roles` and inserts the new target role.
-- **Audit**: Logged as a role transition audit event.
+- `not_required`: a role-only transition required no provider call.
+- `pending`: a token-fenced provider attempt owns a two-minute lease.
+- `succeeded`: provider state was recorded as synchronized.
+- `failed`: database authorization remains authoritative and staff UI reports attention required.
 
-### 3. Offboarding & Access Revocation (`disable` / `deactivate`)
-- **Input**: Staff Email/ID.
-- **Preconditions**: Confirms staff identity is not the last remaining active system administrator.
-- **Action**:
-  1. Deactivates role records in `user_roles`.
-  2. Sets ban status on `auth.users` identity to prevent future authentication.
-  3. Preserves `admin_users` profile row unchanged to maintain historical attribution for all past approvals.
-- **Audit**: Logged as an offboarding audit event.
+A provider failure never compensates or restores database authorization. While the current version
+has pending/failed provider work, further lifecycle transitions are blocked. An authorized operator
+uses **Retry sign-in sync**; the database issues a new expiring claim only after the prior claim has
+failed or expired. Completion accepts only the matching one-time token. Tokens are stored only as
+SHA-256 hashes and are never returned to the browser.
 
-### 4. Anomaly Detection (`audit` / `orphan-check`)
-- **Multi-Role Detection**: Identifies any staff identity holding more than one active role in `user_roles`.
-- **Orphan Detection**: Identifies `admin_users` profiles without linked Auth identities, or Auth identities missing `admin_users` profiles.
-- **Remediation**: Reports anomalies without performing automatic mutations unless explicitly authorized.
+The event history is append-only: reconciliation never replaces or deletes an event. Its controlled
+provider fields (`provider_status`, attempt count, claim lease/token hash, failure code, and last
+attempt time) record the fenced provider workflow on the original transition row; ordinary table
+updates remain unavailable.
 
----
+## Deployment and preflight
 
-## Pre-Implementation Requirements
+1. Back up the database under the existing managed recovery procedure.
+2. Confirm there are no duplicate staff emails after trimming and case-folding. The migration
+   deliberately fails transactionally if identity addressing would be ambiguous.
+3. Confirm at least two effective Administrators exist and are not pending activation.
+4. Apply the reserved forward-only migration before deploying application code that reads
+   `lifecycle_status` or `lifecycle_version`.
+5. Run the focused migration/unit/API/UI tests and the disposable Local Supabase verifier:
 
-Executable staff provisioning scripts wait for:
-1. Complete manual inventory of existing `auth.users`, `admin_users`, and `user_roles` records on shared staging.
-2. Confirmation and cleanup of any existing role anomalies or unlinked accounts.
-3. Completion of the 7-gate database migration-history reconciliation.
-4. Formal project-owner approval of staff management DDL and CLI procedures.
+   ```text
+   npm run verify:staff-lifecycle-runtime:disposable
+   ```
+
+6. After application deployment, have two Administrators independently confirm Staff access loads,
+   then perform a governed non-admin role replacement and verify its audit/provider status.
+
+The migration is transactional. A migration-time failure leaves the prior schema unchanged. Do not
+deploy the new application against that unchanged schema.
+
+## Recovery
+
+- If provider synchronization fails, leave database lifecycle state unchanged and retry from the
+  Staff access UI after the provider is healthy. Do not manually restore roles to hide the failure.
+- If an operator loses their own Auth access, a different effective Administrator performs the
+  governed action. Hosted dashboard or direct database mutation is not part of this workflow.
+- If only one effective Administrator remains, lifecycle changes affecting that identity must stop
+  until the separately governed bootstrap/recovery process establishes another effective admin.
+- Never roll back to an application build that predates the `lifecycle_status` authorization check
+  while any staff row is deactivated; that older build could ignore the authoritative deny state.
+  If application rollback is unavoidable, retain the lifecycle gate or take the Admin/CMS offline.
+- Do not drop lifecycle columns/events or recreate deleted role rows as a rollback. Recovery is
+  forward-only: correct the application/provider fault, reconcile provider state, and use an
+  explicit audited reactivation when access should genuinely return.
+
+The lifecycle event table is service-readable for the bounded staff directory but grants no direct
+insert/update/delete privileges. `anon` receives no table or routine access. `authenticated` may
+execute only the session predicate needed by catalog RLS, not lifecycle mutation or audit routines.

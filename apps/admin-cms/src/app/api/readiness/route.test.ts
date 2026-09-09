@@ -11,6 +11,8 @@ vi.mock('../../../lib/env', () => ({ getServerEnv: mocks.getServerEnv }));
 import { GET, HEAD } from './route';
 
 const VALID_COMMIT = 'A75F4D8861CE693DDD264F9797D8AF656911154F';
+const RELEASE_CAPABILITY_SENTINEL =
+  '20260909120000_staff_lifecycle_readiness|active_staff_catalog_rls_v1|staff_lifecycle_v1';
 const VALID_ENV = {
   NEXT_PUBLIC_SUPABASE_URL: 'https://synthetic-readiness.supabase.co',
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_public-test-value',
@@ -63,7 +65,10 @@ function legacyEnv(publicKey = LEGACY_ANON_JWT, databaseAdminKey = LEGACY_SERVIC
 }
 
 function successfulFetch() {
-  return vi.fn<typeof fetch>(async () => new Response(null, { status: 200 }));
+  return vi.fn<typeof fetch>(async () => new Response(
+    JSON.stringify(RELEASE_CAPABILITY_SENTINEL),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  ));
 }
 
 async function json(response: Response) {
@@ -74,13 +79,15 @@ async function json(response: Response) {
 
 describe('GET/HEAD /api/readiness', () => {
   const originalCommit = process.env.RENDER_GIT_COMMIT;
+  const originalRender = process.env.RENDER;
   const originalRuntime = process.env.CAPSTONE_RUNTIME_ENV;
   const originalExpectedHost = process.env.CAPSTONE_EXPECTED_SUPABASE_HOST;
 
   beforeEach(() => {
     mocks.getServerEnv.mockReset();
     mocks.getServerEnv.mockReturnValue(VALID_ENV);
-    delete process.env.RENDER_GIT_COMMIT;
+    process.env.RENDER = 'true';
+    process.env.RENDER_GIT_COMMIT = VALID_COMMIT;
     process.env.CAPSTONE_RUNTIME_ENV = 'staging';
     process.env.CAPSTONE_EXPECTED_SUPABASE_HOST = 'synthetic-readiness.supabase.co';
   });
@@ -90,6 +97,8 @@ describe('GET/HEAD /api/readiness', () => {
     vi.unstubAllGlobals();
     if (originalCommit === undefined) delete process.env.RENDER_GIT_COMMIT;
     else process.env.RENDER_GIT_COMMIT = originalCommit;
+    if (originalRender === undefined) delete process.env.RENDER;
+    else process.env.RENDER = originalRender;
     if (originalRuntime === undefined) delete process.env.CAPSTONE_RUNTIME_ENV;
     else process.env.CAPSTONE_RUNTIME_ENV = originalRuntime;
     if (originalExpectedHost === undefined) delete process.env.CAPSTONE_EXPECTED_SUPABASE_HOST;
@@ -114,6 +123,7 @@ describe('GET/HEAD /api/readiness', () => {
       classification: 'CONFIGURATION_NOT_READY',
       configuration: 'not-ready',
       dependency: 'not-checked',
+      databaseCapability: 'not-checked',
     });
     expect(fetchMock).not.toHaveBeenCalled();
     for (const privateValue of privateValues) {
@@ -134,10 +144,11 @@ describe('GET/HEAD /api/readiness', () => {
       classification: 'READY',
       configuration: 'configured',
       dependency: 'reachable',
-      deploymentCommit: { state: 'missing' },
+      databaseCapability: 'current',
+      deploymentCommit: { state: 'valid', value: VALID_COMMIT.toLowerCase() },
       expectedMigrations: {
-        count: 52,
-        latest: '20260906120000_public_removal_completion_reconciliation',
+        count: 53,
+        latest: '20260909120000_staff_lifecycle_readiness',
       },
     });
   });
@@ -243,7 +254,7 @@ describe('GET/HEAD /api/readiness', () => {
     await expectConfigurationNotReadyWithoutFetch(legacyEnv(token), [token]);
   });
 
-  it('uses one zero-row dependency HEAD and never invokes an RPC or mutation', async () => {
+  it('uses one bounded immutable capability GET and never sends a mutation body', async () => {
     const fetchMock = successfulFetch();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -252,9 +263,8 @@ describe('GET/HEAD /api/readiness', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     const [input, init] = fetchMock.mock.calls[0];
     const url = String(input);
-    expect(url).toBe('https://synthetic-readiness.supabase.co/rest/v1/programs?select=id&limit=0');
-    expect(url).not.toContain('/rpc/');
-    expect(init?.method).toBe('HEAD');
+    expect(url).toBe('https://synthetic-readiness.supabase.co/rest/v1/rpc/get_release_capability_sentinel');
+    expect(init?.method).toBe('GET');
     expect(init?.body).toBeUndefined();
     expect(init?.cache).toBe('no-store');
     expect(init?.redirect).toBe('error');
@@ -355,18 +365,63 @@ describe('GET/HEAD /api/readiness', () => {
     expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
   });
 
-  it('surfaces only syntactically valid Render commit metadata', async () => {
-    vi.stubGlobal('fetch', successfulFetch());
-    process.env.RENDER_GIT_COMMIT = 'invalid-commit-private-value';
-    let response = await GET();
-    let body = await json(response);
-    expect(body.deploymentCommit).toEqual({ state: 'invalid' });
-    expect(JSON.stringify(body)).not.toContain('invalid-commit-private-value');
+  it.each([
+    ['missing', undefined, { state: 'missing' }],
+    ['invalid', 'invalid-commit-private-value', { state: 'invalid' }],
+  ])('fails closed on %s hosted deployment commit evidence', async (_label, value, expected) => {
+    const fetchMock = successfulFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    if (value === undefined) delete process.env.RENDER_GIT_COMMIT;
+    else process.env.RENDER_GIT_COMMIT = value;
 
-    process.env.RENDER_GIT_COMMIT = VALID_COMMIT;
-    response = await GET();
-    body = await json(response);
-    expect(body.deploymentCommit).toEqual({ state: 'valid', value: VALID_COMMIT.toLowerCase() });
+    const response = await GET();
+    const body = await json(response);
+
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({
+      classification: 'CONFIGURATION_NOT_READY',
+      dependency: 'not-checked',
+      databaseCapability: 'not-checked',
+      deploymentCommit: expected,
+    });
+    expect(JSON.stringify(body)).not.toContain('invalid-commit-private-value');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses an operator-shaped commit outside a provider-identified Render runtime', async () => {
+    const fetchMock = successfulFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    delete process.env.RENDER;
+
+    const response = await GET();
+
+    expect(response.status).toBe(503);
+    expect(await json(response)).toMatchObject({
+      classification: 'CONFIGURATION_NOT_READY',
+      databaseCapability: 'not-checked',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['stale sentinel', JSON.stringify('20260906120000_public_removal_completion_reconciliation'), 'application/json'],
+    ['malformed response', '{not-json', 'application/json'],
+    ['wrong content type', JSON.stringify(RELEASE_CAPABILITY_SENTINEL), 'text/plain'],
+    ['oversized response', JSON.stringify('x'.repeat(257)), 'application/json'],
+  ])('fails closed on %s capability evidence', async (_label, payload, contentType) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(payload, {
+      status: 200,
+      headers: { 'Content-Type': contentType },
+    })));
+
+    const response = await GET();
+
+    expect(response.status).toBe(503);
+    expect(await json(response)).toMatchObject({
+      classification: 'DEPENDENCY_NOT_READY',
+      dependency: 'not-ready',
+      databaseCapability: 'not-ready',
+    });
   });
 
   it('returns the same status and no body for HEAD', async () => {
