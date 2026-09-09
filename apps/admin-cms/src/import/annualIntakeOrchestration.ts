@@ -11,10 +11,10 @@ import {
   createAnnualIntakeCohortId,
   createInitialAnnualIntakeProgress,
   fingerprintAnnualIntakeChunk,
-  formatAnnualIntakeSourceFolder,
   mergeAnnualIntakePreviews,
   partitionAnnualIntakeFiles,
   withAnnualIntakeInFlightLock,
+  AnnualIntakeChunkPlanningError,
   type AnnualIntakeChunkProgress,
   type AnnualIntakeFileChunk,
   type AnnualIntakeLockResult,
@@ -136,7 +136,20 @@ export async function runAnnualIntakePreview(
     onProgress,
   } = params;
 
-  const chunks = partitionAnnualIntakeFiles(selectedFiles, selectedRootName);
+  let chunks: AnnualIntakeFileChunk[];
+  try {
+    chunks = partitionAnnualIntakeFiles(selectedFiles, selectedRootName);
+  } catch (error) {
+    if (error instanceof AnnualIntakeChunkPlanningError) {
+      return {
+        success: false,
+        code: error.code,
+        error: error.message,
+        failedChunkIndex: 0,
+      };
+    }
+    throw error;
+  }
   if (chunks.length === 0) {
     return { success: false, code: 'NO_VALID_FILES', error: 'The selected folder contains no valid project packages.', failedChunkIndex: 0 };
   }
@@ -321,7 +334,6 @@ async function verifyAnnualIntakePlanIdentity(
 async function stageMetadataChunk(params: {
   chunk: AnnualIntakePreviewChunk;
   intent: BrowserImportCommitIntent;
-  cohortId: string;
   adminReferenceFile?: File | null;
   adminReferenceMappingConfig?: AdminReferenceMappingConfig | null;
   fetchFn: typeof fetch;
@@ -334,7 +346,6 @@ async function stageMetadataChunk(params: {
     selectedFiles: params.chunk.files,
     adminReferenceFile: params.adminReferenceFile,
     adminReferenceMappingConfig: params.adminReferenceMappingConfig,
-    cohortId: params.cohortId,
     setIsStaging: () => undefined,
     setStagingError: () => undefined,
     setStagedResult: () => undefined,
@@ -409,7 +420,6 @@ async function executeAnnualIntakeImport(
   }
 
   for (const chunk of plan.chunks) {
-    const current = progress.chunks[chunk.index];
     const selectedForChunk = selectedPathsForChunk(chunk, selectedPackagePaths);
     const acknowledgedForChunk = acknowledgedPathsForChunk(chunk, acknowledgedWarningPackagePaths);
 
@@ -441,38 +451,33 @@ async function executeAnnualIntakeImport(
       return publishFailure(failed, prepared.message, chunk.index);
     }
 
-    let batchId = current.batchId;
-    let mediaAssetCount = current.mediaAssetCount;
-    const resumeMediaOnly = current.status === 'failed' && current.failurePhase === 'media' && Boolean(batchId);
+    const metadataResult = await stageMetadataChunk({
+      chunk,
+      intent: prepared.intent,
+      adminReferenceFile,
+      adminReferenceMappingConfig,
+      fetchFn,
+    });
 
-    if (!resumeMediaOnly) {
-      const metadataResult = await stageMetadataChunk({
-        chunk,
-        intent: prepared.intent,
-        cohortId: plan.cohortId,
-        adminReferenceFile,
-        adminReferenceMappingConfig,
-        fetchFn,
+    if (!metadataResult || !metadataResult.success) {
+      const message = errorText(metadataResult && !metadataResult.success ? metadataResult : null, 'The metadata chunk could not be staged.');
+      const failed = updateChunk(progress, chunk.index, {
+        status: 'failed',
+        error: message,
+        failurePhase: 'metadata',
       });
-
-      if (!metadataResult || !metadataResult.success) {
-        const message = errorText(metadataResult && !metadataResult.success ? metadataResult : null, 'The metadata chunk could not be staged.');
-        const failed = updateChunk(progress, chunk.index, {
-          status: 'failed',
-          error: message,
-          failurePhase: 'metadata',
-        });
-        return publishFailure(failed, message, chunk.index);
-      }
-
-      batchId = metadataResult.batchId;
-      publish(updateChunk(progress, chunk.index, {
-        status: 'metadata_staged',
-        batchId,
-        error: null,
-        failurePhase: null,
-      }));
+      return publishFailure(failed, message, chunk.index);
     }
+
+    // The server's metadata replay is authoritative, including for completed/failed persisted
+    // chunks. Never select a media batch from browser progress.
+    const batchId = metadataResult.batchId;
+    publish(updateChunk(progress, chunk.index, {
+      status: 'metadata_staged',
+      batchId,
+      error: null,
+      failurePhase: null,
+    }));
 
     if (!batchId) {
       const message = 'The metadata chunk did not return a recoverable batch identifier.';
@@ -504,7 +509,7 @@ async function executeAnnualIntakeImport(
       return publishFailure(failed, message, chunk.index);
     }
 
-    mediaAssetCount = mediaResult.mediaAssetCount;
+    const mediaAssetCount = mediaResult.mediaAssetCount;
     publish(updateChunk(progress, chunk.index, {
       status: 'completed',
       batchId: mediaResult.batchId,
@@ -637,5 +642,3 @@ export async function runAnnualIntakeImport(
     code: unavailable ? 'COHORT_LOCK_UNAVAILABLE' : 'COHORT_IN_FLIGHT',
   };
 }
-
-export { formatAnnualIntakeSourceFolder };

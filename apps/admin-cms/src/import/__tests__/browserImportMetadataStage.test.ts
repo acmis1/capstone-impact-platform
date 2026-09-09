@@ -558,9 +558,11 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
     expect(mockRpc).toHaveBeenCalledTimes(1);
 
     const rpcArgs = mockRpc.mock.calls[0][1] as {
+      p_source_folder: string;
       p_packages: Array<Record<string, unknown>>;
     };
 
+    expect(rpcArgs.p_source_folder).toBe('pkg1');
     expect(rpcArgs.p_packages).toHaveLength(1);
 
     expect(rpcArgs.p_packages[0]).toEqual(
@@ -570,6 +572,20 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
         repositoryUrl: 'https://github.com/example/project',
       }),
     );
+
+    formData.append('cohortId', `annual-${'a'.repeat(64)}`);
+    const cohortRequest = new NextRequest(
+      'http://localhost:3000/api/imports/stage-metadata',
+      {
+        method: 'POST',
+        headers: { 'content-length': '20000' },
+        body: formData,
+      },
+    );
+    const cohortResponse = await stagePOST(cohortRequest);
+    expect(cohortResponse.status).toBe(400);
+    expect((await cohortResponse.json()).code).toBe('UNEXPECTED_UPLOAD_FIELD');
+    expect(mockRpc).toHaveBeenCalledTimes(1);
   });
 
   it('8b. rejects unsafe controlled links in authoritative server analysis before RPC persistence', async () => {

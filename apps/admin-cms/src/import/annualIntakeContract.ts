@@ -7,12 +7,29 @@ import {
   type SelectedFileDescriptor,
   type SelectionManifest,
 } from './browserImportPreviewContract';
+import { ADMIN_REFERENCE_LIMITS } from './adminReferenceSharedContract';
+import { BROWSER_IMPORT_MEDIA_LIMITS } from './browserImportMediaStageContract';
+import { MAX_GALLERY_IMAGES, parseGalleryFilePosition } from './galleryConvention';
 import { isIgnoredSystemFile, normalizeRelativePath } from './browserSelection';
 
 export const ANNUAL_INTAKE_COHORT_ID_REGEX = /^annual-[a-f0-9]{64}$/;
 export const ANNUAL_INTAKE_PROGRESS_VERSION = 1 as const;
 const SHA256_HEX_REGEX = /^[a-f0-9]{64}$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The media route's 150 MiB Content-Length ceiling covers the media bytes plus the metadata
+ * files, reference workbook, JSON fields, and multipart framing. Annual chunks therefore reserve
+ * the full metadata ceiling, the full Admin-reference workbook ceiling, two maximum text fields
+ * (manifest and intent), and an additional 8 MiB for the bounded mapping and multipart framing.
+ */
+export const ANNUAL_INTAKE_MEDIA_REQUEST_WIRE_RESERVE_BYTES =
+  (2 * BROWSER_IMPORT_LIMITS.MAX_MANIFEST_SIZE_BYTES) + (8 * 1024 * 1024);
+export const ANNUAL_INTAKE_MAX_RAW_MEDIA_BYTES =
+  BROWSER_IMPORT_MEDIA_LIMITS.MAX_MEDIA_MULTIPART_REQUEST_BYTES
+  - BROWSER_IMPORT_LIMITS.MAX_TOTAL_METADATA_BYTES
+  - ADMIN_REFERENCE_LIMITS.MAX_WORKBOOK_BYTES
+  - ANNUAL_INTAKE_MEDIA_REQUEST_WIRE_RESERVE_BYTES;
 
 export type AnnualIntakeChunkStatus = 'pending' | 'skipped' | 'metadata_staged' | 'completed' | 'failed';
 export type AnnualIntakeFailurePhase = 'preview' | 'metadata' | 'media' | null;
@@ -80,10 +97,6 @@ export type AnnualIntakeLockRunner = <T>(
 
 export function isAnnualIntakeCohortId(value: unknown): value is string {
   return typeof value === 'string' && ANNUAL_INTAKE_COHORT_ID_REGEX.test(value);
-}
-
-export function formatAnnualIntakeSourceFolder(selectedRootName: string, cohortId: string): string {
-  return `${selectedRootName} [annual cohort ${cohortId}]`;
 }
 
 export function compareDeterministically(left: string, right: string): number {
@@ -216,6 +229,17 @@ function isMetadataPath(path: string): boolean {
   return fileName === 'project-details.xlsx' || fileName === 'project.json';
 }
 
+function isPotentialMediaPath(path: string): boolean {
+  const fileName = path.split('/').pop()?.toLowerCase() || '';
+  if (fileName === 'poster.png' || fileName === 'poster.pdf') return true;
+
+  const position = parseGalleryFilePosition(fileName);
+  const extension = fileName.split('.').pop();
+  return position !== null
+    && position <= MAX_GALLERY_IMAGES
+    && (extension === 'png' || extension === 'jpg' || extension === 'jpeg' || extension === 'webp');
+}
+
 function fitsExistingRequestLimits(
   selectedRootName: string,
   entries: Array<{ file: File; info: NonNullable<ReturnType<typeof descriptorInfo>> }>,
@@ -224,10 +248,22 @@ function fitsExistingRequestLimits(
   if (packageCount > BROWSER_IMPORT_LIMITS.MAX_PACKAGES) return false;
   const manifest = buildManifest(selectedRootName, entries);
   const metadataDescriptors = manifest.descriptors.filter((descriptor) => isMetadataPath(descriptor.originalPath));
+  const mediaDescriptors = manifest.descriptors.filter((descriptor) => isPotentialMediaPath(descriptor.originalPath));
   return manifest.descriptors.length <= BROWSER_IMPORT_LIMITS.MAX_DESCRIPTORS
     && metadataDescriptors.length <= BROWSER_IMPORT_LIMITS.MAX_METADATA_FILES
     && metadataDescriptors.reduce((total, descriptor) => total + descriptor.fileSizeBytes, 0) <= BROWSER_IMPORT_LIMITS.MAX_TOTAL_METADATA_BYTES
+    && mediaDescriptors.length <= BROWSER_IMPORT_MEDIA_LIMITS.MAX_MEDIA_FILES
+    && mediaDescriptors.reduce((total, descriptor) => total + descriptor.fileSizeBytes, 0) <= ANNUAL_INTAKE_MAX_RAW_MEDIA_BYTES
     && JSON.stringify(manifest).length <= BROWSER_IMPORT_LIMITS.MAX_MANIFEST_SIZE_BYTES;
+}
+
+export class AnnualIntakeChunkPlanningError extends Error {
+  readonly code = 'MEDIA_REQUEST_LIMIT_EXCEEDED' as const;
+
+  constructor() {
+    super('A single project package exceeds the annual intake chunk limits, including the media request limit. Reduce its media size or files and preview the folder again.');
+    this.name = 'AnnualIntakeChunkPlanningError';
+  }
 }
 
 /** Partitions a selected folder by whole package while preserving the existing request ceilings. */
@@ -273,6 +309,9 @@ export function partitionAnnualIntakeFiles(
 
   for (const packagePath of packagePaths) {
     const packageEntries = entriesByPackage.get(packagePath) || [];
+    if (!fitsExistingRequestLimits(selectedRootName, packageEntries, 1)) {
+      throw new AnnualIntakeChunkPlanningError();
+    }
     const candidateEntries = [...currentEntries, ...packageEntries];
     const candidatePackagePaths = [...currentPackagePaths, packagePath];
     const candidateFits = fitsExistingRequestLimits(selectedRootName, candidateEntries, candidatePackagePaths.length);

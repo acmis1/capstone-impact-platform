@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 
+import React from 'react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   canResumeAnnualIntake,
   createBrowserAnnualIntakeProgressStore,
   createInitialAnnualIntakeProgress,
+  ANNUAL_INTAKE_MAX_RAW_MEDIA_BYTES,
   partitionAnnualIntakeFiles,
   type AnnualIntakeLockRunner,
   type AnnualIntakePreviewPlan,
@@ -13,7 +16,7 @@ import {
   withAnnualIntakeInFlightLock,
 } from '../annualIntakeContract';
 import { runAnnualIntakeImport, runAnnualIntakePreview } from '../annualIntakeOrchestration';
-import type { AdminReferenceIntent } from '../adminReferenceSharedContract';
+import type { AdminReferenceIntent, AdminReferenceMappingConfig } from '../adminReferenceSharedContract';
 
 const ROOT = 'annual-2026';
 const REFERENCE_INTENT: AdminReferenceIntent = {
@@ -28,6 +31,12 @@ function makeFile(relativePath: string, body: string, type: string): File {
   const name = relativePath.split('/').pop()!;
   const file = new File([body], name, { type });
   Object.defineProperty(file, 'webkitRelativePath', { value: relativePath });
+  return file;
+}
+
+function makeSizedFile(relativePath: string, size: number, type = 'image/png'): File {
+  const file = makeFile(relativePath, 'x', type);
+  Object.defineProperty(file, 'size', { configurable: true, value: size });
   return file;
 }
 
@@ -162,7 +171,49 @@ describe('Annual intake browser orchestration', () => {
     expect(requestManifests.every((paths) => paths.length <= 25)).toBe(true);
   });
 
-  it('resumes an interrupted media chunk without repeating completed chunks or batches', async () => {
+  it('splits individually valid media-heavy packages below the later media request ceiling', () => {
+    const makeMediaHeavyPackage = (packageName: string) => [
+      makeSizedFile(`${ROOT}/${packageName}/project.json`, 100, 'application/json'),
+      makeSizedFile(`${ROOT}/${packageName}/poster.png`, 5 * 1024 * 1024),
+      makeSizedFile(`${ROOT}/${packageName}/poster.pdf`, 20 * 1024 * 1024, 'application/pdf'),
+      ...Array.from({ length: 10 }, (_, index) => makeSizedFile(
+        `${ROOT}/${packageName}/snapshot-${index + 1}.png`,
+        5 * 1024 * 1024,
+      )),
+    ];
+    const files = [
+      ...makeMediaHeavyPackage('project-001'),
+      ...makeMediaHeavyPackage('project-002'),
+    ];
+
+    const chunks = partitionAnnualIntakeFiles(files, ROOT);
+
+    expect(ANNUAL_INTAKE_MAX_RAW_MEDIA_BYTES).toBe(110 * 1024 * 1024);
+    expect(chunks.map((chunk) => chunk.packagePaths)).toEqual([
+      [`${ROOT}/project-001`],
+      [`${ROOT}/project-002`],
+    ]);
+  });
+
+  it('rejects a single media-heavy package before preview requests or metadata persistence', async () => {
+    const files = [
+      makeSizedFile(`${ROOT}/project-001/project.json`, 100, 'application/json'),
+      makeSizedFile(`${ROOT}/project-001/poster.png`, ANNUAL_INTAKE_MAX_RAW_MEDIA_BYTES + 1),
+    ];
+    const fetchFn = vi.fn<typeof fetch>();
+
+    const result = await runAnnualIntakePreview({ selectedFiles: files, selectedRootName: ROOT, fetchFn });
+
+    expect(result).toEqual({
+      success: false,
+      code: 'MEDIA_REQUEST_LIMIT_EXCEEDED',
+      error: expect.stringMatching(/single project package exceeds.*media request limit/i),
+      failedChunkIndex: 0,
+    });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('resumes an interrupted media chunk with authoritative metadata replay', async () => {
     const files = make120PackageFiles();
     const previewResult = await previewFiles(files);
     expect(previewResult.success).toBe(true);
@@ -203,6 +254,9 @@ describe('Annual intake browser orchestration', () => {
 
     const persistedBeforeRetry = store.value!;
     const completedBatchIds = persistedBeforeRetry.chunks.map((chunk) => chunk.batchId);
+    const retryBatchIds = completedBatchIds.map((batchId, index) =>
+      batchId || `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    );
     let metadataReplayIndex = 0;
     let mediaReplayIndex = 0;
     const retryCalls: string[] = [];
@@ -211,8 +265,11 @@ describe('Annual intake browser orchestration', () => {
       retryCalls.push(url);
       if (url.endsWith('/stage-metadata')) {
         const index = metadataReplayIndex++;
-        if (index < 2) return stageResponse('already_staged', completedBatchIds[index]!, 'completed');
-        return stageResponse('created', `00000000-0000-4000-8000-${String(index + 3).padStart(12, '0')}`);
+        return stageResponse(
+          completedBatchIds[index] ? 'already_staged' : 'created',
+          retryBatchIds[index]!,
+          completedBatchIds[index] ? 'completed' : 'metadata_staged',
+        );
       }
       const batchId = String((init?.body as FormData).get('batchId'));
       const index = mediaReplayIndex++;
@@ -230,9 +287,9 @@ describe('Annual intake browser orchestration', () => {
     });
     expect(resumed.success).toBe(true);
     expect(resumed.progress.chunks.every((chunk) => chunk.status === 'completed')).toBe(true);
-    expect(retryCalls.filter((url) => url.endsWith('/stage-metadata'))).toHaveLength(4);
+    expect(retryCalls.filter((url) => url.endsWith('/stage-metadata'))).toHaveLength(5);
     expect(retryCalls.filter((url) => url.endsWith('/stage-media'))).toHaveLength(5);
-    expect(resumed.progress.chunks.slice(0, 3).map((chunk) => chunk.batchId)).toEqual(completedBatchIds.slice(0, 3));
+    expect(resumed.progress.chunks.map((chunk) => chunk.batchId)).toEqual(retryBatchIds);
   });
 
   it('replays completed persisted progress instead of trusting stale caller state', async () => {
@@ -268,7 +325,10 @@ describe('Annual intake browser orchestration', () => {
       fetchFn: async (input, init) => {
         const url = String(input);
         stageRequests.push(url);
-        if (url.endsWith('/stage-metadata')) return stageResponse('already_staged', replayBatchId, 'completed');
+        if (url.endsWith('/stage-metadata')) {
+          expect((init?.body as FormData).get('cohortId')).toBeNull();
+          return stageResponse('already_staged', replayBatchId, 'completed');
+        }
         expect(String((init?.body as FormData).get('batchId'))).toBe(replayBatchId);
         return mediaResponse('already_completed', replayBatchId);
       },
@@ -322,6 +382,73 @@ describe('Annual intake browser orchestration', () => {
     expect(submittedMediaBatchIds).toEqual([realBatchId]);
     expect(replay.progress.chunks[0].batchId).toBe(realBatchId);
     expect(replay.progress.chunks[0].batchId).not.toBe(fakeBatchId);
+  });
+
+  it('does not trust a forged failed-media batch ID and replays metadata before media', async () => {
+    const result = await previewFiles([makeFile(`${ROOT}/project-001/project.json`, 'AAAAAAAAAAAAAAAA', 'application/json')]);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    const selected = [`${ROOT}/project-001`];
+    const store = memoryStore();
+    const forged = createInitialAnnualIntakeProgress(result.plan, selected, []);
+    const fakeBatchId = '00000000-0000-4000-8000-00000000f002';
+    const realBatchId = '00000000-0000-4000-8000-00000000a002';
+    forged.chunks[0] = {
+      ...forged.chunks[0],
+      status: 'failed',
+      batchId: fakeBatchId,
+      mediaAssetCount: 0,
+      error: 'temporary failure',
+      failurePhase: 'media',
+    };
+    store.value = forged;
+
+    const stageCalls: string[] = [];
+    const submittedMediaBatchIds: string[] = [];
+    const replay = await runAnnualIntakeImport({
+      plan: result.plan,
+      selectedPackagePaths: selected,
+      acknowledgedWarningPackagePaths: [],
+      progressStore: store,
+      fetchFn: async (input, init) => {
+        const url = String(input);
+        stageCalls.push(url);
+        if (url.endsWith('/stage-metadata')) return stageResponse('already_staged', realBatchId, 'completed');
+        const batchId = String((init?.body as FormData).get('batchId'));
+        submittedMediaBatchIds.push(batchId);
+        return mediaResponse('already_completed', realBatchId);
+      },
+      lockRunner: unlocked,
+    });
+
+    expect(replay.success).toBe(true);
+    expect(stageCalls).toEqual(['/api/imports/stage-metadata', '/api/imports/stage-media']);
+    expect(submittedMediaBatchIds).toEqual([realBatchId]);
+    expect(replay.progress.chunks[0].batchId).toBe(realBatchId);
+    expect(replay.progress.chunks[0].batchId).not.toBe(fakeBatchId);
+  });
+
+  it('rejects a created metadata response that claims the batch is already completed', async () => {
+    const result = await previewFiles([makeFile(`${ROOT}/project-001/project.json`, 'AAAAAAAAAAAAAAAA', 'application/json')]);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    const stageCalls: string[] = [];
+    const importResult = await runAnnualIntakeImport({
+      plan: result.plan,
+      selectedPackagePaths: [`${ROOT}/project-001`],
+      acknowledgedWarningPackagePaths: [],
+      fetchFn: async (input) => {
+        stageCalls.push(String(input));
+        return stageResponse('created', '00000000-0000-4000-8000-00000000c003', 'completed');
+      },
+      lockRunner: unlocked,
+    });
+
+    expect(importResult.success).toBe(false);
+    expect(importResult.failedChunkIndex).toBe(0);
+    expect(stageCalls).toEqual(['/api/imports/stage-metadata']);
   });
 
   it('rejects same-name/same-size replacements and changed server preview fingerprints', async () => {
@@ -499,4 +626,197 @@ describe('Annual intake browser orchestration', () => {
       restore();
     }
   });
+});
+
+function makeAnnualComponentPlan(): AnnualIntakePreviewPlan {
+  const packages = Array.from({ length: 26 }, (_, index) => {
+    const packagePath = `${ROOT}/project-${String(index + 1).padStart(2, '0')}`;
+    return {
+      packagePath,
+      folderName: packagePath.split('/')[1],
+      proposedPublicId: packagePath.split('/')[1],
+      metadataSource: 'json' as const,
+      status: 'valid' as const,
+      previewMetadata: {
+        title: packagePath,
+        year: '2026',
+        program: 'Program',
+        discipline: 'Discipline',
+        groupName: packagePath,
+        teamMemberCount: 1,
+        layoutTemplate: 'poster_showcase',
+        featuredMedia: 'poster',
+      },
+      filePresence: {
+        xlsxPresent: false,
+        jsonPresent: true,
+        posterImagePresent: true,
+        posterPdfPresent: false,
+        snapshotPresent: false,
+      },
+      errors: [],
+      warnings: [],
+    };
+  });
+
+  const chunks = [packages.slice(0, 25), packages.slice(25)].map((chunkPackages, index) => ({
+    index,
+    packagePaths: chunkPackages.map((pkg) => pkg.packagePath),
+    files: [],
+    manifest: {
+      selectedRootName: ROOT,
+      fileCount: chunkPackages.length,
+      declaredTotalBytes: chunkPackages.length,
+      ignoredSystemFilesCount: 0,
+      descriptors: [],
+    },
+    contentFingerprint: 'a'.repeat(64),
+    preview: {
+      previewFingerprint: `${String(index + 1).repeat(2)}${'b'.repeat(62)}`,
+      mode: 'batch' as const,
+      selectedRootName: ROOT,
+      packageCount: chunkPackages.length,
+      selectedFileCount: chunkPackages.length,
+      declaredTotalBytes: chunkPackages.length,
+      validPackageCount: chunkPackages.length,
+      warningPackageCount: 0,
+      invalidPackageCount: 0,
+      totalWarnings: 0,
+      totalErrors: 0,
+      mediaValidationMode: 'descriptor_only' as const,
+      batchIssues: [],
+      packages: chunkPackages,
+      adminReference: REFERENCE_INTENT,
+    },
+  }));
+
+  return {
+    cohortId: `annual-${'c'.repeat(64)}`,
+    selectedRootName: ROOT,
+    chunks,
+    mergedPreview: {
+      previewFingerprint: 'd'.repeat(64),
+      mode: 'batch',
+      selectedRootName: ROOT,
+      packageCount: packages.length,
+      selectedFileCount: packages.length,
+      declaredTotalBytes: packages.length,
+      validPackageCount: packages.length,
+      warningPackageCount: 0,
+      invalidPackageCount: 0,
+      totalWarnings: 0,
+      totalErrors: 0,
+      mediaValidationMode: 'descriptor_only',
+      batchIssues: [],
+      packages,
+      adminReference: REFERENCE_INTENT,
+    },
+  };
+}
+
+function makeSelectedAnnualComponentFiles(): File[] {
+  return Array.from({ length: 26 }, (_, index) => {
+    const packageName = `project-${String(index + 1).padStart(2, '0')}`;
+    return makeFile(`${ROOT}/${packageName}/project.json`, 'metadata', 'application/json');
+  });
+}
+
+const annualComponentStubs = {
+  preview: vi.fn(),
+  import: vi.fn(),
+};
+
+describe('Annual intake component verification authority', () => {
+  it('keeps restored terminal progress resumable until authoritative import success', async () => {
+    localStorage.clear();
+    const plan = makeAnnualComponentPlan();
+    const selected = plan.mergedPreview.packages.map((pkg) => pkg.packagePath);
+    const restoredProgress = createInitialAnnualIntakeProgress(plan, selected, []);
+    restoredProgress.chunks = restoredProgress.chunks.map((chunk, index) => ({
+      ...chunk,
+      status: 'completed',
+      batchId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      mediaAssetCount: 1,
+    }));
+    localStorage.setItem(
+      `admin-cms.annual-intake.v1.${plan.cohortId}`,
+      JSON.stringify(restoredProgress),
+    );
+
+    const verifiedProgress: AnnualIntakeProgress = {
+      ...restoredProgress,
+      chunks: restoredProgress.chunks.map((chunk) => ({ ...chunk })),
+    };
+    annualComponentStubs.preview.mockReset();
+    annualComponentStubs.import.mockReset();
+    annualComponentStubs.preview.mockResolvedValue({ success: true, plan });
+    annualComponentStubs.import.mockImplementation(async (params: {
+      onProgress?: (progress: AnnualIntakeProgress) => void;
+    }) => {
+      params.onProgress?.(verifiedProgress);
+      return { success: true, progress: verifiedProgress, error: null, failedChunkIndex: null };
+    });
+
+    vi.doMock('../annualIntakeOrchestration', () => ({
+      runAnnualIntakePreview: annualComponentStubs.preview,
+      runAnnualIntakeImport: annualComponentStubs.import,
+    }));
+
+    type ReferenceSectionProps = {
+      onMappingConfigured: (value: {
+        referenceFile: File;
+        mappingConfig: AdminReferenceMappingConfig;
+      } | null) => void;
+      disabled?: boolean;
+    };
+    vi.doMock('../../components/imports/AdminReferenceDatasetSection', () => ({
+      AdminReferenceDatasetSection: ({ onMappingConfigured, disabled }: ReferenceSectionProps) => React.createElement(
+        'button',
+        {
+          type: 'button',
+          disabled,
+          onClick: () => onMappingConfigured({
+            referenceFile: new File(['reference'], 'reference.xlsx'),
+            mappingConfig: {
+              worksheet: 'REFERENCE',
+              matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+              comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Title' }],
+              reconciliationContractVersion: 'admin-reference-reconciliation-v1',
+            },
+          }),
+        },
+        'Configure test reference',
+      ),
+    }));
+
+    try {
+      const { default: BrowserImportPreviewClient } = await import('../../components/imports/BrowserImportPreviewClient');
+      render(React.createElement(BrowserImportPreviewClient));
+      fireEvent.click(screen.getByRole('button', { name: 'Configure test reference' }));
+      fireEvent.change(screen.getByLabelText('Upload project directory'), {
+        target: { files: makeSelectedAnnualComponentFiles() },
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Preview annual intake' }));
+      });
+
+      await waitFor(() => expect(screen.getByText('Annual intake cohort ready')).toBeTruthy());
+      expect(screen.queryByText(/All selected chunks completed and were verified by the server/i)).toBeNull();
+      expect(screen.getByText(/Saved progress needs server verification/i)).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Verify / Resume annual intake' })).toBeTruthy();
+      expect(screen.queryByRole('link', { name: /Open chunk/i })).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Verify / Resume annual intake' }));
+      await waitFor(() => expect(annualComponentStubs.import).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getByText(/All selected chunks completed and were verified by the server/i)).toBeTruthy());
+      expect(screen.getByRole('link', { name: 'Open chunk 1' })).toBeTruthy();
+    } finally {
+      cleanup();
+      localStorage.clear();
+      vi.resetModules();
+      vi.doUnmock('../annualIntakeOrchestration');
+      vi.doUnmock('../../components/imports/AdminReferenceDatasetSection');
+    }
+  }, 15_000);
 });

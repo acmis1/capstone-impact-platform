@@ -75,6 +75,8 @@ export default function BrowserImportPreviewClient() {
   const [annualPreviewProgress, setAnnualPreviewProgress] = useState<{ completedChunks: number; totalChunks: number } | null>(null);
   const [annualProgress, setAnnualProgress] = useState<AnnualIntakeProgress | null>(null);
   const [annualSelectionConfirmed, setAnnualSelectionConfirmed] = useState(false);
+  // Persisted progress can resume work, but it cannot prove server convergence or batch identity.
+  const [annualVerificationSucceeded, setAnnualVerificationSucceeded] = useState(false);
   const [annualError, setAnnualError] = useState<string | null>(null);
   const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
   const [selectionState, setRawSelectionState] = useState<BrowserImportSelectionState>(resetSelectionState());
@@ -170,6 +172,7 @@ export default function BrowserImportPreviewClient() {
     setAnnualPreviewProgress(null);
     setAnnualProgress(null);
     setAnnualSelectionConfirmed(false);
+    setAnnualVerificationSucceeded(false);
     setAnnualError(null);
     setApiError(null);
     invalidateStagingResult();
@@ -252,6 +255,7 @@ export default function BrowserImportPreviewClient() {
     setAnnualPreviewProgress(null);
     setAnnualProgress(null);
     setAnnualSelectionConfirmed(false);
+    setAnnualVerificationSucceeded(false);
     setAnnualError(null);
     setManifestCache(null);
     invalidateStagingResult();
@@ -293,6 +297,7 @@ export default function BrowserImportPreviewClient() {
           });
           setAnnualProgress(savedProgress);
           setAnnualSelectionConfirmed(true);
+          setAnnualVerificationSucceeded(false);
         } else {
           updateSelectionState(initialSelection);
         }
@@ -416,6 +421,7 @@ export default function BrowserImportPreviewClient() {
     setAnnualPreviewProgress(null);
     setAnnualProgress(null);
     setAnnualSelectionConfirmed(false);
+    setAnnualVerificationSucceeded(false);
     setAnnualError(null);
     setApiError(null);
     invalidateStagingResult();
@@ -428,18 +434,21 @@ export default function BrowserImportPreviewClient() {
   const handleToggleValid = (pkgPath: string) => {
     if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia || annualProgressStarted) return;
     invalidateStagingResult();
+    setAnnualVerificationSucceeded(false);
     updateSelectionState((prev) => toggleValidPackage(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningAck = (pkgPath: string) => {
     if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia || annualProgressStarted) return;
     invalidateStagingResult();
+    setAnnualVerificationSucceeded(false);
     updateSelectionState((prev) => toggleWarningAcknowledgement(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningSelect = (pkgPath: string) => {
     if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia || annualProgressStarted) return;
     invalidateStagingResult();
+    setAnnualVerificationSucceeded(false);
     updateSelectionState((prev) => toggleWarningPackageSelection(prev, pkgPath, previewResult.packages));
   };
 
@@ -479,6 +488,7 @@ export default function BrowserImportPreviewClient() {
       if (!annualSelectionConfirmed) return;
 
       setIsStaging(true);
+      setAnnualVerificationSucceeded(false);
       setAnnualError(null);
       try {
         const result = await runAnnualIntakeImport({
@@ -491,8 +501,14 @@ export default function BrowserImportPreviewClient() {
           adminReferenceMappingConfig: adminReferenceData?.mappingConfig,
           onProgress: setAnnualProgress,
         });
-        if (!result.success) setAnnualError(result.error || 'The annual intake paused after a failed chunk.');
+        if (result.success) {
+          setAnnualVerificationSucceeded(true);
+        } else {
+          setAnnualVerificationSucceeded(false);
+          setAnnualError(result.error || 'The annual intake paused after a failed chunk.');
+        }
       } catch {
+        setAnnualVerificationSucceeded(false);
         setAnnualError('The annual intake could not be safely started. Please preview the folder again and try again.');
       } finally {
         setIsStaging(false);
@@ -570,7 +586,9 @@ export default function BrowserImportPreviewClient() {
     currentStep = 2;
   }
   const isWorkflowComplete = Boolean(mediaCompleteResult);
-  const isAnnualWorkflowComplete = Boolean(annualProgress && annualProgress.chunks.every((chunk) => chunk.status === 'completed' || chunk.status === 'skipped'));
+  const annualProgressComplete = Boolean(annualProgress && annualProgress.chunks.every((chunk) => chunk.status === 'completed' || chunk.status === 'skipped'));
+  const isAnnualWorkflowComplete = annualVerificationSucceeded && annualProgressComplete;
+  const annualVerificationRequired = Boolean(annualProgress) && !annualVerificationSucceeded;
 
   // Single authoritative presentation phase.
   //
@@ -616,6 +634,7 @@ export default function BrowserImportPreviewClient() {
           setAnnualPreviewProgress(null);
           setAnnualProgress(null);
           setAnnualSelectionConfirmed(false);
+          setAnnualVerificationSucceeded(false);
           setAnnualError(null);
           invalidateStagingResult();
           updateSelectionState(resetSelectionState());
@@ -1129,11 +1148,11 @@ export default function BrowserImportPreviewClient() {
                   <Layers className="h-4 w-4 text-information" aria-hidden="true" />
                   <span>Annual intake cohort ready</span>
                 </div>
-                <span className="font-mono text-xs text-muted-foreground">{annualPlan.cohortId}</span>
+                <span className="font-mono text-xs text-muted-foreground">Resume / cohort ID: {annualPlan.cohortId}</span>
               </div>
 
               <p className="text-muted-foreground text-xs leading-relaxed">
-                This cohort is processed in order as independent import batches. A failed chunk can be retried; completed chunks remain saved. The cohort is not one atomic transaction.
+                This intake is processed in order as independent import batches. A failed chunk can be retried; completed chunks remain saved. The Resume / cohort ID is only a browser resume and tab-coordination identity; server batches use the revalidated selected folder root.
               </p>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-2.5 rounded bg-background border border-border text-xs">
@@ -1150,7 +1169,7 @@ export default function BrowserImportPreviewClient() {
                   <strong className="text-foreground">25 packages</strong>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block">Server group:</span>
+                  <span className="text-muted-foreground block">Resume / cohort ID:</span>
                   <strong className="text-foreground">{annualPlan.cohortId}</strong>
                 </div>
               </div>
@@ -1187,8 +1206,10 @@ export default function BrowserImportPreviewClient() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
                 <span className="text-xs text-muted-foreground">
                   {isAnnualWorkflowComplete
-                    ? 'All selected chunks completed. Open any server batch below for review.'
-                    : 'Media is committed per chunk after metadata. Retry uses the same verified content and batch identity.'}
+                    ? 'All selected chunks completed and were verified by the server. Open any server batch below for review.'
+                    : annualVerificationRequired
+                      ? 'Saved progress needs server verification. Verify / Resume to replay each selected chunk safely before opening batch details.'
+                      : 'Media is committed per chunk after metadata. Retry uses the same verified content and server-returned batch identity.'}
                 </span>
                 {!isAnnualWorkflowComplete && (
                   <Button
@@ -1200,12 +1221,18 @@ export default function BrowserImportPreviewClient() {
                     className="font-semibold shrink-0"
                   >
                     <Upload className="h-4 w-4 mr-1.5" aria-hidden="true" />
-                    {isStaging ? 'Processing annual intake…' : annualProgressStarted ? 'Retry failed chunk(s)' : 'Start annual intake'}
+                    {isStaging
+                      ? 'Processing annual intake…'
+                      : annualVerificationRequired
+                        ? 'Verify / Resume annual intake'
+                        : annualProgressStarted
+                          ? 'Retry failed chunk(s)'
+                          : 'Start annual intake'}
                   </Button>
                 )}
               </div>
 
-              {annualProgress && annualProgress.chunks.some((chunk) => chunk.batchId) && (
+              {annualVerificationSucceeded && annualProgress && annualProgress.chunks.some((chunk) => chunk.batchId) && (
                 <div className="flex flex-wrap gap-2 pt-1">
                   {annualProgress.chunks.filter((chunk) => chunk.batchId).map((chunk) => (
                     <Button key={chunk.index} asChild variant="outline" size="sm">

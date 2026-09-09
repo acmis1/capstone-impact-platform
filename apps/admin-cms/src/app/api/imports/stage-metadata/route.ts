@@ -21,7 +21,6 @@ import { BrowserImportMetadataStageErrorCode } from '../../../../import/browserI
 import {
   resolveServerAdminReferenceAnalysisOptions,
 } from '../../../../import/adminReferenceReconciliation';
-import { isAnnualIntakeCohortId } from '../../../../import/annualIntakeContract';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -150,17 +149,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     const submittedIntent = intentValidation.data;
 
-    const cohortEntries = formData.getAll('cohortId');
-    if (cohortEntries.length > 1) return stageError('DUPLICATE_INTENT', 400);
-    let cohortId: string | undefined;
-    if (cohortEntries.length === 1) {
-      const rawCohortId = cohortEntries[0];
-      if (typeof rawCohortId !== 'string' || !isAnnualIntakeCohortId(rawCohortId)) {
-        return stageError('INVALID_INTENT', 400);
-      }
-      cohortId = rawCohortId;
-    }
-
     // Step 6: Validate multipart file uploads against preflight expected metadata keys
     const seenFormKeys = new Set<string>();
     const pendingFileReads: Array<{ key: string; file: File; expectedBytes: number }> = [];
@@ -170,7 +158,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     let adminReferenceMappingJsonStr: string | null = null;
 
     for (const [key, value] of formData.entries()) {
-      if (key === 'manifest' || key === 'intent' || key === 'cohortId') continue;
+      if (key === 'manifest' || key === 'intent') continue;
       if (key === 'referenceFile') {
         if (adminReferenceFile !== null) return stageError('DUPLICATE_UPLOAD_FIELD', 400);
         if (!(value instanceof File)) return stageError('UNEXPECTED_UPLOAD_FIELD', 400);
@@ -272,7 +260,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       authContext,
       serverAnalysis,
       intent: canonicalServerIntent,
-      cohortId,
     });
 
     if (!stageResult.success) {
