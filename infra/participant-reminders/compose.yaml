@@ -1,0 +1,15 @@
+services:
+  participant-preview-reminders:
+    build:
+      context: ../..
+      dockerfile: infra/participant-reminders/Dockerfile
+    # Supply an approved file outside the repository. Run exactly one service instance.
+    env_file:
+      - ${PARTICIPANT_PREVIEW_REMINDERS_ENV_FILE:?Set PARTICIPANT_PREVIEW_REMINDERS_ENV_FILE to an approved env file}
+    # These independent guard values are injected by the host environment so an env-file relabel
+    # cannot redefine the hosted target or its mutation acknowledgement.
+    environment:
+      CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF: ${CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF-}
+      CAPSTONE_STAGING_MUTATION_CONFIRMATION: ${CAPSTONE_STAGING_MUTATION_CONFIRMATION-}
+    init: true
+    restart: on-failure

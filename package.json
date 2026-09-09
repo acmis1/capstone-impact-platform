@@ -68,6 +68,8 @@
     "verify:participant-preview-notification-runtime": "npm run verify:participant-preview-notification-runtime --workspace=apps/admin-cms",
     "verify:participant-preview-reminder-runtime": "npm run verify:participant-preview-reminder-runtime --workspace=apps/admin-cms",
     "run:participant-preview-reminders": "npm run run:participant-preview-reminders --workspace=apps/admin-cms",
+    "build:participant-preview-reminder-runner": "npm run build:participant-preview-reminder-runner --workspace=apps/admin-cms",
+    "run:participant-preview-reminders:hosted": "npm run run:participant-preview-reminders:hosted --workspace=apps/admin-cms",
     "verify:controlled-publication-runtime": "npm run verify:controlled-publication-runtime --workspace=apps/admin-cms",
     "verify:annual-publication-evidence": "npm run verify:annual-publication-evidence --workspace=apps/admin-cms",
     "verify:controlled-public-removal-runtime": "npm run verify:controlled-public-removal-runtime --workspace=apps/admin-cms",
