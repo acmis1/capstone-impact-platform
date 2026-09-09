@@ -1,0 +1,118 @@
+manifestVersion: 1
+kind: WebDeploymentReconciliationManifest
+applyMode: manual-reconciliation-only
+
+identity:
+  application: admin-cms
+  environment: staging
+  dataClass: synthetic-only
+  productionCutover: false
+  liveDudaPublication: false
+
+service:
+  provider: render
+  name: capstone-admin-cms-staging-v2
+  sourceBranch: main
+  region: ap-southeast-1
+  plan: free
+  autoDeploy: false
+  rootDirectory: .
+  runtime:
+    name: node
+    version: 24.14.1
+    npmVersion: 11.11.0
+  commands:
+    installAndBuild: npm ci && npm run build:admin
+    start: npm run start --workspace=apps/admin-cms
+  health:
+    path: /api/readiness
+    expectedStatus: 200
+
+environment:
+  # Owner-supplied values are deliberately null. Populate them only in the
+  # provider secret/config store during a separately authorized reconciliation.
+  - name: NEXT_PUBLIC_SUPABASE_URL
+    required: true
+    source: owner-config
+    sensitive: true
+    value: null
+  - name: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+    required: true
+    source: owner-config
+    sensitive: true
+    value: null
+  - name: SUPABASE_SECRET_KEY
+    required: true
+    source: owner-secret-store
+    secret: true
+    value: null
+  - name: CAPSTONE_AUTH_FLOW_SECRET
+    required: true
+    source: owner-secret-store
+    secret: true
+    value: null
+  - name: CAPSTONE_RUNTIME_ENV
+    required: true
+    source: fixed-safe-value
+    value: staging
+  - name: CAPSTONE_EXPECTED_SUPABASE_HOST
+    required: true
+    source: owner-config
+    sensitive: true
+    value: null
+  - name: CAPSTONE_STAGING_MUTATION_CONFIRMATION
+    required: false
+    source: owner-config
+    sensitive: true
+    value: null
+  - name: SUPABASE_DRAFT_BUCKET
+    required: false
+    source: fixed-safe-default
+    value: project-drafts-private
+  - name: SUPABASE_PUBLIC_ASSETS_BUCKET
+    required: false
+    source: fixed-safe-default
+    value: project-public-assets
+  - name: SUPABASE_PUBLIC_FEEDS_BUCKET
+    required: false
+    source: fixed-safe-default
+    value: public-feeds
+  - name: SUPABASE_PUBLIC_FEED_FILE
+    required: false
+    source: fixed-safe-default
+    value: capstones-latest.json
+  - name: GEMINI_API_KEY
+    required: false
+    source: owner-secret-store
+    secret: true
+    value: null
+  - name: GEMINI_ASSISTIVE_EXTRACTION_ENABLED
+    required: false
+    source: fail-closed-default
+    value: false
+  - name: PARTICIPANT_PREVIEW_EMAIL_ENABLED
+    required: false
+    source: fail-closed-default
+    value: false
+  - name: PARTICIPANT_PREVIEW_REMINDERS_ENABLED
+    required: false
+    source: fail-closed-default
+    value: false
+  - name: STAFF_PROVISIONING_ENABLED
+    required: false
+    source: fail-closed-default
+    value: false
+  - name: CAPSTONE_STAGING_PUBLICATION_ENABLED
+    required: false
+    source: fail-closed-default
+    value: false
+  - name: CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED
+    required: false
+    source: fail-closed-default
+    value: false
+
+reconciliation:
+  automaticDeploymentMustRemainOff: true
+  providerImportMustNotPublish: true
+  productionAndLiveDudaMustRemainSeparate: true
+  ownerMustRecheckProviderTerms: true

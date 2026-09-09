@@ -1,0 +1,55 @@
+name: Supply Chain Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  repository-security:
+    name: Repository security policy and secret patterns
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js 24.14.1
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.14.1'
+
+      - name: Run security policy regression tests
+        run: node --test tools/security/*.test.mjs
+
+      - name: Scan tracked content for high-signal secret patterns
+        run: npm run check:secrets
+
+      - name: Verify workflow and lockfile security policy
+        run: npm run check:security-ci
+
+  production-advisory-audit:
+    name: Root npm Production Advisory Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js 24.14.1
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.14.1'
+
+      # This is a root-lockfile production advisory check, not a dependency-delta review. It
+      # intentionally depends on the npm registry's current advisory service and availability.
+      - name: Fail on current high or critical production advisories
+        run: npm audit --package-lock-only --omit=dev --audit-level=high

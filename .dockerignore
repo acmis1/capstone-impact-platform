@@ -9,3 +9,9 @@ node_modules
 .next
 coverage
 Prototype
+
+# Environment files can contain server credentials and must never enter a build context.
+.env
+.env.*
+**/.env
+**/.env.*

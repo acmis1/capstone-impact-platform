@@ -1,5 +1,9 @@
 FROM node:24.14.1-bookworm-slim
 
+ARG CAPSTONE_DEPLOYMENT_VERSION=""
+
+LABEL org.opencontainers.image.revision="${CAPSTONE_DEPLOYMENT_VERSION}"
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/opt/capstone/venv/bin:$PATH \
     PYTHONUNBUFFERED=1
@@ -40,6 +44,8 @@ RUN mkdir -p /opt/capstone/artifacts/paddle /opt/capstone/artifacts/languagetool
 
 RUN python3 -c "from capstone_assistive_worker.ocr.contract import OcrAvailabilityState; from capstone_assistive_worker.ocr.paddle_title import PaddleTitleOcrProvider; availability = PaddleTitleOcrProvider(models_dir='/opt/capstone/artifacts/paddle').availability(); assert availability.state is OcrAvailabilityState.AVAILABLE, availability.message"
 
-COPY . .
+COPY apps/admin-cms apps/admin-cms
 
-CMD ["npm", "run", "run:assistive-worker:hosted", "--workspace=apps/admin-cms"]
+USER node
+
+CMD ["node", "--import", "tsx", "apps/admin-cms/src/scripts/runHostedAssistiveCoordinator.ts"]

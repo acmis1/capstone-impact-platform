@@ -5,7 +5,7 @@ name: Assistive Executor Images
 # Manual only, and publishing is opt-in and off by default: a maintainer must deliberately request
 # it after reviewing the third-party redistribution position recorded in
 # docs/handover/third-party-licences.md. A build alone proves the pinned provider artifact hashes
-# and prints the digests the infrastructure template must be pinned to.
+# and exports local OCI evidence whose manifest digests the infrastructure template can be pinned to.
 
 on:
   workflow_dispatch:
@@ -36,14 +36,16 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
       - name: Build heavy assistive worker image
         if: inputs.build_worker
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         id: worker
         with:
           context: .
@@ -52,10 +54,11 @@ jobs:
           provenance: false
           push: false
           tags: ghcr.io/${{ github.repository }}/capstone-assistive-worker:${{ github.sha }}
+          outputs: type=oci,dest=/tmp/capstone-assistive-worker.oci.tar
 
       - name: Build scheduled dispatcher image
         if: inputs.build_dispatcher
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         id: dispatcher
         with:
           context: .
@@ -64,12 +67,28 @@ jobs:
           provenance: false
           push: false
           tags: ghcr.io/${{ github.repository }}/capstone-assistive-dispatcher:${{ github.sha }}
+          outputs: type=oci,dest=/tmp/capstone-assistive-dispatcher.oci.tar
 
-      - name: Report image digests to pin in infrastructure
+      - name: Validate and report local OCI image manifest digests
+        env:
+          BUILD_WORKER: ${{ inputs.build_worker }}
+          BUILD_DISPATCHER: ${{ inputs.build_dispatcher }}
         run: |
+          set -euo pipefail
+
           echo "commit: ${{ github.sha }}"
-          echo "worker digest: ${{ steps.worker.outputs.digest }}"
-          echo "dispatcher digest: ${{ steps.dispatcher.outputs.digest }}"
+          if [[ "$BUILD_WORKER" == "true" ]]; then
+            worker_digest="$(bash tools/assistive-image-digest/validate-oci-image-digest.sh worker /tmp/capstone-assistive-worker.oci.tar)"
+            echo "worker digest: $worker_digest"
+          else
+            echo "worker image: not built (build_worker=false)"
+          fi
+          if [[ "$BUILD_DISPATCHER" == "true" ]]; then
+            dispatcher_digest="$(bash tools/assistive-image-digest/validate-oci-image-digest.sh dispatcher /tmp/capstone-assistive-dispatcher.oci.tar)"
+            echo "dispatcher digest: $dispatcher_digest"
+          else
+            echo "dispatcher image: not built (build_dispatcher=false)"
+          fi
           echo "Published: false"
 
   publish:
@@ -82,13 +101,15 @@ jobs:
       packages: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
       - name: Authenticate to the container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -96,7 +117,7 @@ jobs:
 
       - name: Build and publish heavy assistive worker image
         if: inputs.build_worker
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         id: worker
         with:
           context: .
@@ -108,7 +129,7 @@ jobs:
 
       - name: Build and publish scheduled dispatcher image
         if: inputs.build_dispatcher
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         id: dispatcher
         with:
           context: .

@@ -26,6 +26,7 @@
     "check:staging-media": "tsx src/scripts/checkMediaAssets.ts",
     "check:staging-auth": "tsx src/scripts/checkStagingAuth.ts",
     "check:deployment-readiness": "tsx src/scripts/checkHostedDeploymentReadiness.ts",
+    "check:deployment-manifest": "tsx src/scripts/checkDeploymentManifest.ts",
     "check:hosted-smoke": "tsx src/scripts/checkHostedDeploymentSmoke.ts",
     "check:operational-readiness": "tsx src/scripts/checkM6OperationalReadiness.ts",
     "check:zero-cost": "tsx src/scripts/checkZeroCostEnvelope.ts",

@@ -45,13 +45,20 @@ export function checkTerminology(
 }
 
 const yamlFiles = [
+  '.github/dependabot.yml',
+  '.github/workflows/codeql.yml',
   '.github/workflows/ci.yml',
   '.github/workflows/assistive-worker-ci.yml',
   '.github/workflows/assistive-benchmark-ci.yml',
   '.github/workflows/assistive-worker-image.yml',
+  '.github/workflows/browser-release-evidence.yml',
+  '.github/workflows/security.yml',
+  '.github/workflows/zero-cost-staging-monitoring.yml',
   '.github/ISSUE_TEMPLATE/bug.yml',
   '.github/ISSUE_TEMPLATE/feature.yml',
   '.github/ISSUE_TEMPLATE/task.yml',
+  'infra/assistive-worker/compose.yaml',
+  'infra/deployment/admin-cms-staging.manifest.yaml',
 ];
 
 export function checkYaml(repoRoot = path.resolve(__dirname, '../../../../')): string[] {
