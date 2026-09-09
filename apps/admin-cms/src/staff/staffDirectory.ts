@@ -7,6 +7,9 @@ interface AdminUserRow {
   id: unknown;
   email: unknown;
   full_name: unknown;
+  lifecycle_status: unknown;
+  lifecycle_version: unknown;
+  lifecycle_updated_at: unknown;
 }
 
 interface RoleRow {
@@ -24,12 +27,24 @@ interface ProvisioningRow {
   created_at: unknown;
 }
 
+interface LifecycleEventRow {
+  target_admin_user_id: unknown;
+  lifecycle_version: unknown;
+  provider_status: unknown;
+}
+
 function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
 function optionalText(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
+}
+
+function lifecycleVersion(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error('STAFF_DIRECTORY_READ_FAILED');
+  return parsed;
 }
 
 /**
@@ -43,15 +58,20 @@ function optionalText(value: unknown): string | null {
 export async function readStaffDirectory(
   client: SupabaseClient,
 ): Promise<{ staff: StaffDirectoryEntry[]; incidents: StaffProvisioningIncident[] }> {
-  const [profiles, roles, provisioning] = await Promise.all([
-    client.from('admin_users').select('id, email, full_name'),
+  const [profiles, roles, provisioning, lifecycleEvents] = await Promise.all([
+    client.from('admin_users').select(
+      'id, email, full_name, lifecycle_status, lifecycle_version, lifecycle_updated_at',
+    ),
     client.from('user_roles').select('user_id, role'),
     client
       .from('staff_provisioning_requests')
       .select('admin_user_id, normalized_email, full_name, requested_roles, status, failure_code, created_at'),
+    client
+      .from('staff_lifecycle_events')
+      .select('target_admin_user_id, lifecycle_version, provider_status'),
   ]);
 
-  if (profiles.error || roles.error || provisioning.error) {
+  if (profiles.error || roles.error || provisioning.error || lifecycleEvents.error) {
     throw new Error('STAFF_DIRECTORY_READ_FAILED');
   }
 
@@ -65,6 +85,12 @@ export async function readStaffDirectory(
   }
 
   const provisioningRows = (provisioning.data ?? []) as ProvisioningRow[];
+  const providerStatusByTargetVersion = new Map<string, string>();
+  for (const row of (lifecycleEvents.data ?? []) as LifecycleEventRow[]) {
+    const targetId = text(row.target_admin_user_id);
+    const version = lifecycleVersion(row.lifecycle_version);
+    if (targetId) providerStatusByTargetVersion.set(`${targetId}:${version}`, text(row.provider_status));
+  }
 
   const pendingByAdminId = new Map<string, ProvisioningRow>();
   for (const row of provisioningRows) {
@@ -85,11 +111,29 @@ export async function readStaffDirectory(
   const staff: StaffDirectoryEntry[] = ((profiles.data ?? []) as AdminUserRow[]).map((row) => {
     const id = text(row.id);
     const email = text(row.email);
+    const version = lifecycleVersion(row.lifecycle_version);
+    const lifecycleStatus = text(row.lifecycle_status);
+    if (lifecycleStatus !== 'active' && lifecycleStatus !== 'deactivated') {
+      throw new Error('STAFF_DIRECTORY_READ_FAILED');
+    }
+    const eventProviderStatus = providerStatusByTargetVersion.get(`${id}:${version}`);
+    const providerSync = eventProviderStatus === 'pending'
+      ? ('pending' as const)
+      : eventProviderStatus === 'failed'
+        ? ('attention_required' as const)
+        : ('synchronized' as const);
     return {
       fullName: text(row.full_name),
       email,
       roles: canonicalizeRoles(rolesByUser.get(id) ?? []),
-      status: pendingByAdminId.has(id) ? ('pending_activation' as const) : ('active' as const),
+      status: lifecycleStatus === 'deactivated'
+        ? ('deactivated' as const)
+        : pendingByAdminId.has(id)
+          ? ('pending_activation' as const)
+          : ('active' as const),
+      version,
+      providerSync,
+      lastChangedAt: optionalText(row.lifecycle_updated_at),
       requestedAt: requestedAtByEmail.get(email) ?? null,
     };
   });

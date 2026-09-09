@@ -294,11 +294,11 @@ mutation workflows unavailable:
   through each migration. Never clear cost-fence reservations to obtain a match.
 
 Gates 3 and 4 supply migration/schema evidence. `/api/readiness` supplies application
-configuration, target identity, credential-shape and dependency-liveness evidence via a bounded
-service-role HEAD query to `public.programs`. It reports the migration manifest the **bundle
-expects**, plus valid commit metadata when available; it does not inspect migration history,
-correction tables, exact RPC signatures, grants, RLS, policies or bucket inventory. It can be
-green on a 48-state database and cannot replace H1.
+configuration, immutable deployment-commit identity, and bounded dependency evidence by calling
+the current service-role-only, read-only capability sentinel RPC. It reports the migration manifest
+the **bundle expects** and fails closed when the sentinel is absent or stale; it still does not prove
+exact migration history, the complete RPC signature set, grants, RLS policies, or bucket inventory,
+so it cannot replace H1.
 
 ### H2. Post-application deployment verification
 
