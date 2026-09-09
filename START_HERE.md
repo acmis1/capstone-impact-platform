@@ -14,7 +14,8 @@ The Capstone Impact Platform is a school-owned administrative CMS and publicatio
 - **Active Application Code**: [`apps/admin-cms/`](./apps/admin-cms/) — The modern Next.js 16 application containing the admin dashboard, review APIs, schema validators, and public feed compiler.
 - **Active Database Infrastructure**: [`infra/supabase/`](./infra/supabase/) — PostgreSQL migrations, seed SQL, and local development runbooks.
 - **Active Documentation & Contributor Automation**: Root files (`README.md`, `CONTRIBUTING.md`, `AGENTS.md`, `START_HERE.md`), [`docs/`](./docs/), and [`.github/`](./.github/) may also change during active development.
-- **Prototype Boundary**: The [`Prototype/`](./Prototype/) folder contains historical feasibility material and demo pages. Ordinary Admin/CMS work must not casually modify it. Assigned Duda/public-layer integration work may modify the explicitly maintained [`Prototype/duda/`](./Prototype/duda/) renderer and its contract harness when the issue scope authorizes it; `apps/admin-cms` must never import Prototype implementation helpers.
+- **Active Public Layer**: [`apps/public-layer/`](./apps/public-layer/) is the maintained Duda presentation-only package, including renderer assets, current-feed contract fixtures, and loopback browser harnesses. `apps/admin-cms` remains authoritative for editorial data, feed validation, and publication; this package has no live Duda publish authority.
+- **Prototype Boundary**: The [`Prototype/`](./Prototype/) folder contains historical feasibility material and immutable reference snapshots. Current tests and CI must not use its Duda renderer or scripts.
 
 ---
 
@@ -27,8 +28,9 @@ The Capstone Impact Platform is a school-owned administrative CMS and publicatio
 5. **[`README.md`](./README.md)** — Project overview and architecture summary.
 5. **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** — Repository workflow rules, safety boundaries, and definition of done.
 6. **[`apps/admin-cms/README.md`](./apps/admin-cms/README.md)** — Developer guide for the Next.js application, routes, and components.
-7. **[`infra/supabase/local-development.md`](./infra/supabase/local-development.md)** — Local database architecture, migrations, and local verification details.
-8. **[`docs/developer-troubleshooting.md`](./docs/developer-troubleshooting.md)** — Fixes for common setup errors.
+7. **[`apps/public-layer/README.md`](./apps/public-layer/README.md)** — Maintained Duda presentation boundary and loopback harnesses.
+8. **[`infra/supabase/local-development.md`](./infra/supabase/local-development.md)** — Local database architecture, migrations, and local verification details.
+9. **[`docs/developer-troubleshooting.md`](./docs/developer-troubleshooting.md)** — Fixes for common setup errors.
 
 ---
 
@@ -107,7 +109,7 @@ npm run supabase:stop
 capstone-impact-platform/
 ├── .github/                  # PR templates, issue templates, CODEOWNERS, CI workflows
 ├── apps/
-│   └── admin-cms/            # Active Next.js 16 Admin/CMS application
+│   ├── admin-cms/            # Active Next.js 16 Admin/CMS application
 │       ├── src/
 │       │   ├── app/          # App Router routes (/admin, /login, /api/...)
 │       │   ├── components/   # UI components & admin shell
@@ -116,12 +118,17 @@ capstone-impact-platform/
 │       │   ├── scripts/      # Verification & setup runners
 │       │   └── security/     # Security tests & validation suites
 │       └── README.md         # Admin/CMS technical documentation
+│   └── public-layer/         # Active Duda presentation assets and loopback harnesses
+│       ├── duda/             # Renderer templates, styles, and synthetic feed fixtures
+│       ├── scripts/          # URL-validator and browser harness scripts
+│       ├── AGENTS.md         # Public-layer boundary rules
+│       └── README.md         # Public-layer maintenance guide
 ├── docs/                     # Technical specifications & runbooks
 │   └── developer-troubleshooting.md # Developer setup troubleshooting guide
 ├── infra/
 │   └── supabase/             # Database migrations, seed SQL, runbooks
 │       └── migrations/       # 53 timestamped PostgreSQL migration files
-├── Prototype/                # Historical material; maintained Duda renderer is under duda/
+├── Prototype/                # Historical feasibility material and immutable reference snapshot
 ├── AGENTS.md                 # Agent governance & repository rules
 ├── CONTRIBUTING.md           # Contributor workflow & safety rules
 ├── README.md                 # Primary repository overview
@@ -288,7 +295,7 @@ Do not select broad roadmap topics directly from `docs/implementation-backlog.md
 - ❌ **DO NOT** access hosted Supabase, Render, Vercel, or Duda dashboards.
 - ❌ **DO NOT** hardcode or commit API keys, secrets, credentials, passwords, or connection strings.
 - ❌ **DO NOT** use real participant, staff, or supervisor personal identity data (use synthetic data only).
-- ❌ **DO NOT** casually modify historical `Prototype/` material; only authorized Duda/public-layer work may change the maintained `Prototype/duda/` renderer and contract harness.
+- ❌ **DO NOT** modify, delete, or redirect current checks to historical `Prototype/` material; maintain the Duda presentation layer under `apps/public-layer/`.
 - ❌ **DO NOT** edit, rename, or delete existing migration files `0001` through the current repository candidate `0053`; migrations are append-only after merge. The latest hosted evidence remains at `0052` until candidate `0053` is separately verified there.
 - ❌ **DO NOT** self-merge Pull Requests without maintainer sign-off.
 

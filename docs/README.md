@@ -9,8 +9,9 @@ When verifying system behavior or planning extensions, information must be refer
 1. **Executable Implementation**: Executable code, PostgreSQL schema migrations, and automated unit/integration test suites on the `main` branch define the absolute source of truth for current implemented behavior.
 2. **Root Documentation**: General cross-system architecture, operational constraints, security guidelines, and delivery backlog records reside in this `/docs` directory.
 3. **Admin CMS Foundation**: Application-specific staging configurations, environment variables, local testing scripts, and directory structures reside in [apps/admin-cms/README.md](../apps/admin-cms/README.md).
-4. **Infrastructure & Governance**: Local development guide, staging migration reconciliation runbook, key governance, and staff lifecycle design reside under [infra/supabase/](../infra/supabase/).
-5. **Feasibility Prototype**: Legacy prototype operations, recovery scripts, local dry-run configurations, and recovery execution steps reside in [Prototype/docs/supabase-recovery-runbook.md](../Prototype/docs/supabase-recovery-runbook.md) and [Prototype/docs/deployment-staging.md](../Prototype/docs/deployment-staging.md).
+4. **Active Public Presentation Layer**: Maintained Duda renderer assets, synthetic contract fixtures, and loopback browser harnesses reside in [apps/public-layer/README.md](../apps/public-layer/README.md).
+5. **Infrastructure & Governance**: Local development guide, staging migration reconciliation runbook, key governance, and staff lifecycle design reside under [infra/supabase/](../infra/supabase/).
+6. **Feasibility Prototype**: Legacy prototype operations, recovery scripts, local dry-run configurations, and recovery execution steps reside in [Prototype/docs/supabase-recovery-runbook.md](../Prototype/docs/supabase-recovery-runbook.md) and [Prototype/docs/deployment-staging.md](../Prototype/docs/deployment-staging.md).
 6. **Historical Reference**: The pre-consolidation planning snapshot is permanently preserved under the annotated tag `archive-docs-foundation-2026-07-18`. This tag points to the historical documentation foundation that preceded the PR #12 consolidated rewrite, serves purely as historical evidence, and must not be referenced or treated as current operational guidance.
 
 ---

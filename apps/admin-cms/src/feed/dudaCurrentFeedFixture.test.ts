@@ -5,7 +5,7 @@ import { PublicFeedRecord } from '../domain/publicFeed';
 import { validatePublicFeed } from './validatePublicFeed';
 
 const fixturePath = new URL(
-  '../../../../Prototype/duda/current-feed-demo-fixture.json',
+  '../../../../apps/public-layer/duda/current-feed-demo-fixture.json',
   import.meta.url,
 );
 
