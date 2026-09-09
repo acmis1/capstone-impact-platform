@@ -37,6 +37,14 @@ import {
 import { runBrowserImportPreparation } from '../../import/browserImportPreparationController';
 import { runBrowserImportMetadataStaging } from '../../import/browserImportStagingController';
 import { runBrowserImportMediaStaging } from '../../import/browserImportMediaStagingController';
+import {
+  canResumeAnnualIntake,
+  createBrowserAnnualIntakeProgressStore,
+  isStoredAnnualIntakeProgress,
+  type AnnualIntakePreviewPlan,
+  type AnnualIntakeProgress,
+} from '../../import/annualIntakeContract';
+import { runAnnualIntakeImport, runAnnualIntakePreview } from '../../import/annualIntakeOrchestration';
 import { AdminReferenceDatasetSection } from './AdminReferenceDatasetSection';
 import { ImportWorkflowGuide } from './ImportWorkflowGuide';
 import type { AdminReferenceMappingConfig } from '../../import/adminReferenceSharedContract';
@@ -63,6 +71,11 @@ export default function BrowserImportPreviewClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [previewResult, setPreviewResult] = useState<BrowserImportPreviewBatch | null>(null);
+  const [annualPlan, setAnnualPlan] = useState<AnnualIntakePreviewPlan | null>(null);
+  const [annualPreviewProgress, setAnnualPreviewProgress] = useState<{ completedChunks: number; totalChunks: number } | null>(null);
+  const [annualProgress, setAnnualProgress] = useState<AnnualIntakeProgress | null>(null);
+  const [annualSelectionConfirmed, setAnnualSelectionConfirmed] = useState(false);
+  const [annualError, setAnnualError] = useState<string | null>(null);
   const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
   const [selectionState, setRawSelectionState] = useState<BrowserImportSelectionState>(resetSelectionState());
   const [manifestCache, setManifestCache] = useState<SelectionManifest | null>(null);
@@ -114,6 +127,7 @@ export default function BrowserImportPreviewClient() {
 
   const stagingLockRef = useRef(false);
   const mediaCompleteLockRef = useRef(false);
+  const annualProgressStoreRef = useRef(createBrowserAnnualIntakeProgressStore());
   const preparationLockRef = useRef(false);
   const selectionStateRef = useRef<BrowserImportSelectionState>(selectionState);
 
@@ -136,7 +150,10 @@ export default function BrowserImportPreviewClient() {
     setMediaCompleteError(null);
   };
 
-  const isPreparingOrLocked = selectionState.isPreparing || isStaging || isCompletingMedia;
+  const isAnnualIntake = detectedPackageCount > 25 || annualPlan !== null;
+  const annualProgressStarted = Boolean(annualProgress?.chunks.some((chunk) => chunk.status !== 'pending'));
+  const annualWorkflowActive = annualProgressStarted && !annualProgress?.chunks.every((chunk) => chunk.status === 'completed' || chunk.status === 'skipped');
+  const isPreparingOrLocked = selectionState.isPreparing || isStaging || isCompletingMedia || annualWorkflowActive;
 
   const handleFolderSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
@@ -149,6 +166,11 @@ export default function BrowserImportPreviewClient() {
     setDeclaredTotalBytes(0);
     setDetectedPackageCount(0);
     setPreviewResult(null);
+    setAnnualPlan(null);
+    setAnnualPreviewProgress(null);
+    setAnnualProgress(null);
+    setAnnualSelectionConfirmed(false);
+    setAnnualError(null);
     setApiError(null);
     invalidateStagingResult();
     updateSelectionState(resetSelectionState());
@@ -226,11 +248,57 @@ export default function BrowserImportPreviewClient() {
     setIsLoading(true);
     setApiError(null);
     setPreviewResult(null);
+    setAnnualPlan(null);
+    setAnnualPreviewProgress(null);
+    setAnnualProgress(null);
+    setAnnualSelectionConfirmed(false);
+    setAnnualError(null);
     setManifestCache(null);
     invalidateStagingResult();
     updateSelectionState(resetSelectionState());
 
     try {
+      if (detectedPackageCount > 25) {
+        const annualResult = await runAnnualIntakePreview({
+          selectedFiles,
+          selectedRootName,
+          adminReferenceFile: adminReferenceData?.referenceFile,
+          adminReferenceMappingConfig: adminReferenceData?.mappingConfig,
+          onProgress: ({ completedChunks, totalChunks }) => setAnnualPreviewProgress({ completedChunks, totalChunks }),
+        });
+
+        if (!annualResult.success) {
+          setApiError(annualResult.error);
+          return;
+        }
+
+        setAnnualPlan(annualResult.plan);
+        setPreviewResult(annualResult.plan.mergedPreview);
+        setManifestCache(null);
+        const initialSelection = createInitialSelectionState(annualResult.plan.mergedPreview);
+        const savedProgress = annualProgressStoreRef.current.read(annualResult.plan.cohortId);
+        if (isStoredAnnualIntakeProgress(savedProgress) && canResumeAnnualIntake(
+          savedProgress,
+          annualResult.plan,
+          savedProgress.selectedPackagePaths,
+          savedProgress.acknowledgedWarningPackagePaths,
+        )) {
+          const validPaths = new Set(annualResult.plan.mergedPreview.packages.map((pkg) => pkg.packagePath));
+          const restoredSelection = savedProgress.selectedPackagePaths.filter((path) => validPaths.has(path));
+          const restoredAcknowledgements = savedProgress.acknowledgedWarningPackagePaths.filter((path) => validPaths.has(path));
+          updateSelectionState({
+            ...initialSelection,
+            selectedPackagePaths: restoredSelection,
+            acknowledgedWarningPackagePaths: restoredAcknowledgements,
+          });
+          setAnnualProgress(savedProgress);
+          setAnnualSelectionConfirmed(true);
+        } else {
+          updateSelectionState(initialSelection);
+        }
+        return;
+      }
+
       const descriptors: SelectedFileDescriptor[] = [];
       const metadataFilesToUpload: File[] = [];
       let totalBytes = 0;
@@ -344,6 +412,11 @@ export default function BrowserImportPreviewClient() {
     setDeclaredTotalBytes(0);
     setDetectedPackageCount(0);
     setPreviewResult(null);
+    setAnnualPlan(null);
+    setAnnualPreviewProgress(null);
+    setAnnualProgress(null);
+    setAnnualSelectionConfirmed(false);
+    setAnnualError(null);
     setApiError(null);
     invalidateStagingResult();
     updateSelectionState(resetSelectionState());
@@ -353,27 +426,40 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleToggleValid = (pkgPath: string) => {
-    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
+    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia || annualProgressStarted) return;
     invalidateStagingResult();
     updateSelectionState((prev) => toggleValidPackage(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningAck = (pkgPath: string) => {
-    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
+    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia || annualProgressStarted) return;
     invalidateStagingResult();
     updateSelectionState((prev) => toggleWarningAcknowledgement(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningSelect = (pkgPath: string) => {
-    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
+    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia || annualProgressStarted) return;
     invalidateStagingResult();
     updateSelectionState((prev) => toggleWarningPackageSelection(prev, pkgPath, previewResult.packages));
   };
 
   const handlePrepareImport = async () => {
-    if (!previewResult || !manifestCache || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
+    if (!previewResult || (!manifestCache && !annualPlan) || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
     const origin = document.activeElement;
     invalidateStagingResult();
+
+    if (annualPlan) {
+      if (!adminReferenceData) {
+        setAnnualError('A confirmed Admin Reference mapping is required before an annual intake can be imported.');
+      } else if (selectionStateRef.current.selectedPackagePaths.length === 0) {
+        setAnnualError('At least one project must be selected.');
+      } else {
+        setAnnualError(null);
+        setAnnualSelectionConfirmed(true);
+      }
+      setFocusRequest({ origin, action: 'confirm' });
+      return;
+    }
 
     await runBrowserImportPreparation({
       lock: preparationLockRef,
@@ -388,6 +474,33 @@ export default function BrowserImportPreviewClient() {
 
   const handleStageMetadata = async () => {
     const origin = document.activeElement;
+
+    if (annualPlan) {
+      if (!annualSelectionConfirmed) return;
+
+      setIsStaging(true);
+      setAnnualError(null);
+      try {
+        const result = await runAnnualIntakeImport({
+          plan: annualPlan,
+          selectedPackagePaths: selectionStateRef.current.selectedPackagePaths,
+          acknowledgedWarningPackagePaths: selectionStateRef.current.acknowledgedWarningPackagePaths,
+          existingProgress: annualProgress,
+          progressStore: annualProgressStoreRef.current,
+          adminReferenceFile: adminReferenceData?.referenceFile,
+          adminReferenceMappingConfig: adminReferenceData?.mappingConfig,
+          onProgress: setAnnualProgress,
+        });
+        if (!result.success) setAnnualError(result.error || 'The annual intake paused after a failed chunk.');
+      } catch {
+        setAnnualError('The annual intake could not be safely started. Please preview the folder again and try again.');
+      } finally {
+        setIsStaging(false);
+      }
+      setFocusRequest({ origin, action: 'metadata' });
+      return;
+    }
+
     await runBrowserImportMetadataStaging({
       lock: stagingLockRef,
       isStaging,
@@ -457,6 +570,7 @@ export default function BrowserImportPreviewClient() {
     currentStep = 2;
   }
   const isWorkflowComplete = Boolean(mediaCompleteResult);
+  const isAnnualWorkflowComplete = Boolean(annualProgress && annualProgress.chunks.every((chunk) => chunk.status === 'completed' || chunk.status === 'skipped'));
 
   // Single authoritative presentation phase.
   //
@@ -480,7 +594,7 @@ export default function BrowserImportPreviewClient() {
   return (
     <div className="flex flex-col gap-6 w-full">
       {/* Workflow Steps Indicator & Onboarding Guide */}
-      <ImportWorkflowGuide currentStep={currentStep} isComplete={isWorkflowComplete} />
+      <ImportWorkflowGuide currentStep={currentStep} isComplete={isWorkflowComplete || isAnnualWorkflowComplete} />
 
       {/* Browser Support Check Warning */}
       {!isSupported && (
@@ -498,6 +612,11 @@ export default function BrowserImportPreviewClient() {
           setAdminReferenceData(data);
           setPreviewResult(null);
           setManifestCache(null);
+          setAnnualPlan(null);
+          setAnnualPreviewProgress(null);
+          setAnnualProgress(null);
+          setAnnualSelectionConfirmed(false);
+          setAnnualError(null);
           invalidateStagingResult();
           updateSelectionState(resetSelectionState());
         }}
@@ -551,7 +670,9 @@ export default function BrowserImportPreviewClient() {
                   className="bg-primary hover:bg-primary font-semibold shadow-xs hover:shadow-md"
                 >
                   <Search className="h-4 w-4 mr-2" aria-hidden="true" />
-                  {isLoading ? 'Checking files…' : 'Check files and continue'}
+                  {detectedPackageCount > 25
+                    ? (isLoading ? 'Checking annual intake…' : 'Preview annual intake')
+                    : (isLoading ? 'Checking files…' : 'Check files and continue')}
                 </Button>
 
                 <Button
@@ -604,6 +725,12 @@ export default function BrowserImportPreviewClient() {
               </div>
             </div>
           )}
+
+          {isAnnualIntake && annualPreviewProgress && isLoading && (
+            <div className="rounded-lg border border-information/30 bg-information/10 px-3.5 py-3 text-xs text-foreground" role="status" aria-live="polite">
+              Previewing annual intake chunk {annualPreviewProgress.completedChunks + 1} of {annualPreviewProgress.totalChunks}. Each request remains capped at 25 packages.
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -611,7 +738,7 @@ export default function BrowserImportPreviewClient() {
       {apiError && (
         <Alert
           variant="destructive"
-          title="File Check Failed"
+          title={isAnnualIntake ? 'Annual Intake Preview Failed' : 'File Check Failed'}
           description={apiError}
         />
       )}
@@ -742,7 +869,7 @@ export default function BrowserImportPreviewClient() {
                               <input
                                 type="checkbox"
                                 checked={isSelected}
-                                disabled={isPreparingOrLocked}
+                                disabled={isPreparingOrLocked || annualProgressStarted}
                                 onChange={() => handleToggleValid(pkg.packagePath)}
                                 aria-label={`Select package ${pkg.folderName} for import`}
                                 className="h-4 w-4 rounded border-input text-primary focus:ring-ring disabled:opacity-50 cursor-pointer"
@@ -757,7 +884,7 @@ export default function BrowserImportPreviewClient() {
                                 <input
                                   type="checkbox"
                                   checked={isAcked}
-                                  disabled={isPreparingOrLocked}
+                                  disabled={isPreparingOrLocked || annualProgressStarted}
                                   onChange={() => handleToggleWarningAck(pkg.packagePath)}
                                   aria-label={`Acknowledge warnings for package ${pkg.folderName}`}
                                   className="h-4 w-4 rounded border-input text-warning focus:ring-ring disabled:opacity-50 cursor-pointer"
@@ -769,7 +896,7 @@ export default function BrowserImportPreviewClient() {
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
-                                  disabled={!isAcked || isPreparingOrLocked}
+                                  disabled={!isAcked || isPreparingOrLocked || annualProgressStarted}
                                   onChange={() => handleToggleWarningSelect(pkg.packagePath)}
                                   aria-label={`Select warning package ${pkg.folderName} for import after acknowledgement`}
                                   className="h-4 w-4 rounded border-input text-primary focus:ring-ring disabled:opacity-50"
@@ -964,7 +1091,9 @@ export default function BrowserImportPreviewClient() {
                   ? 'A confirmed Admin Reference mapping (above) is also required before you can confirm.'
                   : unacknowledgedWarningCount > 0
                     ? `${unacknowledgedWarningCount} warning project(s) require acknowledgement before you can confirm.`
-                    : 'Confirming does not save these projects yet — it locks in your selection for the next step.'}
+                    : annualPlan
+                      ? `Annual intake runs ${annualPlan.chunks.length} deterministic chunk(s), each capped at 25 packages. Confirming does not save projects yet.`
+                      : 'Confirming does not save these projects yet — it locks in your selection for the next step.'}
               </div>
             </div>
 
@@ -977,9 +1106,119 @@ export default function BrowserImportPreviewClient() {
               className="font-semibold shrink-0"
             >
               <CheckSquare className="h-4 w-4 mr-1.5" aria-hidden="true" />
-              {selectionState.isPreparing ? 'Confirming selection…' : 'Confirm selected projects'}
+              {selectionState.isPreparing
+                ? 'Confirming selection…'
+                : annualPlan
+                  ? 'Confirm annual intake selection'
+                  : 'Confirm selected projects'}
             </Button>
           </div>
+
+          {annualError && (
+            <Alert
+              variant="destructive"
+              title="Annual Intake Paused"
+              description={annualError}
+            />
+          )}
+
+          {annualPlan && annualSelectionConfirmed && (
+            <div className="p-4 rounded-lg bg-information/10 border border-information/30 flex flex-col gap-4 text-xs">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+                  <Layers className="h-4 w-4 text-information" aria-hidden="true" />
+                  <span>Annual intake cohort ready</span>
+                </div>
+                <span className="font-mono text-xs text-muted-foreground">{annualPlan.cohortId}</span>
+              </div>
+
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                This cohort is processed in order as independent import batches. A failed chunk can be retried; completed chunks remain saved. The cohort is not one atomic transaction.
+              </p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-2.5 rounded bg-background border border-border text-xs">
+                <div>
+                  <span className="text-muted-foreground block">Packages selected:</span>
+                  <strong className="text-foreground">{selectionState.selectedPackagePaths.length}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Chunks:</span>
+                  <strong className="text-foreground">{annualPlan.chunks.length}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Chunk ceiling:</span>
+                  <strong className="text-foreground">25 packages</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Server group:</span>
+                  <strong className="text-foreground">{annualPlan.cohortId}</strong>
+                </div>
+              </div>
+
+              {annualProgress && (
+                <div className="flex flex-col gap-2" aria-live="polite">
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="font-semibold text-foreground">Chunk progress</span>
+                    <span className="text-muted-foreground">
+                      {annualProgress.chunks.filter((chunk) => chunk.status === 'completed' || chunk.status === 'skipped').length} of {annualProgress.chunks.length} resolved
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {annualProgress.chunks.map((chunk) => (
+                      <div key={chunk.index} className="flex items-center justify-between gap-3 rounded border border-border bg-background px-2.5 py-2">
+                        <span className="text-foreground">Chunk {chunk.index + 1} · {chunk.packagePaths.length} package(s)</span>
+                        <span className={chunk.status === 'completed' ? 'text-success font-semibold' : chunk.status === 'failed' ? 'text-destructive font-semibold' : 'text-muted-foreground'}>
+                          {chunk.status === 'completed'
+                            ? 'Complete'
+                            : chunk.status === 'metadata_staged'
+                              ? 'Details saved; media pending'
+                              : chunk.status === 'skipped'
+                                ? 'No selected packages'
+                                : chunk.status === 'failed'
+                                  ? 'Retry required'
+                                  : 'Pending'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                <span className="text-xs text-muted-foreground">
+                  {isAnnualWorkflowComplete
+                    ? 'All selected chunks completed. Open any server batch below for review.'
+                    : 'Media is committed per chunk after metadata. Retry uses the same verified content and batch identity.'}
+                </span>
+                {!isAnnualWorkflowComplete && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleStageMetadata}
+                    ref={metadataButtonRef}
+                    disabled={isStaging}
+                    className="font-semibold shrink-0"
+                  >
+                    <Upload className="h-4 w-4 mr-1.5" aria-hidden="true" />
+                    {isStaging ? 'Processing annual intake…' : annualProgressStarted ? 'Retry failed chunk(s)' : 'Start annual intake'}
+                  </Button>
+                )}
+              </div>
+
+              {annualProgress && annualProgress.chunks.some((chunk) => chunk.batchId) && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {annualProgress.chunks.filter((chunk) => chunk.batchId).map((chunk) => (
+                    <Button key={chunk.index} asChild variant="outline" size="sm">
+                      <Link href={`/admin/imports/${chunk.batchId}`}>
+                        Open chunk {chunk.index + 1}
+                        <ArrowRight className="h-3.5 w-3.5 ml-1.5" aria-hidden="true" />
+                      </Link>
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Preparation Error Feedback */}
           {selectionState.preparationErrorCode && (

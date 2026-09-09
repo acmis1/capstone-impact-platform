@@ -13,6 +13,7 @@ import type {
   BrowserImportMetadataStageResponse,
 } from './browserImportMetadataStageContract';
 import type { AdminReferenceMappingConfig } from './adminReferenceSharedContract';
+import { isAnnualIntakeCohortId } from './annualIntakeContract';
 
 export interface BrowserImportStagingLock {
   current: boolean;
@@ -26,6 +27,7 @@ export interface RunBrowserImportMetadataStagingParams {
   selectedFiles: File[];
   adminReferenceFile?: File | null;
   adminReferenceMappingConfig?: AdminReferenceMappingConfig | null;
+  cohortId?: string | null;
   setIsStaging: (val: boolean) => void;
   setStagingError: (error: string | null) => void;
   setStagedResult: (result: {
@@ -72,6 +74,7 @@ export async function runBrowserImportMetadataStaging(
     selectedFiles,
     adminReferenceFile,
     adminReferenceMappingConfig,
+    cohortId,
     setIsStaging,
     setStagingError,
     setStagedResult,
@@ -94,6 +97,15 @@ export async function runBrowserImportMetadataStaging(
     if (adminReferenceFile && adminReferenceMappingConfig) {
       formData.append('referenceFile', adminReferenceFile);
       formData.append('adminReferenceMapping', JSON.stringify(adminReferenceMappingConfig));
+    }
+
+    if (cohortId) {
+      if (!isAnnualIntakeCohortId(cohortId)) {
+        const msg = STAGING_KNOWN_ERROR_MAP.INVALID_INTENT;
+        setStagingError(msg);
+        return { success: false, code: 'INVALID_INTENT', error: msg };
+      }
+      formData.append('cohortId', cohortId);
     }
 
     // Filter and attach ONLY metadata files (project-details.xlsx or project.json).

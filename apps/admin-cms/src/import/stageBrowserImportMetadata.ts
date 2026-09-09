@@ -23,6 +23,7 @@ import {
   adminReferenceIntentsSemanticallyEqual,
   canonicalizeAdminReferenceIntent,
 } from './adminReferenceReconciliationCore';
+import { formatAnnualIntakeSourceFolder, isAnnualIntakeCohortId } from './annualIntakeContract';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -45,8 +46,17 @@ export async function stageBrowserImportMetadata(params: {
   authContext: AuthenticatedAdminContext;
   serverAnalysis: BrowserImportServerAnalysis;
   intent: BrowserImportCommitIntent;
+  cohortId?: string;
 }): Promise<BrowserImportMetadataStageResponse> {
-  const { authContext, serverAnalysis, intent } = params;
+  const { authContext, serverAnalysis, intent, cohortId } = params;
+
+  if (cohortId !== undefined && !isAnnualIntakeCohortId(cohortId)) {
+    return {
+      success: false,
+      code: 'INVALID_INTENT',
+      error: 'Annual intake cohort identity is invalid.',
+    };
+  }
 
   if (!browserImportCommitIntentSchema.safeParse(intent).success) {
     return {
@@ -313,7 +323,9 @@ export async function stageBrowserImportMetadata(params: {
     p_preview_fingerprint: intent.previewFingerprint,
     p_canonical_intent: canonicalIntent,
     p_mode: serverAnalysis.preview.batch.mode,
-    p_source_folder: intent.selectedRootName,
+    p_source_folder: cohortId
+      ? formatAnnualIntakeSourceFolder(intent.selectedRootName, cohortId)
+      : intent.selectedRootName,
     p_imported_by_id: authContext.adminUserId,
     p_packages: payloadPackages,
   });
