@@ -57,7 +57,9 @@ function evidence(): Gate4SchemaEvidence {
       bypassRls: name === 'service_role', superuser: false,
     })), migrations, tables, functions,
     columns: [['projects', 'poster_text_public'], ['projects', 'accessibility_text_public'],
-      ['projects', 'participant_contact_email'], ['media_assets', 'alt_text_public'], ['admin_users', 'auth_user_id']]
+      ['projects', 'participant_contact_email'], ['media_assets', 'alt_text_public'], ['admin_users', 'auth_user_id'],
+      ['admin_users', 'lifecycle_status'], ['admin_users', 'lifecycle_version'],
+      ['admin_users', 'lifecycle_updated_at'], ['admin_users', 'deactivated_at']]
       .map(([table, name], index) => ({ schema: 'public', table, name, ordinal: index + 1,
         dataType: 'text', arrayElementType: null, nullable: true, identity: '', generated: '', defaultExpression: null })),
     constraints: [], policies: [],
@@ -253,18 +255,18 @@ function constraintEvidence() {
 }
 
 describe('exact migration-to-dump-replay constraint rendering pairs', () => {
-  it('keeps the core comparator strict and accepts only the five observed pairs in recovery', () => {
+  it('keeps the core comparator strict and accepts only the seven observed pairs in recovery', () => {
     const { source, restored } = constraintEvidence();
     const before = JSON.stringify([source, restored]);
     const raw = compareGate4Evidence(restored, source);
     expect(raw.classification).toBe('GATE4_DRIFT');
-    expect(raw.totalDifferences).toBe(5);
+    expect(raw.totalDifferences).toBe(7);
     expect(raw.categoryMatches.TABLE_GRANTS).toBe(true);
     vi.spyOn(collector, 'collectLocalGate4Evidence').mockReturnValue(restored);
     const result = runGate4(repositoryRoot, identity, source);
     expect(result.selfCheckClassification).toBe('GATE4_MATCH');
     expect(result.sourceComparisonClassification).toBe('GATE4_MATCH_CONSTRAINT_RENDERING_PORTABLE');
-    expect(result.constraintRenderingPairCount).toBe(5);
+    expect(result.constraintRenderingPairCount).toBe(7);
     expect(JSON.stringify([source, restored])).toBe(before);
   });
 
@@ -296,9 +298,9 @@ describe('exact migration-to-dump-replay constraint rendering pairs', () => {
     });
   }
 
-  it.each(['sixth-change', 'missing', 'missing-both', 'extra', 'metadata', 'table-grant', 'source-contract'])('rejects %s', (kind) => {
+  it.each(['unreviewed-change', 'missing', 'missing-both', 'extra', 'metadata', 'table-grant', 'source-contract'])('rejects %s', (kind) => {
     const { source, restored } = constraintEvidence();
-    if (kind === 'sixth-change') {
+    if (kind === 'unreviewed-change') {
       source.constraints.push({ ...source.constraints[0], name: 'unreviewed_check', definition: 'CHECK (true)' });
       restored.constraints.push({ ...source.constraints.at(-1)!, definition: 'CHECK (false)' });
     }
@@ -329,7 +331,7 @@ describe('exact migration-to-dump-replay constraint rendering pairs', () => {
     const { source, restored } = constraintEvidence();
     source.constraints[0].definition = source.constraints[0].definition.replaceAll('length(', 'pg_catalog.length(\n');
     vi.spyOn(collector, 'collectLocalGate4Evidence').mockReturnValue(restored);
-    expect(runGate4(repositoryRoot, identity, source).constraintRenderingPairCount).toBe(5);
+    expect(runGate4(repositoryRoot, identity, source).constraintRenderingPairCount).toBe(7);
     source.constraints[0].definition = "CHECK (private_marker_function('PRIVATE_DEFINITION_VALUE'))";
     const result = runGate4(repositoryRoot, identity, source);
     expect(result.sourceComparisonClassification).toBe('GATE4_DRIFT');

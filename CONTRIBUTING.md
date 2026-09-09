@@ -74,7 +74,7 @@ npm run supabase:stop
 
 ## E. Database & Migration Governance
 
-1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete existing migrations `0001` through `0052`.
+1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete existing migrations `0001` through `0053`.
 2. **New Schema Changes**: Any schema, policy, or grant change requires a new 14-digit timestamped migration file in `infra/supabase/migrations/` (`YYYYMMDDHHMMSS_description.sql`).
 3. **Local Replay & Reset Verification**: Verify all schema changes locally by running `npm run supabase:reset` to replay migrations from zero in strict timestamp order.
 4. **Static Contract Tests**: Add static contract tests in `apps/admin-cms/src/security/` for any new database migration file.
@@ -84,11 +84,11 @@ npm run supabase:stop
    - New postgres-owned functions are private by default; execution privileges must be explicitly revoked from `PUBLIC`, `anon`, and `authenticated`, and granted only to intended roles (e.g. `service_role`).
    - Do not alter `supabase_admin` default privileges.
 
-### Migration Inventory (52 Timestamped Migrations)
+### Migration Inventory (53 Timestamped Migrations)
 
-The current repository contains 52 migrations through
-`20260906120000_public_removal_completion_reconciliation.sql`. See the
-[selected migration inventory](infra/supabase/README.md#selected-migration-inventory-52-migrations-total)
+The current repository contains 53 migrations through
+`20260909120000_staff_lifecycle_readiness.sql`. See the
+[selected migration inventory](infra/supabase/README.md#selected-migration-inventory-53-migrations-total)
 and [local development guide](infra/supabase/local-development.md) for current replay and bucket
 ownership. The first nine migrations below are historical milestones, not the complete inventory.
 
@@ -114,7 +114,7 @@ inventory does not prove hosted deployment; obtain fresh migration/schema eviden
 A contribution is complete when:
 - The work requires zero hosted resource or dashboard access for local execution.
 - `npm run onboarding:check` passes (12/12 automated checks).
-- All 51 database migrations replay cleanly via `npm run supabase:reset`.
+- All 53 database migrations replay cleanly via `npm run supabase:reset`.
 - `npm run check:feed` passes schema validation.
 - `npm run lint --workspace=apps/admin-cms` reports 0 errors and 0 warnings.
 - `npm run test:admin` passes all unit and security tests.

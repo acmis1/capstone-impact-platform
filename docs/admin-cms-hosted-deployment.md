@@ -16,7 +16,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | **Instance Status** | Active / Separate (Never touch) | **ACTIVE_HEALTHY** (Active Target) | **PAUSED / INACTIVE** (Do not modify) |
 | **Region** | `ap-southeast-1` | `ap-southeast-1` | `ap-southeast-1` |
 | **Hosting Service** | Existing Render static/web service | **Separate** Render/Cloud Web Service | — |
-| **Database State** | Prohibited from mutation | Historical read-only observations recorded 46 then 48/48 rows; current verified Gate 3 history is 52 through `20260906120000_public_removal_completion_reconciliation`, and Gate 4 is a 52-migration structural match. Exact schema/grant/RPC alignment remains independently re-verifiable for later schema changes | Historical manually evolved baseline; migration history untracked |
+| **Database State** | Prohibited from mutation | Historical read-only observations recorded 46 then 48/48 rows; the latest hosted Gate 3/4 evidence is the prior 52-migration contract through `20260906120000_public_removal_completion_reconciliation`. The repository candidate now expects Migration 0053 and requires fresh governed Gate 3/4 evidence after authorized application. | Historical manually evolved baseline; migration history untracked |
 
 > [!IMPORTANT]
 > The existing Render service configured for `Prototype/` must **NEVER** be repurposed or pointed to `apps/admin-cms`. The Admin/CMS requires an independent web service with its own environment variables and deployment pipeline. Furthermore, the Prototype Supabase project (`capstone-prototype-recovery-2026`) is completely isolated and must never be targeted by Admin/CMS operations.
@@ -45,19 +45,18 @@ The Capstone platform enforces strict architectural and operational isolation be
 | Endpoint | Success contract | What it proves | What it does not prove |
 | :--- | :--- | :--- | :--- |
 | `GET /api/health` | HTTP 200 with `{ "app": "admin-cms", "status": "ok" }` | The deployed application can execute a route handler. | Valid environment variables, Supabase reachability, schema state, authentication, publication, UAT, or production acceptance. |
-| `GET /api/readiness` | HTTP 200 with `readiness: "ready"`, `classification: "READY"`, `configuration: "configured"`, and `dependency: "reachable"` | Critical server configuration parses, the runtime is verified as the expected HTTPS staging target, and a two-second zero-row Supabase `HEAD` read succeeds. | Applied migration history, exact schema/grants/RPC signatures, Auth or Storage readiness, workflow behavior, full UAT, publication readiness, or production acceptance. |
+| `GET /api/readiness` | HTTP 200 with `readiness: "ready"`, `classification: "READY"`, `configuration: "configured"`, `dependency: "reachable"`, and `databaseCapability: "current"` | Critical server configuration parses; Render supplies a valid full deployment commit; the runtime is the expected HTTPS staging target; and one bounded, two-second, read-only sentinel RPC returns the exact immutable capability marker expected by the application bundle. | Exact migration-history equality, the complete schema/grant/RLS/RPC contract, Auth or Storage readiness, workflow behavior, full UAT, publication readiness, or production acceptance. |
 
 Readiness failures return HTTP 503 with one of two bounded classifications:
 
-- `CONFIGURATION_NOT_READY`: critical environment configuration or expected staging target identity is missing, malformed, or mismatched; the dependency is reported as `not-checked`.
-- `DEPENDENCY_NOT_READY`: configuration is valid but the bounded read-only dependency probe fails, returns a non-success status, or times out; the dependency is reported as `not-ready`.
+- `CONFIGURATION_NOT_READY`: critical environment configuration, Render provider identity, full provider commit, or expected staging target identity is missing, malformed, or mismatched; the dependency and database capability are `not-checked`.
+- `DEPENDENCY_NOT_READY`: configuration and deployment identity are valid but the bounded sentinel call fails, returns a non-success status, times out, exceeds 256 bytes, or does not return the exact current marker; the dependency and database capability are `not-ready`.
 
-Every readiness body includes the repository's expected migration count and latest expected migration identifier. This is version evidence from the deployed application bundle, not proof that those migrations are applied to the hosted database. `RENDER_GIT_COMMIT` is returned only when it is exactly a valid 40-character hexadecimal commit identifier; otherwise `deploymentCommit.state` is truthfully `missing` or `invalid` and no untrusted value is echoed.
+Every readiness body includes the repository's expected migration count and latest expected migration identifier. That bundle expectation alone is not database proof; `READY` additionally requires the immutable sentinel installed in the same final migration to return the exact marker for the current lifecycle and catalog-RLS capabilities. `RENDER_GIT_COMMIT` is accepted only with Render's automatic `RENDER=true` marker and only when it is a valid 40-character hexadecimal commit. Missing or invalid evidence is fatal, and no untrusted value is echoed.
 
-Gates 3 and 4 provide migration-history and exact schema evidence. `/api/readiness` checks runtime
-configuration, target identity, credential shape and bounded service-role HEAD access to
-`public.programs`; it does not inspect correction tables, RPC signatures, grants, RLS/policies or
-bucket inventory. A green response can coexist with a database still at 48 migrations. For the
+Gates 3 and 4 provide migration-history and exact schema evidence. `/api/readiness` independently
+checks runtime configuration, provider identity, credential shape, and the bounded service-role
+capability sentinel; it does not replace full catalog, grant, RLS/policy, or bucket evidence. For the
 48→51 transition, enforce the controlled migration window and the separate database/application
 verification stages in the [release rollout plan](operations/staging-migrations-49-51-rollout.md)
 before restoring normal staff mutation access.
@@ -81,9 +80,9 @@ The command performs only these bounded, unauthenticated requests:
 - `GET` and `HEAD` `/api/readiness`;
 - `GET` `/login`.
 
-It proves that the exact liveness contract is available, the readiness response is internally consistent and currently `READY`, the login route returns HTML, deployment commit evidence is valid, and the readiness bundle's expected migration count/latest identifier matches the migration files currently checked out in the repository. It also records observed request duration without imposing or inventing a production SLA. Redirects cannot leave the supplied origin or move a request to a different route.
+It proves that the exact liveness contract is available, the readiness response is internally consistent and currently `READY`, the login route returns HTML, deployment commit evidence is valid, the database capability sentinel is current, and the readiness bundle's expected migration count/latest identifier matches the migration files currently checked out in the repository. It also records observed request duration without imposing or inventing a production SLA. Redirects cannot leave the supplied origin or move a request to a different route.
 
-It does **not** authenticate, create a session, submit a login form, inspect private project/media routes, prove that migrations are applied, validate schema or RLS, exercise workflow UAT, publish a feed, mutate Supabase or Duda, send email, deploy the application, or replace independent CI and review. In particular, readiness migration evidence describes what the deployed bundle expects; it is not hosted database migration-history evidence.
+It does **not** authenticate, create a session, submit a login form, inspect private project/media routes, prove exact migration history or the full schema/RLS/grant contract, exercise workflow UAT, publish a feed, mutate Supabase or Duda, send email, deploy the application, or replace independent CI and review.
 
 The final line is deterministic. `HOSTED_SMOKE_CLASSIFICATION = READY_FOR_SUPERVISED_UAT` means only that the supervised UAT session may begin. Any other classification fails closed and requires investigation. One green smoke run must never be represented as production readiness or as a substitute for the governed schema/RLS and stakeholder UAT checks.
 
@@ -263,6 +262,7 @@ The active Admin/CMS staging stack uses Render service `capstone-admin-cms-stagi
 - **Migration History (Gate 3) — later historical observation**: 48/48 repository migrations were recorded through `20260831090000_postgres17_maintain_privilege_alignment`.
 - **Migration History (Gate 3) — current verified observation**: 52 rows were recorded, from earliest `20260601035138` through `20260906120000_public_removal_completion_reconciliation`.
 - **Schema, Grants, and RPCs (Gate 4)**: Independent structural evidence is `GATE4_MATCH` for the 52-migration contract: 44 tables, 514 columns, 387 constraints, 31 policies, 84 application RPC signatures across 83 names, 1 canonical staff-role helper, 4 dispatcher routines, and 4 Storage buckets, with zero differences and validation errors. This is a separate structural evidence layer from the current deployment identity.
+- **Repository release candidate**: The source manifest now contains 53 migrations through `20260909120000_staff_lifecycle_readiness`. The candidate inventory contains 42 public application tables and 88 exact service-role application RPC signatures across 87 names. This is repository evidence only; it is not applied-hosted or fresh Gate 3/4 evidence.
 - **Latest verified application deployment evidence (2026-09-08)**: Render service `capstone-admin-cms-staging-v2` targets branch `main` and is authoritative at deployment `dep-dafimfn9l3cc73c8blog`, with deployed application commit `50d02632f4403f3acb5620d6b9a2e482e8ac5688`. GET `/api/health` and `/api/readiness` returned 200 with that deployment identity, readiness `READY`, and canonical feed `[]`; the publication gate was restored to disabled. Later documentation-only repository commits do not by themselves change this deployed application baseline.
 - **Render application-release rehearsal (2026-09-03)**: A genuine staging forward deployment, official Render rollback, and exact-SHA redeployment completed with `/api/health` 200, `/login` 200, `/api/readiness` `READY`, and deployment identity matching at every stage. Timings were 145.2 s forward, 52.7 s rollback, and 145.1 s final redeploy; auto-deploy remained disabled. This is `VERIFIED_STAGING` application-release evidence, not database recovery RTO.
 - **Current-52 recovery evidence (2026-09-08)**: The current staging-origin logical capture and isolated PostgreSQL 17 restore are recorded as bounded `VERIFIED_STAGING` evidence in [Current-52 Recovery Evidence](m6-current52-recovery-evidence-2026-09-08.md). This does not establish managed hosted PITR or hosted-to-hosted recovery.
@@ -291,12 +291,12 @@ The automated checker queries the PostgREST Data API and OpenAPI schema. It inte
 - **RPC Signatures**: OpenAPI metadata proves RPC names, but may collapse or omit full overloaded parameter signatures.
 - **Fail-Closed Design**: The checker deliberately refuses to synthesize `SCHEMA_BASELINE = MATCH` or `READY_FOR_MUTATION_DECISION` without explicit, governed Gate 3/4 manual verification inputs.
 
-The checker compares against the current repository contract: 41 public application tables, 83 application RPC names across 84 exact signatures, and 4 canonical Storage buckets. Expected automated inspection output on a target that already matches that contract:
+The checker compares against the current repository contract: 42 public application tables, 87 application RPC names across 88 exact signatures, and 4 canonical Storage buckets. Expected automated inspection output on a target that already matches that contract:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
-- `REQUIRED_TABLE_SET = PRESENT` (All 41 public application tables detected or the documented privilege-hidden subset separately evidenced)
-- `REQUIRED_RPC_NAMES = PRESENT` (All 83 application RPC names detected; 84 exact signatures including the expected overload)
+- `REQUIRED_TABLE_SET = PRESENT` (All 42 public application tables detected or the documented privilege-hidden subset separately evidenced)
+- `REQUIRED_RPC_NAMES = PRESENT` (All 87 application RPC names detected; 88 exact signatures including the expected overload)
 - `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 4 canonical buckets detected)
 - `AUTH_FOUNDATION = READY`
 - `MANUAL_EVIDENCE_REQUIRED = YES`
@@ -306,8 +306,8 @@ A historical target at the 48-migration baseline predates migrations 0049–0051
 
 ### B. Governed Evidence Boundary
 The active staging-v2 migration history is a separate Gate 3 evidence layer from the Gate 4 schema, grant, RLS, and RPC verification that may be required for a release:
-- **Migration History (Gate 3)**: Current verified history is 52 rows from `20260601035138` through `20260906120000_public_removal_completion_reconciliation`; 46-row and 48/48 records are historical observations.
-- **Schema & Grants (Gate 4)**: The supplied 52-migration structural evidence is `GATE4_MATCH`; matching migration-history count alone would not prove schema/grant/RPC parity.
+- **Migration History (Gate 3)**: Latest hosted evidence is 52 rows from `20260601035138` through `20260906120000_public_removal_completion_reconciliation`; the 53-migration repository candidate requires fresh evidence after authorized application. The 46-row and 48/48 records remain historical observations.
+- **Schema & Grants (Gate 4)**: The supplied 52-migration hosted structural evidence is `GATE4_MATCH`; it is not evidence for the 53-migration repository candidate, and matching migration-history count alone would not prove schema/grant/RPC parity.
 - **Other Gates**: Render deployment identity has separately matched `50d02632f4403f3acb5620d6b9a2e482e8ac5688` in bounded read-only smoke. Current-52 Auth/Storage recovery is separately documented above; UAT, monitoring, formal RPO/RTO, and release acceptance remain their own gates.
 
 Auth readiness is verified via:

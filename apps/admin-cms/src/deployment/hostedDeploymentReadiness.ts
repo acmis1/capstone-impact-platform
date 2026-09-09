@@ -1,11 +1,11 @@
 /**
  * Read-only hosted deployment readiness inspection and evaluation.
  *
- * Function discovery uses only the PostgREST OpenAPI document. It must never
- * execute an RPC because repository RPCs can mutate authoritative state.
+ * Broad function discovery uses only the PostgREST OpenAPI document. Public
+ * deployment readiness separately executes one immutable, read-only capability sentinel.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 52;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 53;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -60,7 +60,11 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260903120000_participant_preview_controlled_links.sql',
   '20260903130000_participant_owned_corrections.sql',
   '20260906120000_public_removal_completion_reconciliation.sql',
+  '20260909120000_staff_lifecycle_readiness.sql',
 ] as const;
+
+export const RELEASE_CAPABILITY_SENTINEL =
+  '20260909120000_staff_lifecycle_readiness|active_staff_catalog_rls_v1|staff_lifecycle_v1';
 
 export const REQUIRED_CORE_TABLES = [
   'programs',
@@ -107,7 +111,10 @@ export const REQUIRED_PUBLICATION_TABLES = [
   'public_feed_discipline_projection_authority',
 ] as const;
 
-export const REQUIRED_STAFF_TABLES = ['staff_provisioning_requests'] as const;
+export const REQUIRED_STAFF_TABLES = [
+  'staff_provisioning_requests',
+  'staff_lifecycle_events',
+] as const;
 
 export const REQUIRED_AUTH_PROVENANCE_TABLES = ['password_recovery_sessions'] as const;
 
@@ -150,6 +157,7 @@ function rpc(
 
 /** Final application RPC signatures granted to service_role by the repository migrations. */
 export const REQUIRED_RPC_SIGNATURES = [
+  rpc('get_release_capability_sentinel', [], []),
   rpc('bootstrap_initial_admin', ['p_auth_user_id', 'p_email', 'p_full_name'], ['uuid', 'text', 'text']),
   rpc('register_password_recovery_session', ['p_session_id', 'p_auth_user_id'], ['uuid', 'uuid']),
   rpc('perform_project_review_action', ['p_public_id', 'p_action', 'p_comments', 'p_admin_id'], ['text', 'text', 'text', 'uuid']),
@@ -198,6 +206,9 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('begin_staff_provisioning_compensation', ['p_request_id', 'p_execution_token', 'p_auth_user_id'], ['uuid', 'uuid', 'uuid']),
   rpc('activate_staff_provisioning', ['p_auth_user_id'], ['uuid']),
   rpc('fail_staff_provisioning', ['p_request_id', 'p_execution_token', 'p_failure_code', 'p_compensation_state'], ['uuid', 'uuid', 'text', 'text']),
+  rpc('manage_staff_lifecycle', ['p_actor_admin_id', 'p_target_email', 'p_action', 'p_roles', 'p_expected_version'], ['uuid', 'text', 'text', 'text[]', 'bigint']),
+  rpc('claim_staff_provider_reconciliation', ['p_actor_admin_id', 'p_target_email', 'p_expected_version'], ['uuid', 'text', 'bigint']),
+  rpc('complete_staff_provider_reconciliation', ['p_event_id', 'p_reconciliation_token', 'p_succeeded', 'p_failure_code'], ['uuid', 'uuid', 'boolean', 'text']),
   rpc('reserve_participant_preview_notification', ['p_participant_preview_id', 'p_admin_id', 'p_notification_kind'], ['uuid', 'uuid', 'text']),
   rpc('generate_participant_preview_with_notification', ['p_public_id', 'p_admin_id', 'p_token_hash', 'p_expires_in_seconds', 'p_private_bucket', 'p_is_correction_reissue'], ['text', 'uuid', 'text', 'integer', 'text', 'boolean']),
   rpc('begin_participant_preview_notification_transport', ['p_notification_id', 'p_execution_token'], ['uuid', 'uuid']),

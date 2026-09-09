@@ -7,9 +7,11 @@ import {
 import {
   EXPECTED_REPOSITORY_MIGRATIONS,
   EXPECTED_REPOSITORY_MIGRATION_COUNT,
+  RELEASE_CAPABILITY_SENTINEL,
 } from './hostedDeploymentReadiness';
 
 export const DEPENDENCY_READINESS_TIMEOUT_MS = 2_000;
+export const RELEASE_CAPABILITY_MAX_RESPONSE_BYTES = 256;
 
 const latestMigration = EXPECTED_REPOSITORY_MIGRATIONS[
   EXPECTED_REPOSITORY_MIGRATIONS.length - 1
@@ -25,6 +27,7 @@ export type DeploymentReadinessBody = {
   classification: 'READY' | 'CONFIGURATION_NOT_READY' | 'DEPENDENCY_NOT_READY';
   configuration: 'configured' | 'not-ready';
   dependency: 'reachable' | 'not-checked' | 'not-ready';
+  databaseCapability: 'current' | 'not-checked' | 'not-ready';
   deploymentCommit: CommitEvidence;
   expectedMigrations: {
     count: number;
@@ -50,6 +53,13 @@ function commitEvidence(value: string | undefined): CommitEvidence {
   return /^[0-9a-f]{40}$/i.test(value)
     ? { state: 'valid', value: value.toLowerCase() }
     : { state: 'invalid' };
+}
+
+function hasValidProviderDeploymentIdentity(
+  evidence: CommitEvidence,
+  runtimeEnv: StagingRuntimeEnvironment,
+): boolean {
+  return runtimeEnv.RENDER === 'true' && evidence.state === 'valid';
 }
 
 function hasValidCredentialSemantics(env: ServerEnv): boolean {
@@ -114,7 +124,46 @@ function baseBody(renderGitCommit: string | undefined): Pick<
   };
 }
 
-async function dependencyIsReachable(
+async function readBoundedResponse(
+  response: Response,
+  maximumBytes: number,
+): Promise<string | null> {
+  if (!response.body) return null;
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > maximumBytes) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return null;
+  }
+
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+async function databaseCapabilityIsCurrent(
   env: ServerEnv,
   fetchImpl: typeof fetch,
   timeoutMs: number,
@@ -123,9 +172,7 @@ async function dependencyIsReachable(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const endpoint = new URL('/rest/v1/programs', env.supabaseUrl);
-    endpoint.searchParams.set('select', 'id');
-    endpoint.searchParams.set('limit', '0');
+    const endpoint = new URL('/rest/v1/rpc/get_release_capability_sentinel', env.supabaseUrl);
 
     const headers: Record<string, string> = {
       Accept: 'application/json',
@@ -136,14 +183,24 @@ async function dependencyIsReachable(
     }
 
     const response = await fetchImpl(endpoint, {
-      method: 'HEAD',
+      method: 'GET',
       headers,
       body: undefined,
       cache: 'no-store',
       redirect: 'error',
       signal: controller.signal,
     });
-    return response.ok;
+    if (!response.ok || !response.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
+      return false;
+    }
+
+    const body = await readBoundedResponse(response, RELEASE_CAPABILITY_MAX_RESPONSE_BYTES);
+    if (body === null) return false;
+    try {
+      return JSON.parse(body) === RELEASE_CAPABILITY_SENTINEL;
+    } catch {
+      return false;
+    }
   } catch {
     return false;
   } finally {
@@ -160,6 +217,20 @@ export async function getDeploymentReadiness({
 }: DeploymentReadinessOptions): Promise<DeploymentReadinessResult> {
   const evidence = baseBody(renderGitCommit);
 
+  if (!hasValidProviderDeploymentIdentity(evidence.deploymentCommit, runtimeEnv)) {
+    return {
+      status: 503,
+      body: {
+        ...evidence,
+        readiness: 'not-ready',
+        classification: 'CONFIGURATION_NOT_READY',
+        configuration: 'not-ready',
+        dependency: 'not-checked',
+        databaseCapability: 'not-checked',
+      },
+    };
+  }
+
   let env: ServerEnv;
   try {
     env = loadEnv();
@@ -172,6 +243,7 @@ export async function getDeploymentReadiness({
         classification: 'CONFIGURATION_NOT_READY',
         configuration: 'not-ready',
         dependency: 'not-checked',
+        databaseCapability: 'not-checked',
       },
     };
   }
@@ -185,11 +257,12 @@ export async function getDeploymentReadiness({
         classification: 'CONFIGURATION_NOT_READY',
         configuration: 'not-ready',
         dependency: 'not-checked',
+        databaseCapability: 'not-checked',
       },
     };
   }
 
-  if (!(await dependencyIsReachable(env, fetchImpl, timeoutMs))) {
+  if (!(await databaseCapabilityIsCurrent(env, fetchImpl, timeoutMs))) {
     return {
       status: 503,
       body: {
@@ -198,6 +271,7 @@ export async function getDeploymentReadiness({
         classification: 'DEPENDENCY_NOT_READY',
         configuration: 'configured',
         dependency: 'not-ready',
+        databaseCapability: 'not-ready',
       },
     };
   }
@@ -210,6 +284,7 @@ export async function getDeploymentReadiness({
       classification: 'READY',
       configuration: 'configured',
       dependency: 'reachable',
+      databaseCapability: 'current',
     },
   };
 }

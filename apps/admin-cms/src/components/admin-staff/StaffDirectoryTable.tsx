@@ -5,6 +5,7 @@ import {
   Clock3,
   RotateCcw,
   ShieldAlert,
+  UserRoundX,
   Users,
 } from 'lucide-react';
 import { Badge } from '../ui/badge';
@@ -15,6 +16,7 @@ import type {
   StaffDirectoryEntry,
   StaffProvisioningIncident,
 } from '../../staff/staffProvisioningRepository';
+import { StaffLifecycleControls } from './StaffLifecycleControls';
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   admin: 'Administrator',
@@ -63,16 +65,34 @@ function RoleBadges({ roles }: { roles: AdminRole[] }) {
 }
 
 function AccountStatus({ status }: { status: StaffDirectoryEntry['status'] }) {
-  return status === 'active' ? (
+  if (status === 'active') return (
     <Badge variant="success" className="w-fit">
       <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
       Active
     </Badge>
-  ) : (
+  );
+  if (status === 'deactivated') return (
+    <Badge variant="neutral" className="w-fit">
+      <UserRoundX className="h-3.5 w-3.5" aria-hidden="true" />
+      Deactivated
+    </Badge>
+  );
+  return (
     <Badge variant="warning" className="w-fit">
       <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
       Awaiting account setup
     </Badge>
+  );
+}
+
+function ProviderStatus({ status }: { status: StaffDirectoryEntry['providerSync'] }) {
+  if (status === 'synchronized') return null;
+  return (
+    <p className={`mt-2 text-xs leading-relaxed ${status === 'attention_required' ? 'text-destructive' : 'text-muted-foreground'}`}>
+      {status === 'attention_required'
+        ? 'Sign-in synchronization needs attention.'
+        : 'Sign-in synchronization is pending.'}
+    </p>
   );
 }
 
@@ -114,6 +134,7 @@ function incidentExplanation(status: StaffProvisioningIncident['status']): strin
 export interface StaffDirectoryTableProps {
   staff: StaffDirectoryEntry[];
   incidents: StaffProvisioningIncident[];
+  currentUserEmail: string;
 }
 
 /**
@@ -123,7 +144,7 @@ export interface StaffDirectoryTableProps {
  * secrets and no provider detail. Desktop tables and narrow-screen lists share the same bounded
  * role, status and timestamp presenters so every safe field retains the same meaning.
  */
-export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTableProps) {
+export function StaffDirectoryTable({ staff, incidents, currentUserEmail }: StaffDirectoryTableProps) {
   return (
     <div className="flex flex-col gap-6">
       <Card role="region" aria-labelledby="staff-directory-heading" className="overflow-hidden border-border-structural">
@@ -160,13 +181,6 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
               <div className="hidden xl:block">
                 <table className="w-full table-fixed border-collapse text-sm">
                   <caption className="sr-only">Admin/CMS staff accounts and their assigned roles</caption>
-                  <colgroup>
-                    <col className="w-[21%]" />
-                    <col className="w-[27%]" />
-                    <col className="w-[20%]" />
-                    <col className="w-[19%]" />
-                    <col className="w-[13%]" />
-                  </colgroup>
                   <thead className="bg-muted/55 text-foreground-subtle">
                     <tr className="border-b border-border text-left">
                       <th scope="col" className="px-5 py-3 font-semibold">Name</th>
@@ -174,6 +188,7 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
                       <th scope="col" className="px-5 py-3 font-semibold">Roles</th>
                       <th scope="col" className="px-5 py-3 font-semibold">Status</th>
                       <th scope="col" className="px-5 py-3 font-semibold">Requested</th>
+                      <th scope="col" className="px-5 py-3 font-semibold">Manage access</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -189,9 +204,19 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
                           {entry.email}
                         </td>
                         <td className="px-5 py-4 align-top"><RoleBadges roles={entry.roles} /></td>
-                        <td className="px-5 py-4 align-top"><AccountStatus status={entry.status} /></td>
+                        <td className="px-5 py-4 align-top">
+                          <AccountStatus status={entry.status} />
+                          <ProviderStatus status={entry.providerSync} />
+                        </td>
                         <td className="px-5 py-4 align-top text-xs leading-relaxed text-muted-foreground">
                           <StaffTimestamp value={entry.requestedAt} />
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          <StaffLifecycleControls
+                            key={`${entry.email}-${entry.version}`}
+                            staff={entry}
+                            isCurrentUser={entry.email.toLowerCase() === currentUserEmail.toLowerCase()}
+                          />
                         </td>
                       </tr>
                     ))}
@@ -206,7 +231,10 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
                       <p className="min-w-0 font-semibold leading-relaxed text-foreground [overflow-wrap:anywhere]">
                         {entry.fullName || '—'}
                       </p>
-                      <AccountStatus status={entry.status} />
+                      <div>
+                        <AccountStatus status={entry.status} />
+                        <ProviderStatus status={entry.providerSync} />
+                      </div>
                     </div>
                     <dl className="mt-4 grid gap-4 sm:grid-cols-2">
                       <div className="min-w-0 sm:col-span-2">
@@ -222,6 +250,13 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
                         <dd className="mt-1 text-sm text-foreground-subtle"><StaffTimestamp value={entry.requestedAt} /></dd>
                       </div>
                     </dl>
+                    <div className="mt-5 border-t border-border/70 pt-4">
+                      <StaffLifecycleControls
+                        key={`${entry.email}-${entry.version}`}
+                        staff={entry}
+                        isCurrentUser={entry.email.toLowerCase() === currentUserEmail.toLowerCase()}
+                      />
+                    </div>
                   </li>
                 ))}
               </ul>

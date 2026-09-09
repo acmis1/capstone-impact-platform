@@ -53,7 +53,7 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
     return { token, hash, id: result.previewId as string };
   };
   try {
-    assert.match(sql('SELECT count(*) AS migration_count FROM supabase_migrations.schema_migrations;'), /\b52\b/);
+    assert.match(sql('SELECT count(*) AS migration_count FROM supabase_migrations.schema_migrations;'), /\b53\b/);
     // Default ACLs materialize as direct grants at CREATE TABLE; SELECT alone cannot narrow them.
     const correctionTables = ['participant_correction_events', 'participant_correction_prior_revisions',
       'participant_correction_recovery_rows', 'participant_correction_submissions'];
@@ -144,7 +144,7 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
     const initial = await project(); const oldMedia = await media();
     const previewBefore = await data(client.from('participant_previews').select('*').eq('id', preview.id).single());
     const correctionBefore = await data(client.from('participant_preview_correction_requests').select('*').eq('id', correctionId).single());
-    pass('52 migrations; synthetic source, old gallery and confirmed historical evidence');
+    pass('53 migrations; synthetic source, old gallery and confirmed historical evidence');
 
     phase = 'participant staging and access controls';
     const form = await correctionForm();

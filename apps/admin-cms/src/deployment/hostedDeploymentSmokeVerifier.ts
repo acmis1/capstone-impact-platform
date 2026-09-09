@@ -488,17 +488,20 @@ function evaluateReadinessGet(request: RequestResult): ReadinessEvidence | null 
     body.readiness === 'ready' &&
     body.classification === 'READY' &&
     body.configuration === 'configured' &&
-    body.dependency === 'reachable';
+    body.dependency === 'reachable' &&
+    body.databaseCapability === 'current';
   const configurationNotReady = request.observation.status === 503 &&
     body.readiness === 'not-ready' &&
     body.classification === 'CONFIGURATION_NOT_READY' &&
     body.configuration === 'not-ready' &&
-    body.dependency === 'not-checked';
+    body.dependency === 'not-checked' &&
+    body.databaseCapability === 'not-checked';
   const dependencyNotReady = request.observation.status === 503 &&
     body.readiness === 'not-ready' &&
     body.classification === 'DEPENDENCY_NOT_READY' &&
     body.configuration === 'configured' &&
-    body.dependency === 'not-ready';
+    body.dependency === 'not-ready' &&
+    body.databaseCapability === 'not-ready';
   const structurallyValid = migrations !== null &&
     (commit.state !== 'invalid' ||
       (typeof body.deploymentCommit === 'object' &&

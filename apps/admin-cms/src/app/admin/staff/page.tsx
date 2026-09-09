@@ -64,7 +64,7 @@ export default async function StaffAccessPage() {
   const pendingCount = staff.filter((entry) => entry.status === 'pending_activation').length;
   const needsAttentionCount = incidents.filter(
     (incident) => incident.status === 'compensation_failed',
-  ).length;
+  ).length + staff.filter((entry) => entry.providerSync === 'attention_required').length;
 
   return (
     <div className="flex flex-col gap-8">
@@ -117,7 +117,11 @@ export default async function StaffAccessPage() {
           headingLevel="h2"
         />
       ) : (
-        <StaffDirectoryTable staff={staff} incidents={incidents} />
+        <StaffDirectoryTable
+          staff={staff}
+          incidents={incidents}
+          currentUserEmail={adminContext.email}
+        />
       )}
 
       <section aria-labelledby="staff-access-actions-heading" className="flex flex-col gap-4">

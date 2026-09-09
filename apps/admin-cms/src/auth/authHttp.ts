@@ -9,6 +9,7 @@ export function getAuthErrorHttpStatus(type: AuthErrorType | string): number {
       return 401;
     case 'ADMIN_NOT_PROVISIONED':
     case 'STAFF_ACTIVATION_PENDING':
+    case 'STAFF_DEACTIVATED':
     case 'PASSWORD_RECOVERY_REQUIRED':
     case 'AUTHENTICATION_PROVENANCE_INVALID':
     case 'PERMISSION_DENIED':
@@ -30,6 +31,7 @@ export function getPublicAuthErrorMessage(type: AuthErrorType | string): string 
       return 'Authentication required.';
     case 'ADMIN_NOT_PROVISIONED':
     case 'STAFF_ACTIVATION_PENDING':
+    case 'STAFF_DEACTIVATED':
     case 'PASSWORD_RECOVERY_REQUIRED':
     case 'AUTHENTICATION_PROVENANCE_INVALID':
     case 'PERMISSION_DENIED':

@@ -71,7 +71,11 @@ The safe sequence for this release is:
 
 The maintenance gate is application code, so the existing older staging build cannot enforce it. The reviewed release candidate therefore has to be deployed before the database transition begins.
 
-This does **not** mean the 51-contract application is allowed to operate normally against the 48-state database. It is permitted only in the verified closed state described above. Blocked routes do not reach schema-dependent application logic. The three allowlisted H2 surfaces are bounded: health does not query the database, readiness performs only its existing bounded dependency check against the baseline `public.programs` relation, and the login surface does not exercise correction tables/RPCs/buckets.
+This does **not** mean the 51-contract application is allowed to operate normally against the 48-state database. It is permitted only in the verified closed state described above. Blocked routes do not reach schema-dependent application logic. In that historical build, the three allowlisted H2 surfaces were bounded: health did not query the database, readiness used the baseline `public.programs` dependency probe, and the login surface did not exercise correction tables/RPCs/buckets.
+
+That readiness description is historical to the 51-contract build. The current endpoint instead
+requires a valid provider deployment commit and calls the immutable, read-only release capability
+sentinel RPC; it cannot be green against this older 48-state database.
 
 The operational invariant is therefore:
 

@@ -19,6 +19,7 @@ type ReadinessBody = {
   classification: string;
   configuration: string;
   dependency: string;
+  databaseCapability: string;
   deploymentCommit: unknown;
   expectedMigrations: unknown;
 };
@@ -64,6 +65,7 @@ function readyBody(overrides: Partial<ReadinessBody> = {}): ReadinessBody {
     classification: 'READY',
     configuration: 'configured',
     dependency: 'reachable',
+    databaseCapability: 'current',
     deploymentCommit: { state: 'valid', value: VALID_COMMIT },
     expectedMigrations: REPOSITORY_MIGRATIONS,
     ...overrides,

@@ -1,15 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { assistiveMutationResponseSchema } from '../domain/jobContract';
+import { assistiveEnqueueResponseSchema, assistiveMutationResponseSchema } from '../domain/jobContract';
 import { hashAssistiveInput } from '../domain/inputIdentity';
 import { hashDuplicateCorpus } from '../duplicate-detection/duplicateRanker';
 import type { AssistiveJobGateway } from '../repositories/assistiveJobRepository';
 import type { AssistiveInputGateway } from '../repositories/assistiveInputRepository';
+import { loadAssistiveInput } from '../services/assistiveInputService';
 import { enqueueAssistiveValidation } from '../services/assistiveJobService';
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const ACTOR_ID = '22222222-2222-4222-8222-222222222222';
 const RUN_ID = '33333333-3333-4333-8333-333333333333';
+const REPLACEMENT_PROJECT_ID = '55555555-5555-4555-8555-555555555555';
 const PDF = Buffer.from('%PDF-1.4\n', 'ascii');
 
 function jobs(): AssistiveJobGateway {
@@ -67,9 +69,46 @@ describe('assistive job service and response contracts', () => {
     expect(gateway.enqueue).not.toHaveBeenCalled();
   });
 
+  it('rejects an A-to-B input replacement at the final reload before enqueue', async () => {
+    const gateway = jobs();
+    const input = inputs();
+    const baseline = await loadAssistiveInput(input, PROJECT_ID, 'private');
+    expect(baseline).not.toBeNull();
+    vi.mocked(input.download).mockResolvedValue(Buffer.from('%PDF-1.5\n', 'ascii'));
+
+    await expect(enqueueAssistiveValidation(gateway, input, {
+      projectId: PROJECT_ID,
+      actorAdminUserId: ACTOR_ID,
+      privateBucket: 'private',
+      expectedInputHash: baseline!.inputHash,
+      expectedProjectPublicId: 'P-1',
+    })).resolves.toEqual({ resultCode: 'INPUT_CHANGED' });
+    expect(gateway.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('rejects a same-publicId replacement because the bound project identity changed', async () => {
+    const gateway = jobs();
+    const input = inputs();
+    vi.mocked(input.loadProject)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({
+        id: REPLACEMENT_PROJECT_ID, public_id: 'P-1', title: 'Replacement', summary: '', background: '', solution: '',
+      });
+
+    await expect(enqueueAssistiveValidation(gateway, input, {
+      projectId: PROJECT_ID,
+      actorAdminUserId: ACTOR_ID,
+      privateBucket: 'private',
+      expectedInputHash: 'a'.repeat(64),
+      expectedProjectPublicId: 'P-1',
+    })).resolves.toEqual({ resultCode: 'PROJECT_NOT_FOUND' });
+    expect(gateway.enqueue).not.toHaveBeenCalled();
+  });
+
   it('rejects unknown fields on every mutation response', () => {
     expect(assistiveMutationResponseSchema.safeParse({ resultCode: 'SUPERSEDED' }).success).toBe(true);
     expect(assistiveMutationResponseSchema.safeParse({ resultCode: 'SUPERSEDED', unknown: true }).success).toBe(false);
     expect(assistiveMutationResponseSchema.safeParse({ resultCode: 'HEARTBEAT' }).success).toBe(false);
+    expect(assistiveEnqueueResponseSchema.safeParse({ resultCode: 'INPUT_CHANGED' }).success).toBe(true);
   });
 });

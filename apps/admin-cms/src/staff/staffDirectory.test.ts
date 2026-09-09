@@ -6,11 +6,9 @@ describe('readStaffDirectory', () => {
     const client = {
       from: vi.fn((table: string) => ({
         select: vi.fn().mockResolvedValue(
-          table === 'admin_users'
+          table === 'admin_users' || table === 'user_roles' || table === 'staff_lifecycle_events'
             ? { data: [], error: null }
-            : table === 'user_roles'
-              ? { data: [], error: null }
-              : {
+            : {
                 data: [{
                   admin_user_id: 'internal-profile-id',
                   normalized_email: 'cleanup@capstone.test',

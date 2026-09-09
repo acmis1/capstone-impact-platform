@@ -245,7 +245,7 @@ async function main(): Promise<void> {
       || restore.tableGrantPortabilityCompatibility !== 'REVOKED_KNOWN_TARGET_DEFAULT_ACL_OVERGRANTS'
       || restore.tableGrantPortabilityRevokeCount <= 0
       || restore.gate4?.sourceComparisonClassification !== 'GATE4_MATCH_CONSTRAINT_RENDERING_PORTABLE'
-      || restore.gate4?.constraintRenderingPairCount !== 5
+      || restore.gate4?.constraintRenderingPairCount !== 7
       || restore.gate4?.tableGrantsMatch !== true
       || !roleArtifactUnchanged
       || !bundlePreservedThroughRestore
