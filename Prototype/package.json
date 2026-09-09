@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "validate-feed": "node scripts/validate-feed.js",
     "test": "node scripts/test-recovery.js",
+    "test:import-upload-limits": "node scripts/test-import-upload-limits.js",
     "test:duda-feed-url-validator": "node scripts/test-duda-feed-url-validator.js",
     "test:duda-current-feed-browser": "node scripts/test-duda-current-feed-browser.js",
     "recovery:dry-run": "node scripts/recoverPrototypeSupabase.js",
@@ -22,7 +23,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.18.2",
-    "multer": "^2.1.1",
+    "multer": "^2.3.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
