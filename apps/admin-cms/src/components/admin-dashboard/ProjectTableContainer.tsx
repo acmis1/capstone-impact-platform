@@ -26,6 +26,7 @@ import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { isSafeBulkPublicId } from '../../projects/bulkProjectReview';
 import { BulkProjectReviewPanel } from './BulkProjectReviewPanel';
+import { BulkAssistiveExecutionPanel } from './BulkAssistiveExecutionPanel';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -52,6 +53,7 @@ export interface ProjectTableContainerProps {
   result: ProjectIndexResult;
   canSubmitBulk?: boolean;
   canReviewBulk?: boolean;
+  canRunAssistiveBulk?: boolean;
 }
 
 const columnHelper = createColumnHelper<ProjectIndexRow>();
@@ -177,7 +179,13 @@ function supportingContext(row: ProjectIndexRow): string | null {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-export function ProjectTableContainer({ query, result, canSubmitBulk = false, canReviewBulk = false }: ProjectTableContainerProps) {
+export function ProjectTableContainer({
+  query,
+  result,
+  canSubmitBulk = false,
+  canReviewBulk = false,
+  canRunAssistiveBulk = false,
+}: ProjectTableContainerProps) {
   // Opt out of React Compiler memoization because useReactTable is an incompatible library boundary
   "use no memo";
 
@@ -527,6 +535,11 @@ export function ProjectTableContainer({ query, result, canSubmitBulk = false, ca
         selectedProjects={selectedProjects}
         canSubmitBulk={canSubmitBulk}
         canReviewBulk={canReviewBulk}
+        onBusyChange={setBulkReviewBusy}
+      />
+      <BulkAssistiveExecutionPanel
+        selectedProjects={selectedProjects}
+        canRunAssistive={canRunAssistiveBulk}
         onBusyChange={setBulkReviewBusy}
       />
 
