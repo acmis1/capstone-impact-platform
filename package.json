@@ -104,6 +104,6 @@
   },
   "devDependencies": {
     "server-only": "^0.0.1",
-    "supabase": "2.109.1"
+    "supabase": "2.116.0"
   }
 }
