@@ -33,6 +33,7 @@ const RUNTIME_SCRIPTS: Record<string, RuntimeScript> = {
     environment: { CAPSTONE_VERIFY_LEDGER_FOCUS: 'stale-discipline-relevance' },
   },
   publication: { file: 'verifyControlledPublicationRuntime.ts' },
+  'annual-publication': { file: 'verifyAnnualPublicationEvidenceRuntime.ts' },
   removal: { file: 'verifyControlledPublicRemovalRuntime.ts' },
 };
 const DEFAULT_RUNTIME_NAMES = ['ledger', 'publication', 'removal'];
@@ -85,7 +86,10 @@ function configurePorts(config: string): string {
   return `${updated}\n[analytics]\nenabled = true\nport = ${portBase + 7}\n`;
 }
 
-function createWorkdir(excludeMigrations: readonly string[] = []): string {
+function createWorkdir(
+  excludeMigrations: readonly string[] = [],
+  annualPublicationMode = false,
+): string {
   const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'capstone-ledger-runtime-'));
   const source = path.join(repositoryRoot, 'infra', 'supabase');
   const destination = path.join(workdir, 'supabase');
@@ -94,7 +98,14 @@ function createWorkdir(excludeMigrations: readonly string[] = []): string {
     fs.rmSync(path.join(destination, 'migrations', migration), { force: true });
   }
   const configPath = path.join(destination, 'config.toml');
-  fs.writeFileSync(configPath, configurePorts(fs.readFileSync(configPath, 'utf8')), 'utf8');
+  let config = configurePorts(fs.readFileSync(configPath, 'utf8'));
+  if (annualPublicationMode) {
+    // The repository seed contains one published demonstration project. The annual verifier owns
+    // an empty disposable publication universe so its 120-record head cannot include unrelated
+    // seed membership; all default ledger/publication/removal modes retain the normal seed.
+    config = config.replace(/^seed = .*$/m, 'seed = { sql_paths = [] }');
+  }
+  fs.writeFileSync(configPath, config, 'utf8');
   return workdir;
 }
 
@@ -399,6 +410,12 @@ function runSupabase(command: 'start' | 'stop' | 'migrate', workdir: string, net
 function main(): void {
   const upgradeRequested = selected.includes(UPGRADE_MODE);
   const scriptModes = selected.filter((name) => name !== UPGRADE_MODE);
+  const annualPublicationRequested = scriptModes.includes('annual-publication');
+  if (annualPublicationRequested && scriptModes.length !== 1) {
+    console.error('The annual publication run needs its own empty disposable stack; run it as a separate invocation.');
+    process.exitCode = 1;
+    return;
+  }
   if (upgradeRequested && scriptModes.length > 0) {
     console.error('The disposable upgrade run needs its own stack; run it as a separate invocation.');
     process.exitCode = 1;
@@ -406,7 +423,10 @@ function main(): void {
   }
   // An upgrade run must start from the exact pre-correction migration database; a script run starts
   // from a fresh full install. Provisioning one stack per invocation keeps both baselines exact.
-  const workdir = createWorkdir(upgradeRequested ? CORRECTION_MIGRATIONS : []);
+  const workdir = createWorkdir(
+    upgradeRequested ? CORRECTION_MIGRATIONS : [],
+    annualPublicationRequested,
+  );
   let networkId = '';
   let networkCreateAttempted = false;
   let startAttempted = false;

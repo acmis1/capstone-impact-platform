@@ -59,6 +59,7 @@
     "verify:publication-readiness-runtime": "tsx src/scripts/verifyPublicationReadinessRuntime.ts",
     "verify:publication-preparation-runtime": "tsx src/scripts/verifyPublicationPreparationRuntime.ts",
     "verify:controlled-publication-runtime": "tsx src/scripts/verifyControlledPublicationRuntime.ts",
+    "verify:annual-publication-evidence": "node --conditions=react-server --import tsx src/scripts/runDisposableLedgerRuntime.ts annual-publication",
     "verify:controlled-public-removal-runtime": "tsx src/scripts/verifyControlledPublicRemovalRuntime.ts",
     "verify:public-feed-ledger-runtime": "tsx src/scripts/verifyPublicFeedLedgerRuntime.ts",
     "verify:public-feed-ledger-runtime:disposable": "tsx src/scripts/runDisposableLedgerRuntime.ts",
