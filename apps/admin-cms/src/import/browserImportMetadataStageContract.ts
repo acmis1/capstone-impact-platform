@@ -27,7 +27,7 @@ export interface BrowserImportMetadataStageSuccess {
   batchId: string;
   projectCount: number;
   warningCount: number;
-  batchStatus: 'metadata_staged';
+  batchStatus: 'metadata_staged' | 'completed';
 }
 
 export interface BrowserImportMetadataStageFailure {
@@ -86,7 +86,8 @@ export function validateBrowserImportMetadataStageResponse(data: unknown): Brows
       typeof obj.warningCount === 'number' &&
       Number.isInteger(obj.warningCount) &&
       obj.warningCount >= 0 &&
-      obj.batchStatus === 'metadata_staged'
+      (obj.batchStatus === 'metadata_staged'
+        || (obj.result === 'already_staged' && obj.batchStatus === 'completed'))
     ) {
       return {
         success: true,
@@ -94,7 +95,7 @@ export function validateBrowserImportMetadataStageResponse(data: unknown): Brows
         batchId: obj.batchId,
         projectCount: obj.projectCount,
         warningCount: obj.warningCount,
-        batchStatus: 'metadata_staged',
+        batchStatus: obj.batchStatus,
       };
     }
     return null;
