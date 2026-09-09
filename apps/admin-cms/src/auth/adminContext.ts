@@ -15,12 +15,17 @@ export async function resolveAdminContextFromAuthUser(
   authUserId: string,
   supabaseAdmin: SupabaseClient,
 ): Promise<AuthenticatedAdminContext> {
-  let adminUser: { id: string; email: string; full_name: string | null } | null;
+  let adminUser: {
+    id: string;
+    email: string;
+    full_name: string | null;
+    lifecycle_status: unknown;
+  } | null;
 
   try {
     const { data, error } = await supabaseAdmin
       .from('admin_users')
-      .select('id, email, full_name')
+      .select('id, email, full_name, lifecycle_status')
       .eq('auth_user_id', authUserId)
       .maybeSingle();
     if (error) throw error;
@@ -31,6 +36,12 @@ export async function resolveAdminContextFromAuthUser(
 
   if (!adminUser) {
     throw new AdminAuthError('ADMIN_NOT_PROVISIONED', 'Access denied.');
+  }
+
+  // Database lifecycle state is authoritative even while a formerly valid provider token remains
+  // cryptographically valid. Any absent or unrecognized state fails closed with deactivation.
+  if (adminUser.lifecycle_status !== 'active') {
+    throw new AdminAuthError('STAFF_DEACTIVATED', 'Access denied.');
   }
 
   // Fail closed while an invitation is still awaiting the invitee's account setup.

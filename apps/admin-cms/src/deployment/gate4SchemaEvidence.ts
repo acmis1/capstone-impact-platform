@@ -872,6 +872,10 @@ export function validateCurrentRepositoryGate4Contract(
     ['projects', 'participant_contact_email'],
     ['media_assets', 'alt_text_public'],
     ['admin_users', 'auth_user_id'],
+    ['admin_users', 'lifecycle_status'],
+    ['admin_users', 'lifecycle_version'],
+    ['admin_users', 'lifecycle_updated_at'],
+    ['admin_users', 'deactivated_at'],
   ] as const) {
     if (!evidence.columns.some((candidate) => candidate.schema === 'public' && candidate.table === table && candidate.name === column)) {
       errors.push(`Critical Local column public.${table}.${column} is missing.`);

@@ -227,7 +227,7 @@ jobs:
           SUPABASE_START_TIMEOUT_MS: '900000'
 
   staging-migration-upgrade:
-    name: Disposable Staging Migration 0048 to 0052 Upgrade
+    name: Disposable Staging Migration 0048 to 0053 Upgrade
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -249,9 +249,9 @@ jobs:
         run: npm ci
 
       # Provisions exactly the 48-migration hosted baseline on its own disposable stack, seeds
-      # representative synthetic 48-state evidence, then applies 0049 through 0052 one at a time.
+      # representative synthetic 48-state evidence, then applies 0049 through 0053 one at a time.
       # It owns every resource it creates, verifies its own cleanup, and contacts no hosted system.
-      - name: Verify the exact 0048 to 0052 migration upgrade on an owned disposable stack
+      - name: Verify the exact 0048 to 0053 migration upgrade on an owned disposable stack
         run: npm run verify:staging-migration-upgrade:disposable
 
   participant-owned-corrections:
@@ -331,10 +331,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify fifty-two migrations and local integrity
+      - name: Verify fifty-three migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 52
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 53
 
       - name: Verify exact Gate 4 schema evidence from the migrated Local catalog
         run: npm run check:gate4-schema-evidence:local --workspace=apps/admin-cms -- --local-self-check
@@ -347,6 +347,9 @@ jobs:
 
       - name: Verify staff role and session governance runtime behavior
         run: npm exec --workspace=apps/admin-cms -- tsx src/scripts/verifyStaffRoleSessionGovernanceRuntime.ts
+
+      - name: Verify staff lifecycle and retained-token RLS on an owned disposable stack
+        run: npm run verify:staff-lifecycle-runtime:disposable
 
       - name: Verify secure password recovery runtime behavior
         run: npm run verify:password-recovery-runtime --workspace=apps/admin-cms

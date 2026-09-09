@@ -9,6 +9,7 @@ import {
   startDockerLoopbackProxy,
   stopDockerLoopbackProxy,
 } from '../local-development/safeSupabaseCli';
+import { RELEASE_CAPABILITY_SENTINEL } from '../deployment/hostedDeploymentReadiness';
 import { cleanupDisposableLedgerRuntime } from './disposableLedgerCleanup';
 
 /**
@@ -42,16 +43,16 @@ const PSQL_COMMAND_TIMEOUT_MS = 45_000;
 const RUNTIME_TIMEOUT_MS = 600_000;
 
 /**
- * The sole correction migration. Removing exactly this file reproduces the
- * pre-correction state (one fewer than the integrated repository migration set);
+ * Removing the release tail reproduces the exact pre-correction state;
  * restoring it proves the supported forward-only upgrade back to the full set.
  */
 const CORRECTION_MIGRATIONS = [
   '20260906120000_public_removal_completion_reconciliation.sql',
+  '20260909120000_staff_lifecycle_readiness.sql',
 ];
 
 const PRE_CORRECTION_MIGRATION_COUNT = 51;
-const CURRENT_MAIN_MIGRATION_COUNT = 52;
+const CURRENT_MAIN_MIGRATION_COUNT = 53;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -327,6 +328,11 @@ function verifyCorrectionUpgrade(workdir: string): void {
     ),
     '1',
   );
+  assert.equal(
+    psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260909120000';"),
+    '1',
+  );
+  assert.equal(psql('SELECT public.get_release_capability_sentinel();'), RELEASE_CAPABILITY_SENTINEL);
   const completionDefinition = routineDefinition('complete_public_feed_operation');
   assert.ok(completionDefinition.includes("v_project.status <> 'archived'"));
   assert.ok(completionDefinition.includes("archived_from_status IS DISTINCT FROM 'published'"));

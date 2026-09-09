@@ -459,7 +459,8 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
         console.error(`❌ Policy role mismatch for [${polName}].`);
         return false;
       }
-      if (normalizePolicyExpr(foundPol.qual) !== 'true') {
+      if (normalizePolicyExpr(foundPol.qual)
+        !== 'select staff_session_is_active() as staff_session_is_active') {
         console.error(`❌ Policy qual expression mismatch for [${polName}].`);
         return false;
       }
@@ -491,7 +492,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
         return false;
       }
     }
-    console.log(`✔ Live database policy semantics verified (lookup SELECT true & ${EXPECTED_TABLES.length} restrictive admin_all FALSE).`);
+    console.log(`✔ Live database policy semantics verified (lookup SELECT active-staff predicate & ${EXPECTED_TABLES.length} restrictive admin_all FALSE).`);
 
     // 3e. Exact Live Table-Grant Matrix verification (Section 4)
     const grantRows = runLocalDbQuery(

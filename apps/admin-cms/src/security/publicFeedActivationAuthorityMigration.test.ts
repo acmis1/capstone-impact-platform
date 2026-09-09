@@ -11,14 +11,13 @@ const source = fs.readFileSync(path.join(migrations, migrationName), 'utf8').rep
 describe('public-feed activation authority migration', () => {
   it('leaves every earlier migration byte-identical to current main', () => {
     const files = fs.readdirSync(migrations).filter((name) => name.endsWith('.sql')).sort();
-    expect(files).toHaveLength(52);
+    expect(files).toHaveLength(53);
     expect(files).toContain(migrationName);
 
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'origin/main', '--',
-      // Only the Issue #268 forward migration is newer than origin/main; every other file, this
-      // one included, must remain byte-identical.
-      ...files.filter((file) => file !== '20260906120000_public_removal_completion_reconciliation.sql')
+      // Migration 0053 is the only migration newer than this branch's verified origin/main base.
+      ...files.filter((file) => file !== '20260909120000_staff_lifecycle_readiness.sql')
                       .map((file) => `infra/supabase/migrations/${file}`)
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
 
