@@ -91,6 +91,15 @@ On exact current `main` SHA `50d02632f4403f3acb5620d6b9a2e482e8ac5688` with 52 m
 
 The evaluator explicitly does not prove hosted Supabase, Render/Duda production capacity, production SLA, high concurrency, institutional UAT, or human staff-effort savings. KPI-01 remains `NOT TESTED`. The separate accessibility evidence recheck also passed: 112 files scanned, 57 text files, 0 findings, 54 screenshots, 54 unique hashes, and 0 duplicate groups; this is evidence-integrity verification, not institutional accessibility acceptance.
 
+## Subsequent annual-scale publication/rendering evidence - 2026-09-09
+
+This audit's evaluator remains exactly what it was: a 132-case / 120-persisted processing and read-only publication-planning evaluation whose owned ordinary feed is deliberately empty. It was **not** rewritten or rerun as a 120-project publisher. Two later, separate machine-evidence paths now close different Local-only scale boundaries without changing that historical result:
+
+- [Annual-Scale Governed Publication Evidence](annual-scale-publication-evidence.md) drove 120 synthetic targets through the current participant-confirmation/readiness and `executeControlledPublication` path on a verifier-owned disposable Local Supabase stack. All 120 completed, the final canonical feed contained 120 records, exact publication/ledger/audit/lifecycle accounting matched, media/idempotency/negative controls passed, and no active publication operation or disposable residue remained.
+- [Duda Annual-Scale Rendering Evidence](duda-annual-scale-rendering-evidence.md) loaded 120 deterministic current-contract records into the actual repository Duda listing/detail renderer on loopback-only desktop/mobile browser harnesses. All 120 listing/detail targets were accounted for; search, four facets/intersections, representative details, responsive overflow, and browser error capture passed. No Duda site was contacted or mutated.
+
+Together with this evaluator they now provide separate evidence for annual-scale processing, governed disposable-Local publication, and local public rendering. They still do **not** constitute one 120-project import-to-live-Duda production run and do not prove hosted/production capacity, production concurrency/SLA, live Impact publication, KPI-01 staff-effort reduction, formal intended-user UAT, or institutional acceptance.
+
 ## Historical source and integration (2026-09-03)
 
 - Audited Binh head: `f004d39d9e4f5744018dd17efd9094afa77acb7f`.
@@ -230,7 +239,7 @@ Corrections beyond Binh's integrated work touch only:
 - `apps/admin-cms/src/scripts/verifyReleaseEvaluation.ts`
 - `docs/release-evaluation-harness.md`, `docs/m6-release-acceptance-checklist.md` and this audit.
 
-Remaining limits: independent reconciliation timing; no single wholly green default full-suite run on this host; GitHub authentication for posting review; no final-head CI; no comparable human efficiency measurements. Browser evidence is a representative Local smoke, not institutional UAT or comprehensive accessibility certification. Candidate planning does not prove 100+ published projects, Duda integration, production capacity, Render limits, hosted recovery or stakeholder acceptance. Content-correction ownership was observed through current authority, not redesigned.
+Historical remaining limits for this 2026-09-03 pass: independent reconciliation timing; no single wholly green default full-suite run on this host; GitHub authentication for posting review; no final-head CI; no comparable human efficiency measurements. Browser evidence is a representative Local smoke, not institutional UAT or comprehensive accessibility certification. Candidate planning in this evaluator does not itself prove 100+ published projects, Duda integration, production capacity, Render limits, hosted recovery or stakeholder acceptance. The separate 2026-09-09 annual-scale publication/rendering evidence above closes only the stated disposable-Local publication and loopback-rendering boundaries; it does not retroactively change this evaluator or its production/human limits. Content-correction ownership was observed through current authority, not redesigned.
 
 **Hosted application/infrastructure contacts/mutations: NONE.** GitHub source/CI metadata was read and the authorized review submission failed authentication. No hosted Supabase, Render, Azure, Duda or publish-cloud-feed call; no public promotion/removal, publication ledger mutation, production load test, teammate branch rewrite, push or merge.
 
