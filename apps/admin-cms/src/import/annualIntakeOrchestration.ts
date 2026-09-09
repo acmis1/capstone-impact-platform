@@ -392,6 +392,16 @@ async function executeAnnualIntakeImport(
     onProgress?.(progress);
   };
 
+  const publishFailure = (
+    failed: AnnualIntakeProgress,
+    message: string,
+    failedChunkIndex: number,
+  ): AnnualIntakeImportResult => {
+    const published = { ...failed, lastError: message, failedChunkIndex };
+    publish(published);
+    return { success: false, progress: published, error: message, failedChunkIndex };
+  };
+
   if (selectedPackagePaths.length === 0) {
     const next = { ...progress, lastError: 'At least one project must be selected.', failedChunkIndex: null };
     publish(next);
@@ -400,14 +410,14 @@ async function executeAnnualIntakeImport(
 
   for (const chunk of plan.chunks) {
     const current = progress.chunks[chunk.index];
-    if (current.status === 'completed' || current.status === 'skipped') continue;
-
     const selectedForChunk = selectedPathsForChunk(chunk, selectedPackagePaths);
     const acknowledgedForChunk = acknowledgedPathsForChunk(chunk, acknowledgedWarningPackagePaths);
 
     if (selectedForChunk.length === 0) {
       publish(updateChunk(progress, chunk.index, {
         status: 'skipped',
+        batchId: null,
+        mediaAssetCount: 0,
         error: null,
         failurePhase: null,
       }));
@@ -428,8 +438,7 @@ async function executeAnnualIntakeImport(
         error: prepared.message,
         failurePhase: 'metadata',
       });
-      publish({ ...failed, lastError: prepared.message, failedChunkIndex: chunk.index });
-      return { success: false, progress: failed, error: prepared.message, failedChunkIndex: chunk.index };
+      return publishFailure(failed, prepared.message, chunk.index);
     }
 
     let batchId = current.batchId;
@@ -453,8 +462,7 @@ async function executeAnnualIntakeImport(
           error: message,
           failurePhase: 'metadata',
         });
-        publish({ ...failed, lastError: message, failedChunkIndex: chunk.index });
-        return { success: false, progress: failed, error: message, failedChunkIndex: chunk.index };
+        return publishFailure(failed, message, chunk.index);
       }
 
       batchId = metadataResult.batchId;
@@ -473,8 +481,7 @@ async function executeAnnualIntakeImport(
         error: message,
         failurePhase: 'metadata',
       });
-      publish({ ...failed, lastError: message, failedChunkIndex: chunk.index });
-      return { success: false, progress: failed, error: message, failedChunkIndex: chunk.index };
+      return publishFailure(failed, message, chunk.index);
     }
 
     const mediaResult = await stageMediaChunk({
@@ -494,8 +501,7 @@ async function executeAnnualIntakeImport(
         error: message,
         failurePhase: 'media',
       });
-      publish({ ...failed, lastError: message, failedChunkIndex: chunk.index });
-      return { success: false, progress: failed, error: message, failedChunkIndex: chunk.index };
+      return publishFailure(failed, message, chunk.index);
     }
 
     mediaAssetCount = mediaResult.mediaAssetCount;

@@ -101,8 +101,12 @@ function memoryStore(): AnnualIntakeProgressStore & { value: AnnualIntakeProgres
   return store;
 }
 
-function stageResponse(result: 'created' | 'already_staged', batchId: string): Response {
-  return makeResponse({ success: true, result, batchId, projectCount: 25, warningCount: 0, batchStatus: 'metadata_staged' });
+function stageResponse(
+  result: 'created' | 'already_staged',
+  batchId: string,
+  batchStatus: 'metadata_staged' | 'completed' = 'metadata_staged',
+): Response {
+  return makeResponse({ success: true, result, batchId, projectCount: 25, warningCount: 0, batchStatus });
 }
 
 function mediaResponse(result: 'completed' | 'already_completed', batchId: string): Response {
@@ -190,17 +194,29 @@ describe('Annual intake browser orchestration', () => {
     });
     expect(interrupted.success).toBe(false);
     expect(interrupted.failedChunkIndex).toBe(2);
+    expect(interrupted.progress).toEqual(store.value);
+    expect(interrupted.progress.lastError).toBe('temporary failure');
+    expect(interrupted.progress.failedChunkIndex).toBe(2);
     expect(store.value?.chunks.slice(0, 2).every((chunk) => chunk.status === 'completed')).toBe(true);
     expect(store.value?.chunks[2]).toMatchObject({ status: 'failed', failurePhase: 'media' });
     expect(store.value?.chunks[2].batchId).toBeTruthy();
 
+    const persistedBeforeRetry = store.value!;
+    const completedBatchIds = persistedBeforeRetry.chunks.map((chunk) => chunk.batchId);
+    let metadataReplayIndex = 0;
+    let mediaReplayIndex = 0;
     const retryCalls: string[] = [];
-    const retryFetch: typeof fetch = async (input) => {
+    const retryFetch: typeof fetch = async (input, init) => {
       const url = String(input);
       retryCalls.push(url);
-      if (url.endsWith('/stage-media') && retryCalls.length === 1) return mediaResponse('already_completed', store.value!.chunks[2].batchId!);
-      if (url.endsWith('/stage-metadata')) return stageResponse('created', `00000000-0000-4000-8000-${String(retryCalls.length + 3).padStart(12, '0')}`);
-      return mediaResponse('completed', `00000000-0000-4000-8000-${String(retryCalls.length + 2).padStart(12, '0')}`);
+      if (url.endsWith('/stage-metadata')) {
+        const index = metadataReplayIndex++;
+        if (index < 2) return stageResponse('already_staged', completedBatchIds[index]!, 'completed');
+        return stageResponse('created', `00000000-0000-4000-8000-${String(index + 3).padStart(12, '0')}`);
+      }
+      const batchId = String((init?.body as FormData).get('batchId'));
+      const index = mediaReplayIndex++;
+      return mediaResponse(index < 3 ? 'already_completed' : 'completed', batchId);
     };
 
     const resumed = await runAnnualIntakeImport({
@@ -214,11 +230,12 @@ describe('Annual intake browser orchestration', () => {
     });
     expect(resumed.success).toBe(true);
     expect(resumed.progress.chunks.every((chunk) => chunk.status === 'completed')).toBe(true);
-    expect(retryCalls.filter((url) => url.endsWith('/stage-metadata'))).toHaveLength(2);
-    expect(retryCalls.filter((url) => url.endsWith('/stage-media'))).toHaveLength(3);
+    expect(retryCalls.filter((url) => url.endsWith('/stage-metadata'))).toHaveLength(4);
+    expect(retryCalls.filter((url) => url.endsWith('/stage-media'))).toHaveLength(5);
+    expect(resumed.progress.chunks.slice(0, 3).map((chunk) => chunk.batchId)).toEqual(completedBatchIds.slice(0, 3));
   });
 
-  it('uses completed persisted progress instead of downgrading to stale caller state', async () => {
+  it('replays completed persisted progress instead of trusting stale caller state', async () => {
     const result = await previewFiles([makeFile(`${ROOT}/project-001/project.json`, 'AAAAAAAAAAAAAAAA', 'application/json')]);
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -240,23 +257,71 @@ describe('Annual intake browser orchestration', () => {
 
     const storedSnapshot = JSON.stringify(store.value);
     const staleCallerState = createInitialAnnualIntakeProgress(result.plan, selected, []);
-    let stageRequests = 0;
+    const replayBatchId = store.value!.chunks[0].batchId!;
+    const stageRequests: string[] = [];
     const secondRun = await runAnnualIntakeImport({
       plan: result.plan,
       selectedPackagePaths: selected,
       acknowledgedWarningPackagePaths: [],
       existingProgress: staleCallerState,
       progressStore: store,
-      fetchFn: async () => {
-        stageRequests += 1;
-        return makeResponse({});
+      fetchFn: async (input, init) => {
+        const url = String(input);
+        stageRequests.push(url);
+        if (url.endsWith('/stage-metadata')) return stageResponse('already_staged', replayBatchId, 'completed');
+        expect(String((init?.body as FormData).get('batchId'))).toBe(replayBatchId);
+        return mediaResponse('already_completed', replayBatchId);
       },
       lockRunner: unlocked,
     });
 
     expect(secondRun.success).toBe(true);
-    expect(stageRequests).toBe(0);
+    expect(stageRequests).toEqual(['/api/imports/stage-metadata', '/api/imports/stage-media']);
     expect(JSON.stringify(store.value)).toBe(storedSnapshot);
+  });
+
+  it('does not trust a forged completed batch ID and converges through authoritative replay', async () => {
+    const result = await previewFiles([makeFile(`${ROOT}/project-001/project.json`, 'AAAAAAAAAAAAAAAA', 'application/json')]);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    const selected = [`${ROOT}/project-001`];
+    const store = memoryStore();
+    const forged = createInitialAnnualIntakeProgress(result.plan, selected, []);
+    const fakeBatchId = '00000000-0000-4000-8000-00000000f001';
+    const realBatchId = '00000000-0000-4000-8000-00000000a001';
+    forged.chunks[0] = {
+      ...forged.chunks[0],
+      status: 'completed',
+      batchId: fakeBatchId,
+      mediaAssetCount: 1,
+    };
+    store.value = forged;
+
+    const stageCalls: string[] = [];
+    const submittedMediaBatchIds: string[] = [];
+    const replay = await runAnnualIntakeImport({
+      plan: result.plan,
+      selectedPackagePaths: selected,
+      acknowledgedWarningPackagePaths: [],
+      existingProgress: createInitialAnnualIntakeProgress(result.plan, selected, []),
+      progressStore: store,
+      fetchFn: async (input, init) => {
+        const url = String(input);
+        stageCalls.push(url);
+        if (url.endsWith('/stage-metadata')) return stageResponse('already_staged', realBatchId, 'completed');
+        const batchId = String((init?.body as FormData).get('batchId'));
+        submittedMediaBatchIds.push(batchId);
+        return mediaResponse('already_completed', realBatchId);
+      },
+      lockRunner: unlocked,
+    });
+
+    expect(replay.success).toBe(true);
+    expect(stageCalls).toEqual(['/api/imports/stage-metadata', '/api/imports/stage-media']);
+    expect(submittedMediaBatchIds).toEqual([realBatchId]);
+    expect(replay.progress.chunks[0].batchId).toBe(realBatchId);
+    expect(replay.progress.chunks[0].batchId).not.toBe(fakeBatchId);
   });
 
   it('rejects same-name/same-size replacements and changed server preview fingerprints', async () => {

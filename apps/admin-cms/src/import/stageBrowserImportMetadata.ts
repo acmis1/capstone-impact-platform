@@ -389,7 +389,8 @@ export async function stageBrowserImportMetadata(params: {
     typeof res.warningCount !== 'number' ||
     !Number.isInteger(res.warningCount) ||
     res.warningCount < 0 ||
-    res.batchStatus !== 'metadata_staged'
+    res.batchStatus !== 'metadata_staged' &&
+    !(res.result === 'already_staged' && res.batchStatus === 'completed')
   ) {
     return {
       success: false,
@@ -404,6 +405,6 @@ export async function stageBrowserImportMetadata(params: {
     batchId: res.batchId,
     projectCount: res.projectCount,
     warningCount: res.warningCount,
-    batchStatus: 'metadata_staged',
+    batchStatus: res.batchStatus as 'metadata_staged' | 'completed',
   };
 }
