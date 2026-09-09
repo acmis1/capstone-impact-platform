@@ -24,12 +24,24 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          persist-credentials: false
+          # Evidence checks resolve historical protocol-freeze commits by immutable SHA.
           fetch-depth: 0
 
+      # The v1 freeze commit was squash-merged and is not in main's ancestry. The protected
+      # annotated evidence tag is the durable reachability anchor for the strict blob/absence proof.
+      - name: Verify durable v1 protocol-freeze provenance tag
+        run: |
+          freeze_tag='refs/tags/evidence/ocr-productionization-v1-freeze'
+          freeze_sha='0485a8b7fda3f3e9f9873849104cd90917b4f395'
+          git fetch --no-tags origin "${freeze_tag}:${freeze_tag}"
+          test "$(git cat-file -t "$freeze_tag")" = 'tag'
+          test "$(git rev-parse "${freeze_tag}^{}")" = "$freeze_sha"
+
       - name: Setup Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: '3.11'
           cache: 'pip'

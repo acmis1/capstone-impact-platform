@@ -1,0 +1,67 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:17'
+      timezone: Asia/Ho_Chi_Minh
+    open-pull-requests-limit: 3
+    groups:
+      npm-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /Prototype
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      prototype-npm-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /tools/assistive-validation-benchmark
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      benchmark-npm-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /apps/assistive-worker
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:37'
+      timezone: Asia/Ho_Chi_Minh
+    open-pull-requests-limit: 2
+    groups:
+      worker-python-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /tools/assistive-validation-benchmark
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      benchmark-python-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns: ['*']

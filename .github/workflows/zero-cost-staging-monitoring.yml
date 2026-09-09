@@ -15,19 +15,54 @@ concurrency:
 jobs:
   probe:
     name: Probe staging health and readiness
+    # This single scheduled job owns the incident ledger. issues:write is required only to
+    # create/update/close its marker-bound monitoring issue; no source or PR writes are allowed.
+    permissions:
+      contents: read
+      issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js 24.14.1
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.14.1'
 
       - name: Run monitor unit tests
-        run: node --test tools/zero-cost-staging-monitoring/monitor.test.mjs
+        run: >-
+          node --test
+          tools/zero-cost-staging-monitoring/monitor.test.mjs
+          tools/zero-cost-staging-monitoring/incident-ledger.test.mjs
 
       - name: Run bounded staging probe
-        run: node tools/zero-cost-staging-monitoring/monitor.mjs https://capstone-admin-cms-staging-v2.onrender.com
+        id: probe
+        continue-on-error: true
+        run: |
+          set +e
+          node tools/zero-cost-staging-monitoring/monitor.mjs https://capstone-admin-cms-staging-v2.onrender.com 2>&1 | tee "$RUNNER_TEMP/zero-cost-staging-monitoring.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Sync repository-owned incident ledger
+        id: incident_ledger
+        if: ${{ always() && steps.probe.outcome != 'skipped' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          MONITOR_STEP_OUTCOME: ${{ steps.probe.outcome }}
+          MONITOR_RESULT_FILE: ${{ runner.temp }}/zero-cost-staging-monitoring.log
+        run: node tools/zero-cost-staging-monitoring/incident-ledger.mjs
+
+      - name: Enforce probe and ledger result
+        if: ${{ always() && steps.probe.outcome != 'skipped' }}
+        env:
+          MONITOR_STEP_OUTCOME: ${{ steps.probe.outcome }}
+          INCIDENT_LEDGER_STEP_OUTCOME: ${{ steps.incident_ledger.outcome }}
+          MONITOR_RESULT_FILE: ${{ runner.temp }}/zero-cost-staging-monitoring.log
+        run: >-
+          node tools/zero-cost-staging-monitoring/incident-ledger.mjs
+          --enforce-workflow-result

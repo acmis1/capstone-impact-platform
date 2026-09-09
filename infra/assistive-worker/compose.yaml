@@ -1,0 +1,32 @@
+name: capstone-assistive-worker
+
+services:
+  worker:
+    image: capstone-assistive-worker:${CAPSTONE_DEPLOYMENT_VERSION:?Set CAPSTONE_DEPLOYMENT_VERSION in the external worker env file}
+    pull_policy: never
+    build:
+      context: ${CAPSTONE_ASSISTIVE_WORKER_BUILD_CONTEXT:?Build through infra/assistive-worker/verify.sh}
+      dockerfile: apps/assistive-worker/Dockerfile.hosted
+      args:
+        CAPSTONE_DEPLOYMENT_VERSION: ${CAPSTONE_DEPLOYMENT_VERSION:?Set CAPSTONE_DEPLOYMENT_VERSION in the external worker env file}
+    env_file:
+      - path: ${CAPSTONE_ASSISTIVE_WORKER_ENV_FILE:?Pass the external worker env file through verify.sh}
+        required: true
+    environment:
+      CAPSTONE_RUNTIME_ENV: staging
+      CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED: "true"
+      CAPSTONE_ASSISTIVE_EXECUTION_MODE: CONTINUOUS
+      CAPSTONE_EXPECTED_SUPABASE_HOST: ${CAPSTONE_EXPECTED_SUPABASE_HOST:?Set CAPSTONE_EXPECTED_SUPABASE_HOST in the external worker env file}
+      CAPSTONE_ASSISTIVE_SUPABASE_URL: ${CAPSTONE_ASSISTIVE_SUPABASE_URL:?Set CAPSTONE_ASSISTIVE_SUPABASE_URL in the external worker env file}
+      CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID: ${CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID:?Set CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID in the external worker env file}
+      CAPSTONE_DEPLOYMENT_VERSION: ${CAPSTONE_DEPLOYMENT_VERSION:?Set CAPSTONE_DEPLOYMENT_VERSION in the external worker env file}
+      CAPSTONE_ASSISTIVE_PADDLE_MODELS_DIR: /opt/capstone/artifacts/paddle
+      CAPSTONE_ASSISTIVE_LANGUAGETOOL_ARCHIVE: /opt/capstone/artifacts/languagetool/LanguageTool-stable.zip
+      CAPSTONE_ASSISTIVE_LANGUAGETOOL_JAR: /opt/capstone/artifacts/languagetool/LanguageTool-6.6/languagetool-server.jar
+    init: true
+    user: "1000:1000"
+    restart: unless-stopped
+    stop_grace_period: 10m
+    cpus: 2
+    mem_limit: 4g
+    scale: 1

@@ -151,8 +151,17 @@ AI availability is never publication authority.
 gh workflow run assistive-worker-image.yml -f build_worker=true -f build_dispatcher=true
 ```
 
-The build verifies the frozen PP-OCRv6 and LanguageTool artifact hashes and prints both digests.
-Record them: the infrastructure template is pinned to digests, never to a tag.
+The build verifies the frozen PP-OCRv6 and LanguageTool artifact hashes and exports each selected
+image to a local OCI archive. The workflow reads the archive's `index.json`, validates the single
+`linux/amd64` image-manifest descriptor, verifies the corresponding content-addressed blob, and
+prints its non-empty `sha256:<64 lowercase hex>` digest. This is the OCI image manifest content
+digest—not the OCI archive checksum, an image-config digest, or an arbitrary file checksum. It is
+the immutable identifier to carry into later registry registration and deployment pinning; if the
+image is published later, confirm that the registry reports the same manifest digest.
+
+The build-only path never authenticates to or pushes to a registry. A missing or malformed digest
+fails the workflow before any success evidence is printed. The `publish` input remains opt-in and
+defaults to `false`.
 
 ### 5.3 Create the dedicated database role
 
