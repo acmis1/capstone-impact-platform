@@ -131,6 +131,8 @@ Run from the repository root:
 | --- | --- | --- |
 | `CAPSTONE_RUNTIME_ENV` | Target Guard | Target environment identifier. Staging-capable commands require the exact value `staging`. Local Supabase workflows do not use this shared-staging identity guard (local workflows are protected separately by loopback-only validation). |
 | `CAPSTONE_EXPECTED_SUPABASE_HOST` | Target Guard | Expected Supabase host domain (e.g. `app-staging.supabase.co`). Required for staging target matching. |
+| `CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF` | Target Guard | Exact 20-letter Supabase project ref for the hosted reminder target. The hosted Compose profile injects it independently from the reminder env file. |
+| `CAPSTONE_STAGING_MUTATION_CONFIRMATION` | Operator acknowledgment | Existing valid staging mutation-confirmation label; it is not cryptographic target evidence. Target binding comes from the canonical HTTPS URL, exact expected hostname, and independently injected 20-letter project ref. The hosted Compose profile injects this acknowledgment independently from the reminder env file. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe | Supabase endpoint used by public client configuration. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe | Modern publishable client key (preferred over legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY`). |
 | `SUPABASE_SECRET_KEY` | Server-only | Modern server secret key (preferred over legacy `SUPABASE_SERVICE_ROLE_KEY`). Must never reach browser code. |
@@ -276,7 +278,7 @@ Migration 0024 separates future planning from email execution. `participant_prev
 
 Reminder bodies deliberately have no URL input. They tell the participant to use the secure link in the original preview email, because the raw preview credential remains non-persistent and unrecoverable. Text and HTML rendering preserve escaping, CRLF/header sanitization, bounded subjects, and the existing opaque Message-ID design. Delivery reuses the same conservative notification state machine: `sent`, known `failed`, and `delivery_unknown` are terminal and never automatically retried.
 
-`PARTICIPANT_PREVIEW_REMINDERS_ENABLED=true`, participant-preview email enablement, and valid SMTP configuration are all required before the runner claims work. `npm run run:participant-preview-reminders` is a loopback-Supabase-only local/disposable entrypoint; the reusable core has no Mailpit dependency and can be called later by an approved production scheduler. **No production cadence, hosted scheduler/provider activation, production credential, or arbitrary resend policy is included.**
+`PARTICIPANT_PREVIEW_REMINDERS_ENABLED=true`, participant-preview email enablement, valid encrypted SMTP configuration, exact hosted target identity (including project ref), and the existing staging mutation-confirmation label are all required before the runner claims work. `npm run run:participant-preview-reminders` is a loopback-Supabase-only local/disposable entrypoint; the reusable core has no Mailpit dependency and can be called later by an approved production scheduler. **No production cadence, hosted scheduler/provider activation, production credential, or arbitrary resend policy is included.**
 
 ## Application routes
 

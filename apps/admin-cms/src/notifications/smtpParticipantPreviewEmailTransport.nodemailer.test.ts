@@ -32,6 +32,13 @@ const CONFIG: ParticipantPreviewEmailSmtpConfig = {
   from: 'no-reply@capstone.invalid',
 };
 
+const HOSTED_STARTTLS_CONFIG: ParticipantPreviewEmailSmtpConfig = {
+  ...CONFIG,
+  host: 'smtp.institution.invalid',
+  port: 587,
+  requireTLS: true,
+};
+
 const MESSAGE = {
   recipient: 'group.alpha@example.invalid',
   subject: 'Please review your capstone project details',
@@ -92,6 +99,22 @@ describe('SMTP participant preview transport — real nodemailer contract', () =
 
     expect(typeof transporter.sendMail).toBe('function');
     expect(transporter.transporter).toBeDefined();
+  });
+
+  it('passes hosted STARTTLS enforcement to nodemailer for a non-implicit-TLS port', () => {
+    const createTransport = vi.spyOn(nodemailer, 'createTransport');
+    try {
+      new SmtpParticipantPreviewEmailTransport(HOSTED_STARTTLS_CONFIG);
+
+      expect(createTransport).toHaveBeenCalledWith(expect.objectContaining({
+        host: HOSTED_STARTTLS_CONFIG.host,
+        port: HOSTED_STARTTLS_CONFIG.port,
+        secure: false,
+        requireTLS: true,
+      }));
+    } finally {
+      createTransport.mockRestore();
+    }
   });
 
   it('composes the message through real nodemailer with the app From, recipient and Message-ID', async () => {

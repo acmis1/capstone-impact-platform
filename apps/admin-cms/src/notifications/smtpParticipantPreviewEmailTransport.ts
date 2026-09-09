@@ -99,6 +99,7 @@ export class SmtpParticipantPreviewEmailTransport implements ParticipantPreviewE
         host: config.host,
         port: config.port,
         secure: config.secure,
+        ...(config.requireTLS ? { requireTLS: true } : {}),
         auth: config.auth ? { user: config.auth.user, pass: config.auth.password } : undefined,
         // Bounded so a hung server cannot hold a staff request open indefinitely. A timeout
         // classifies as `unknown`, never as a failure.

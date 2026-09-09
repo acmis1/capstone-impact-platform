@@ -29,6 +29,8 @@ export interface ParticipantPreviewEmailSmtpConfig {
   host: string;
   port: number;
   secure: boolean;
+  /** Hosted callers set this to require STARTTLS when `secure` is false. */
+  requireTLS?: boolean;
   /** Present only when the server is configured to authenticate. Never logged or returned. */
   auth: { user: string; password: string } | null;
   /** RFC 5321 envelope/From address. Bounded and control-character free. */
