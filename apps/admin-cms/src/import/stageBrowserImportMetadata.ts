@@ -313,7 +313,7 @@ export async function stageBrowserImportMetadata(params: {
     p_preview_fingerprint: intent.previewFingerprint,
     p_canonical_intent: canonicalIntent,
     p_mode: serverAnalysis.preview.batch.mode,
-    p_source_folder: intent.selectedRootName,
+    p_source_folder: serverAnalysis.preview.batch.selectedRootName,
     p_imported_by_id: authContext.adminUserId,
     p_packages: payloadPackages,
   });
@@ -377,7 +377,8 @@ export async function stageBrowserImportMetadata(params: {
     typeof res.warningCount !== 'number' ||
     !Number.isInteger(res.warningCount) ||
     res.warningCount < 0 ||
-    res.batchStatus !== 'metadata_staged'
+    res.batchStatus !== 'metadata_staged' &&
+    !(res.result === 'already_staged' && res.batchStatus === 'completed')
   ) {
     return {
       success: false,
@@ -392,6 +393,6 @@ export async function stageBrowserImportMetadata(params: {
     batchId: res.batchId,
     projectCount: res.projectCount,
     warningCount: res.warningCount,
-    batchStatus: 'metadata_staged',
+    batchStatus: res.batchStatus as 'metadata_staged' | 'completed',
   };
 }
