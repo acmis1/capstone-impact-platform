@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { readGitMigrationObjects } from '../test-support/gitBatchParser';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -22,12 +22,10 @@ describe('private media approval gate migration contract', () => {
     expect(files).toHaveLength(EXPECTED_MIGRATION_FILENAMES.length);
     expect(files[27]).toBe(filename);
 
-    for (const inherited of files.slice(0, 27)) {
+    const inheritedObjects = readGitMigrationObjects(root, files.slice(0, 27).map(inherited => `origin/main:infra/supabase/migrations/${inherited}`));
+    for (const [index, inherited] of files.slice(0, 27).entries()) {
       const local = fs.readFileSync(path.join(migrations, inherited), 'utf8').replace(/\r\n/g, '\n');
-      const base = execFileSync(
-        'git', ['show', `origin/main:infra/supabase/migrations/${inherited}`],
-        { cwd: root, encoding: 'utf8' },
-      ).replace(/\r\n/g, '\n');
+      const base = inheritedObjects[index].toString('utf8').replace(/\r\n/g, '\n');
       expect(crypto.createHash('sha256').update(local).digest('hex')).toBe(
         crypto.createHash('sha256').update(base).digest('hex'),
       );
