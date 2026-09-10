@@ -9,6 +9,28 @@ import {
 } from '../deployment/hostedDeploymentReadiness';
 import { EXPECTED_MIGRATION_FILENAMES } from '../scripts/onboardingCheck';
 
+import { parseGitBatchObjects, readGitMigrationObjects } from '../test-support/gitBatchParser';
+
+function normalizeMigrationContent(content: Buffer): string {
+  return content.toString('utf8').replace(/\r\n/g, '\n');
+}
+
+describe('Git batch migration object reader', () => {
+  const syntheticBlobId = '0'.repeat(40);
+
+  it('fails closed for a missing batch object', () => {
+    expect(() => parseGitBatchObjects(Buffer.from('missing-ref missing\n'), 1))
+      .toThrow('GIT_BATCH_OBJECT_MISSING');
+  });
+
+  it.each([
+    ['a malformed header', Buffer.from('not-a-git-batch-header\n')],
+    ['a truncated body', Buffer.from(`${syntheticBlobId} blob 3\nab\n`)],
+  ])('fails closed for %s', (_description, output) => {
+    expect(() => parseGitBatchObjects(output, 1)).toThrow(/GIT_BATCH_MALFORMED/);
+  });
+});
+
 /**
  * Migration 0048 exists only to keep one reviewed privilege contract identical across PostgreSQL
  * engine versions. These tests hold it to that narrow purpose: exactly one privilege, exactly one
@@ -122,13 +144,23 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
 
   it('leaves every migration through 0048 byte-identical to its introduction baseline', () => {
     const baseline = migrationIntroductionBaseline();
+    const historicalReferences = baseline.files.map((historical) =>
+      `${baseline.parentCommit}:infra/supabase/migrations/${historical}`);
+    const introducedReferences = baseline.introducedFiles.map((introduced) =>
+      `${baseline.introductionCommit}:infra/supabase/migrations/${introduced}`);
+    const grantingReferences = GRANTING_MIGRATIONS.map((historical) =>
+      `${baseline.parentCommit}:infra/supabase/migrations/${historical}`);
+    const committedObjects = readGitMigrationObjects(root, [
+      ...historicalReferences,
+      ...introducedReferences,
+      ...grantingReferences,
+    ]);
+    let objectIndex = 0;
+    const nextCommitted = (): string => normalizeMigrationContent(committedObjects[objectIndex++]);
 
     for (const historical of baseline.files) {
       const repositoryPath = `infra/supabase/migrations/${historical}`;
-      const committed = execFileSync('git', ['show', `${baseline.parentCommit}:${repositoryPath}`], {
-        cwd: root,
-        encoding: 'utf8',
-      }).replace(/\r\n/g, '\n');
+      const committed = nextCommitted();
       expect(fs.readFileSync(path.join(root, repositoryPath), 'utf8').replace(/\r\n/g, '\n')).toBe(committed);
     }
 
@@ -136,10 +168,7 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     // bytes to the introduction commit so a future PR cannot mutate 0047 or 0048 in place.
     for (const introduced of baseline.introducedFiles) {
       const repositoryPath = `infra/supabase/migrations/${introduced}`;
-      const committed = execFileSync('git', ['show', `${baseline.introductionCommit}:${repositoryPath}`], {
-        cwd: root,
-        encoding: 'utf8',
-      }).replace(/\r\n/g, '\n');
+      const committed = nextCommitted();
       expect(fs.readFileSync(path.join(root, repositoryPath), 'utf8').replace(/\r\n/g, '\n')).toBe(committed);
     }
 
@@ -148,13 +177,11 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     for (const historical of GRANTING_MIGRATIONS) {
       expect(baseline.files).toContain(historical);
       const repositoryPath = `infra/supabase/migrations/${historical}`;
-      const committed = execFileSync('git', ['show', `${baseline.parentCommit}:${repositoryPath}`], {
-        cwd: root,
-        encoding: 'utf8',
-      }).replace(/\r\n/g, '\n');
+      const committed = nextCommitted();
       expect(fs.readFileSync(path.join(root, repositoryPath), 'utf8').replace(/\r\n/g, '\n')).toBe(committed);
       expect(committed).toMatch(/GRANT ALL ON public\.[a-z_]+ TO service_role;/);
     }
+    expect(objectIndex).toBe(committedObjects.length);
   });
 
   it('guards the MAINTAIN statement behind a deterministic server-version branch', () => {
