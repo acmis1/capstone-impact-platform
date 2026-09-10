@@ -168,6 +168,20 @@ describe('Admin Shell and Layout Components', () => {
       expect(accountBtn).toBeDefined();
       expect(accountBtn.getAttribute('aria-haspopup')).toBe('menu');
     });
+
+    it('labels the production shell explicitly when server-selected', () => {
+      render(
+        <TopBar
+          displayName="Production Administrator"
+          roles={['admin']}
+          environment="production"
+          logoutAction={logoutMock}
+        />
+      );
+
+      expect(screen.getByText('Production')).toBeDefined();
+      expect(screen.queryByText('Staging')).toBeNull();
+    });
   });
 
   describe('EnvironmentNotice', () => {
@@ -177,6 +191,13 @@ describe('Admin Shell and Layout Components', () => {
       expect(
         screen.getByText(/Work here uses staging data and does not update the public showcase website\./i)
       ).toBeDefined();
+    });
+
+    it('renders an explicit production warning without a staging safety claim', () => {
+      render(<EnvironmentNotice environment="production" />);
+      expect(screen.getByText(/Production-designated runtime:/i)).toBeDefined();
+      expect(screen.getByText(/Live-feed changes are available only after exact target verification/i)).toBeDefined();
+      expect(screen.queryByText(/does not update the public showcase website/i)).toBeNull();
     });
   });
 

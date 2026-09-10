@@ -56,6 +56,15 @@ export async function recoverPublicFeedOperation(
   if (!canPreparePublication(dependencies.permissions)) return { resultCode: 'PERMISSION_DENIED' };
 
   try {
+    // A request needs a verified forward OR independent rollback capability before ledger access.
+    // The durable operation kind then chooses exactly one path; a rollback window never grants
+    // publication/removal recovery, and production publication never grants historical rollback.
+    let forwardRecoveryAllowed = false;
+    try { dependencies.assertActivationEnvironment(); forwardRecoveryAllowed = true; } catch { /* denied */ }
+    const allowedRollbackTarget = rollbackExecutionTarget(dependencies);
+    if (!forwardRecoveryAllowed && !allowedRollbackTarget) {
+      return { resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' };
+    }
     const ledger = new SupabasePublicFeedLedgerRepositoryCore(dependencies.supabase);
     const operation = await ledger.getBlockingOperation();
     if (!operation) return { resultCode: 'NO_RECOVERY_REQUIRED' };
@@ -70,9 +79,8 @@ export async function recoverPublicFeedOperation(
         const head = await ledger.getHead();
         if (!head?.rollbackEnabled) return { resultCode: 'RECOVERY_REQUIRED' };
       }
-    } else {
-      try { dependencies.assertActivationEnvironment(); }
-      catch { return { resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' }; }
+    } else if (!forwardRecoveryAllowed) {
+      return { resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' };
     }
     if (operation.storageBucket !== dependencies.feedBucket
         || operation.storagePath !== dependencies.feedPath) {

@@ -21,6 +21,9 @@ const BASE_PROPS = {
   targetVersionNumber: null,
   targetIsCurrent: false,
   publishingActivity: 'IDLE' as PublishingActivity,
+  environment: 'staging' as const,
+  executionAvailable: true,
+  recoveryOperationKind: null,
 };
 
 beforeEach(() => {
@@ -103,6 +106,53 @@ describe('PublicFeedHistoryControls', () => {
 
     rerender(<PublicFeedHistoryControls {...BASE_PROPS} publishingActivity="RECOVERY_AVAILABLE" />);
     expect(screen.getByRole('button', { name: 'Recover publishing status' })).toBeTruthy();
+  });
+
+  it('shows disabled production code availability without exposing mutation controls', () => {
+    render(<PublicFeedHistoryControls
+      {...BASE_PROPS}
+      environment="production"
+      executionAvailable={false}
+      historyActive={false}
+    />);
+
+    expect(screen.getByRole('heading', { name: 'Production publishing unavailable' })).toBeTruthy();
+    expect(screen.getByText(/code availability is not cutover authorization/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Set up showcase publishing/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Recover publishing status/i })).toBeNull();
+  });
+
+  it('requires explicit acknowledgement before production feed-history activation', () => {
+    render(<PublicFeedHistoryControls
+      {...BASE_PROPS}
+      environment="production"
+      historyActive={false}
+    />);
+
+    const setup = screen.getByRole('button', { name: 'Set up showcase publishing' });
+    expect(setup.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('checkbox', { name: /requires separate institutional cutover authorization/i }));
+    expect(setup.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('blocks recovery of a production rollback operation while retaining forward recovery', () => {
+    const { rerender } = render(<PublicFeedHistoryControls
+      {...BASE_PROPS}
+      environment="production"
+      publishingActivity="RECOVERY_AVAILABLE"
+      recoveryOperationKind="rollback"
+    />);
+    expect(screen.getByRole('heading', { name: 'Production rollback recovery unavailable' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Recover publishing status' })).toBeNull();
+
+    rerender(<PublicFeedHistoryControls
+      {...BASE_PROPS}
+      environment="production"
+      publishingActivity="RECOVERY_AVAILABLE"
+      recoveryOperationKind="publication"
+    />);
+    expect(screen.getByRole('button', { name: 'Recover publishing status' })).toBeTruthy();
+    expect(screen.getByText(/cannot restore historical feed content/i)).toBeTruthy();
   });
 
   it('presents RELEASED as a cleared pre-write action and refreshes', async () => {

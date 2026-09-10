@@ -36,7 +36,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 - **Build Command**: `npm run build:admin` (or `npm run build --workspace=apps/admin-cms`)
 - **Start Command**: `npm run start --workspace=apps/admin-cms` (or `next start` inside `apps/admin-cms`)
 - **Liveness Endpoint**: `/api/health` (always returns a minimal HTTP 200 while the application route handler is running)
-- **Render Health Check Endpoint**: `/api/readiness` (returns HTTP 200 only when hosted configuration, staging target identity, and the bounded dependency probe are ready)
+- **Render Health Check Endpoint**: `/api/readiness` (returns HTTP 200 only when hosted configuration, the exact declared hosted target identity, and the bounded dependency probe are ready)
 
 ### C. HTTP Liveness and Deployment-Readiness Contracts
 
@@ -45,11 +45,11 @@ The Capstone platform enforces strict architectural and operational isolation be
 | Endpoint | Success contract | What it proves | What it does not prove |
 | :--- | :--- | :--- | :--- |
 | `GET /api/health` | HTTP 200 with `{ "app": "admin-cms", "status": "ok" }` | The deployed application can execute a route handler. | Valid environment variables, Supabase reachability, schema state, authentication, publication, UAT, or production acceptance. |
-| `GET /api/readiness` | HTTP 200 with `readiness: "ready"`, `classification: "READY"`, `configuration: "configured"`, `dependency: "reachable"`, and `databaseCapability: "current"` | Critical server configuration parses; Render supplies a valid full deployment commit; the runtime is the expected HTTPS staging target; and one bounded, two-second, read-only sentinel RPC returns the exact immutable capability marker expected by the application bundle. | Exact migration-history equality, the complete schema/grant/RLS/RPC contract, Auth or Storage readiness, workflow behavior, full UAT, publication readiness, or production acceptance. |
+| `GET /api/readiness` | HTTP 200 with `readiness: "ready"`, `classification: "READY"`, `configuration: "configured"`, `dependency: "reachable"`, and `databaseCapability: "current"` | Critical server configuration parses; Render supplies a valid full deployment commit; the runtime is the exact declared HTTPS hosted target (`staging` or `production`); and one bounded, two-second, read-only sentinel RPC returns the exact immutable capability marker expected by the application bundle. | Publication-feature enablement, exact migration-history equality, the complete schema/grant/RLS/RPC contract, Auth or Storage readiness, workflow behavior, full UAT, publication readiness, or production acceptance. |
 
 Readiness failures return HTTP 503 with one of two bounded classifications:
 
-- `CONFIGURATION_NOT_READY`: critical environment configuration, Render provider identity, full provider commit, or expected staging target identity is missing, malformed, or mismatched; the dependency and database capability are `not-checked`.
+- `CONFIGURATION_NOT_READY`: critical environment configuration, Render provider identity, full provider commit, or expected named hosted target identity is missing, malformed, or mismatched; the dependency and database capability are `not-checked`.
 - `DEPENDENCY_NOT_READY`: configuration and deployment identity are valid but the bounded sentinel call fails, returns a non-success status, times out, exceeds 256 bytes, or does not return the exact current marker; the dependency and database capability are `not-ready`.
 
 Every readiness body includes the repository's expected migration count and latest expected migration identifier. That bundle expectation alone is not database proof; `READY` additionally requires the immutable sentinel installed in the same final migration to return the exact marker for the current lifecycle and catalog-RLS capabilities. `RENDER_GIT_COMMIT` is accepted only with Render's automatic `RENDER=true` marker and only when it is a valid 40-character hexadecimal commit. Missing or invalid evidence is fatal, and no untrusted value is echoed.
@@ -130,6 +130,7 @@ The final line is deterministic. `HOSTED_SMOKE_CLASSIFICATION = READY_FOR_SUPERV
 | `STAFF_PROVISIONING_ENABLED` | `false` | New staff invitations and staging-only direct UAT account creation are disabled. Existing pending invitations can still be activated. Direct creation additionally requires exact staging runtime and Supabase-host identity checks. |
 | `CAPSTONE_STAGING_PUBLICATION_ENABLED` | `false` | Staging showcase publication is absent from the UI and route fails closed. Exact `true` enables it only when the staging runtime identity and expected Supabase host also match. It never enables live production publication. |
 | `CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED` | `false` | Historical rollback controls are absent unless the exact staging identity also passes. Enabling this flag is necessary but insufficient: an active administrator must separately enable the exact database head, and no writer/recovery may be active. Production and Duda/Render rollback remain unavailable. |
+| `CAPSTONE_PRODUCTION_PUBLICATION_ENABLED` | `false` | Production publication code remains unavailable. Exact `true` is necessary but insufficient and is valid only on an exact `production` runtime whose canonical Supabase hostname matches `CAPSTONE_EXPECTED_SUPABASE_HOST`. No production host or project identity is established by this repository. |
 | `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` | `false` | Hosted assistive enqueue remains disabled. Exact `true` is necessary but insufficient: the web service must also prove the staging target identity and observe a fresh compatible worker heartbeat. |
 
 ### E. Assistive Execution
@@ -251,7 +252,7 @@ Stakeholder staging testing does **NOT** automatically authorize:
 
 Controlled staging preparation and synthetic demonstration remain strictly isolated from live public systems.
 
-Local publication, staging/test-showcase publication, and live production publication are distinct capabilities. Local remains loopback-only. Staging is fail-closed unless `CAPSTONE_RUNTIME_ENV=staging`, the actual Supabase hostname exactly matches `CAPSTONE_EXPECTED_SUPABASE_HOST`, and `CAPSTONE_STAGING_PUBLICATION_ENABLED=true`. Live production publication remains unavailable: there is no production route or UI control.
+Local publication, staging/test-showcase publication, and live production publication are distinct capabilities. Local remains loopback-only. Staging is fail-closed unless `CAPSTONE_RUNTIME_ENV=staging`, the actual Supabase hostname exactly matches `CAPSTONE_EXPECTED_SUPABASE_HOST`, and `CAPSTONE_STAGING_PUBLICATION_ENABLED=true`. A production route/UI candidate exists but defaults unavailable and requires the separate exact `CAPSTONE_RUNTIME_ENV=production` identity, canonical expected-host match, and `CAPSTONE_PRODUCTION_PUBLICATION_ENABLED=true`. Code qualification is not hosted/live completion: no production host, Supabase project identity, Duda change, owner approval, or production acceptance is claimed.
 
 ---
 

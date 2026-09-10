@@ -10,6 +10,7 @@ export interface AdminShellClientProps {
   email?: string | null;
   roles?: string[];
   canManageStaff?: boolean;
+  environment?: 'staging' | 'production';
   logoutAction: () => Promise<void>;
   children: React.ReactNode;
 }
@@ -19,6 +20,7 @@ export function AdminShellClient({
   email,
   roles = [],
   canManageStaff = false,
+  environment = 'staging',
   logoutAction,
   children,
 }: AdminShellClientProps) {
@@ -53,10 +55,11 @@ export function AdminShellClient({
             email={email}
             roles={roles}
             canManageStaff={canManageStaff}
+            environment={environment}
             logoutAction={logoutAction}
           />
 
-          <EnvironmentNotice />
+          <EnvironmentNotice environment={environment} />
 
           <main
             id="admin-main-content"

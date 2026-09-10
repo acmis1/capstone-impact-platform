@@ -7,6 +7,7 @@ import { AdminAuthError } from '../../auth/authTypes';
 import { getPublicAuthErrorMessage } from '../../auth/authHttp';
 import { AdminShellClient } from '../../components/admin-shell/AdminShellClient';
 import { AuthErrorScreen } from '../../components/admin-shell/AuthErrorScreen';
+import { isProductionRuntimeEnvironment } from '../../security/stagingRuntimeIdentity';
 
 /**
  * Server Component layout serving as authorization guard for all administrative sub-pages.
@@ -66,6 +67,7 @@ export default async function AdminLayout({
       email={adminContext.email}
       roles={adminContext.roles}
       canManageStaff={canManageStaff(adminContext.permissions)}
+      environment={isProductionRuntimeEnvironment() ? 'production' : 'staging'}
       logoutAction={logoutAction}
     >
       {children}

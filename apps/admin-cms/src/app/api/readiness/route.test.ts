@@ -153,6 +153,23 @@ describe('GET/HEAD /api/readiness', () => {
     });
   });
 
+  it('accepts the same exact-host readiness contract under the production runtime identity', async () => {
+    const fetchMock = successfulFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    process.env.CAPSTONE_RUNTIME_ENV = 'production';
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    expect(await json(response)).toMatchObject({
+      readiness: 'ready',
+      classification: 'READY',
+      configuration: 'configured',
+      dependency: 'reachable',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('rejects a modern secret key in the public slot before the dependency probe', async () => {
     const misplacedSecret = 'sb_secret_misplaced-public-private-value';
     await expectConfigurationNotReadyWithoutFetch(

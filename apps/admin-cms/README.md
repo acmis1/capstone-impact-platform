@@ -129,8 +129,8 @@ Run from the repository root:
 
 | Variable | Classification | Purpose |
 | --- | --- | --- |
-| `CAPSTONE_RUNTIME_ENV` | Target Guard | Target environment identifier. Staging-capable commands require the exact value `staging`. Local Supabase workflows do not use this shared-staging identity guard (local workflows are protected separately by loopback-only validation). |
-| `CAPSTONE_EXPECTED_SUPABASE_HOST` | Target Guard | Expected Supabase host domain (e.g. `app-staging.supabase.co`). Required for staging target matching. |
+| `CAPSTONE_RUNTIME_ENV` | Target Guard | Target environment identifier. Hosted publication uses the exact value `staging` or `production` for its separately named target. Local Supabase workflows remain protected separately by loopback-only validation. |
+| `CAPSTONE_EXPECTED_SUPABASE_HOST` | Target Guard | Expected Supabase host domain. Required to exactly match the selected hosted target; no production value is supplied by the repository. |
 | `CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF` | Target Guard | Exact 20-letter Supabase project ref for the hosted reminder target. The hosted Compose profile injects it independently from the reminder env file. |
 | `CAPSTONE_STAGING_MUTATION_CONFIRMATION` | Operator acknowledgment | Existing valid staging mutation-confirmation label; it is not cryptographic target evidence. Target binding comes from the canonical HTTPS URL, exact expected hostname, and independently injected 20-letter project ref. The hosted Compose profile injects this acknowledgment independently from the reminder env file. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe | Supabase endpoint used by public client configuration. |
@@ -144,6 +144,7 @@ Run from the repository root:
 | `CAPSTONE_STAGING_PUBLICATION_ENABLED` | Server-only optional | Exact `true` enables the staging showcase action only when the shared staging runtime identity and exact Supabase-host guard also pass. Absent/invalid means disabled; it never enables live publication. |
 | `CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED` | Server-only optional | Exact `true` makes rollback controls eligible only for the canonical verified staging identity. The database capability must then be enabled by an active administrator against exact current-head evidence. Absent/invalid means disabled; production remains impossible. |
 | `CAPSTONE_LOCAL_PUBLIC_FEED_ROLLBACK_ENABLED` | Server-only optional | Exact `true` preserves rollback for `CAPSTONE_RUNTIME_ENV=local` with a loopback Supabase URL and an enabled database head. It never enables an arbitrary hosted target. |
+| `CAPSTONE_PRODUCTION_PUBLICATION_ENABLED` | Server-only optional | Defaults off. Exact `true` is necessary but insufficient for the distinct production publication/removal/activation/reconciliation/forward-recovery path: the runtime must also be exactly `production` and the canonical Supabase host must match. Repository support does not establish a production host or authorize cutover. |
 | `GEMINI_API_KEY` and `GEMINI_MODEL` | Server-side optional | Assistive extraction configuration. |
 | `GEMINI_ASSISTIVE_EXTRACTION_ENABLED` | Server-side optional | Enables assistive extraction only when explicitly set to `true`. |
 | `STAFF_PROVISIONING_ENABLED` | Server-only optional | Enables new staff invitations and, only on a separately verified staging runtime, direct UAT test-account creation. Fails closed when absent. Never gates activation of an existing pending invitation. |

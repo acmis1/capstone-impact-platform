@@ -31,10 +31,11 @@ export interface UserSummaryProps {
   email?: string | null;
   roles?: string[];
   canManageStaff?: boolean;
+  environment?: 'staging' | 'production';
   logoutAction: () => Promise<void>;
 }
 
-export function TopBar({ displayName, email, roles = [], canManageStaff = false, logoutAction }: UserSummaryProps) {
+export function TopBar({ displayName, email, roles = [], canManageStaff = false, environment = 'staging', logoutAction }: UserSummaryProps) {
   const pathname = usePathname() || '/admin';
   const descriptor = getRouteDescriptor(pathname);
   const hasNavigableBreadcrumb = descriptor.breadcrumbs.some((item) => item.href);
@@ -82,7 +83,7 @@ export function TopBar({ displayName, email, roles = [], canManageStaff = false,
       <div className="flex items-center gap-3 shrink-0">
         {/* Environment Badge */}
         <Badge variant="neutral" className="inline-flex px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider border border-border/80 bg-muted/80 text-foreground">
-          Staging
+          {environment === 'production' ? 'Production' : 'Staging'}
         </Badge>
 
         {/* Account Dropdown Menu */}

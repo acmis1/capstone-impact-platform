@@ -613,13 +613,15 @@ describe('project detail workspace information architecture', () => {
     ]) {
       expect(pageSource).toContain(capability);
     }
-    expect(pageSource).toMatch(/canExecuteArchive: archiveExecutionTarget === 'local' \|\| archiveExecutionTarget === 'staging',\s*participantResponse:/);
+    expect(pageSource).toMatch(/canExecuteArchive: archiveExecutionTarget === 'local'\s*\|\| archiveExecutionTarget === 'staging'\s*\|\| archiveExecutionTarget === 'production',\s*participantResponse:/);
   });
 
-  it('shows a bounded unavailable archive state only for a declared staging runtime', () => {
+  it('shows bounded unavailable archive states only for declared hosted runtimes', () => {
     expect(pageSource).toMatch(/isStagingRuntimeEnvironment\(\)\s*\? 'staging-unavailable'/);
-    expect(pageSource).toMatch(/\? 'staging'\s*: isStagingRuntimeEnvironment\(\)/);
+    expect(pageSource).toMatch(/isProductionRuntimeEnvironment\(\)\s*\? 'production-unavailable'/);
+    expect(pageSource).toContain("resolvedPublicationTarget ?? (isProductionRuntimeEnvironment() ? 'production-unavailable' : null)");
     expect(pageSource).not.toContain("archiveExecutionTarget = 'staging-unavailable'");
+    expect(pageSource).not.toContain("archiveExecutionTarget = 'production-unavailable'");
   });
 
   it('keeps technical details and change history available rather than removed', () => {
@@ -649,6 +651,8 @@ describe('project detail workspace information architecture', () => {
     expect(asideSource).toContain('Project record');
     expect(asideSource).toContain('Import origin');
     expect(asideSource).toContain('Test environment.');
+    expect(asideSource).toContain('Production-designated runtime.');
+    expect(asideSource).toMatch(/does\s+not replace institutional cutover authorization/);
     expect(asideSource).not.toContain('server runtime identity');
     expect(asideSource).not.toContain('staging sandbox');
   });

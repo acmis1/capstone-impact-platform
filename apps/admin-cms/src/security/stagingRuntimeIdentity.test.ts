@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isStagingRuntimeEnvironment, isVerifiedStagingRuntime } from './stagingRuntimeIdentity';
+import {
+  isProductionRuntimeEnvironment,
+  isStagingRuntimeEnvironment,
+  isVerifiedProductionRuntime,
+  isVerifiedStagingRuntime,
+} from './stagingRuntimeIdentity';
 
 const VALID = {
   CAPSTONE_RUNTIME_ENV: 'staging',
@@ -70,6 +75,44 @@ describe('web staging runtime identity', () => {
       ...VALID,
       CAPSTONE_EXPECTED_SUPABASE_HOST: host,
       NEXT_PUBLIC_SUPABASE_URL: `https://${host}`,
+    })).toBe(false);
+  });
+
+  it('accepts only an exact production identity for the production target', () => {
+    const production = {
+      CAPSTONE_RUNTIME_ENV: 'production',
+      CAPSTONE_EXPECTED_SUPABASE_HOST: 'synthetic-production.supabase.co',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://synthetic-production.supabase.co',
+    };
+    expect(isProductionRuntimeEnvironment(production)).toBe(true);
+    expect(isVerifiedProductionRuntime(production)).toBe(true);
+    expect(isVerifiedStagingRuntime(production)).toBe(false);
+    expect(isVerifiedProductionRuntime({ ...production, CAPSTONE_RUNTIME_ENV: 'Production' })).toBe(false);
+    expect(isVerifiedProductionRuntime({ ...production, NEXT_PUBLIC_SUPABASE_URL: VALID.NEXT_PUBLIC_SUPABASE_URL })).toBe(false);
+  });
+
+  it.each([
+    ['missing runtime', { CAPSTONE_RUNTIME_ENV: undefined }],
+    ['unknown runtime', { CAPSTONE_RUNTIME_ENV: 'live' }],
+    ['missing host', { CAPSTONE_EXPECTED_SUPABASE_HOST: undefined }],
+    ['padded host', { CAPSTONE_EXPECTED_SUPABASE_HOST: ' synthetic-production.supabase.co ' }],
+    ['host mismatch', { NEXT_PUBLIC_SUPABASE_URL: 'https://different-production.supabase.co' }],
+    ['loopback host', {
+      CAPSTONE_EXPECTED_SUPABASE_HOST: '127.0.0.1',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://127.0.0.1',
+    }],
+    ['credential-bearing URL', {
+      NEXT_PUBLIC_SUPABASE_URL: 'https://user:password@synthetic-production.supabase.co',
+    }],
+    ['non-canonical URL', {
+      NEXT_PUBLIC_SUPABASE_URL: 'https://synthetic-production.supabase.co/private?mode=production',
+    }],
+  ])('fails closed for production identity with %s', (_label, override) => {
+    expect(isVerifiedProductionRuntime({
+      CAPSTONE_RUNTIME_ENV: 'production',
+      CAPSTONE_EXPECTED_SUPABASE_HOST: 'synthetic-production.supabase.co',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://synthetic-production.supabase.co',
+      ...override,
     })).toBe(false);
   });
 });

@@ -2,9 +2,11 @@ import * as React from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-export type EnvironmentNoticeProps = React.ComponentProps<'div'>;
+export type EnvironmentNoticeProps = React.ComponentProps<'div'> & {
+  environment?: 'staging' | 'production';
+};
 
-export function EnvironmentNotice({ className, ...props }: EnvironmentNoticeProps) {
+export function EnvironmentNotice({ className, environment = 'staging', ...props }: EnvironmentNoticeProps) {
   return (
     <div
       role="region"
@@ -17,7 +19,11 @@ export function EnvironmentNotice({ className, ...props }: EnvironmentNoticeProp
     >
       <ShieldAlert className="h-4 w-4 text-warning shrink-0" aria-hidden="true" />
       <span>
-        <strong className="font-semibold text-foreground">Test environment:</strong> Work here uses staging data and does not update the public showcase website.
+        {environment === 'production' ? (
+          <><strong className="font-semibold text-foreground">Production-designated runtime:</strong> Treat work here as production-impacting. Live-feed changes are available only after exact target verification and during an explicitly enabled, institution-authorized publication window.</>
+        ) : (
+          <><strong className="font-semibold text-foreground">Test environment:</strong> Work here uses staging data and does not update the public showcase website.</>
+        )}
       </span>
     </div>
   );

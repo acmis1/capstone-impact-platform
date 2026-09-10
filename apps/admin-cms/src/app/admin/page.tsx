@@ -20,6 +20,13 @@ import { Button } from '../../components/ui/button';
 import { ErrorState } from '../../components/ui/error-state';
 import { EmptyState } from '../../components/ui/empty-state';
 import { BulkProjectReviewBusyProvider } from '../../components/admin-dashboard/BulkProjectReviewBusyContext';
+import type { BulkArchiveExecutionTarget } from '../../components/admin-dashboard/BulkArchivePanel';
+import { getServerEnv } from '../../lib/env';
+import { resolvePublicationExecutionTarget } from '../../projects/publicationExecutionPolicy';
+import {
+  isProductionRuntimeEnvironment,
+  isStagingRuntimeEnvironment,
+} from '../../security/stagingRuntimeIdentity';
 
 import {
   toProjectIndexRow,
@@ -64,6 +71,25 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const canSubmitBulk = hasPermission(authContext.permissions, 'projects.edit');
   const canReviewBulk = hasPermission(authContext.permissions, 'projects.review');
   const canRunAssistiveBulk = hasPermission(authContext.permissions, 'projects.edit');
+  const canArchiveBulk = hasPermission(authContext.permissions, 'projects.archive');
+  let archiveExecutionTarget: BulkArchiveExecutionTarget = null;
+  if (canArchiveBulk) {
+    try {
+      const env = getServerEnv();
+      archiveExecutionTarget = resolvePublicationExecutionTarget(env.supabaseUrl)
+        ?? (isStagingRuntimeEnvironment()
+          ? 'staging-unavailable'
+          : isProductionRuntimeEnvironment()
+            ? 'production-unavailable'
+            : null);
+    } catch {
+      archiveExecutionTarget = isStagingRuntimeEnvironment()
+        ? 'staging-unavailable'
+        : isProductionRuntimeEnvironment()
+          ? 'production-unavailable'
+          : null;
+    }
+  }
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -182,6 +208,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   canSubmitBulk={canSubmitBulk}
                   canReviewBulk={canReviewBulk}
                   canRunAssistiveBulk={canRunAssistiveBulk}
+                  canArchiveBulk={canArchiveBulk}
+                  archiveExecutionTarget={archiveExecutionTarget}
                 />
               )}
             </BulkProjectReviewBusyProvider>

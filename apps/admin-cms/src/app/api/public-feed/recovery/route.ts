@@ -5,9 +5,11 @@ import { canPreparePublication } from '../../../../auth/permissions';
 import { AdminAuthError } from '../../../../auth/authTypes';
 import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from '../../../../auth/authHttp';
 import { getServerEnv } from '../../../../lib/env';
-import { createSupabaseAdminClient } from '../../../../lib/supabase/admin';
+import { createSupabaseAdminClientForServerEnv } from '../../../../lib/supabase/admin';
 import { createPublicFeedHistoryDependencies } from '../../../../projects/createPublicFeedHistoryDependencies';
 import { recoverPublicFeedOperation } from '../../../../projects/publicFeedHistoryService';
+import { resolvePublicationExecutionTarget } from '../../../../projects/publicationExecutionPolicy';
+import { isPublicFeedRollbackEnvironmentAvailable } from '../../../../projects/publicFeedRollbackPolicy';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
@@ -20,12 +22,28 @@ export async function POST(request: NextRequest) {
     if (!canPreparePublication(admin.permissions)) {
       return NextResponse.json({ success: false, error: 'Access denied.' }, { status: 403, headers: NO_STORE });
     }
-    const env = getServerEnv();
+    const env = Object.freeze(getServerEnv());
+    const environment = Object.freeze({
+      CAPSTONE_RUNTIME_ENV: process.env.CAPSTONE_RUNTIME_ENV,
+      CAPSTONE_EXPECTED_SUPABASE_HOST: process.env.CAPSTONE_EXPECTED_SUPABASE_HOST,
+      CAPSTONE_STAGING_PUBLICATION_ENABLED: process.env.CAPSTONE_STAGING_PUBLICATION_ENABLED,
+      CAPSTONE_PRODUCTION_PUBLICATION_ENABLED: process.env.CAPSTONE_PRODUCTION_PUBLICATION_ENABLED,
+      CAPSTONE_LOCAL_PUBLIC_FEED_ROLLBACK_ENABLED: process.env.CAPSTONE_LOCAL_PUBLIC_FEED_ROLLBACK_ENABLED,
+      CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED: process.env.CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED,
+      NEXT_PUBLIC_SUPABASE_URL: env.supabaseUrl,
+    });
+    const executionTarget = resolvePublicationExecutionTarget(env.supabaseUrl, environment);
+    if (!executionTarget && !isPublicFeedRollbackEnvironmentAvailable(env.supabaseUrl, environment)) {
+      return NextResponse.json(
+        { success: false, code: 'EXECUTION_FAILED', error: 'Public feed recovery could not be completed.' },
+        { status: 500, headers: NO_STORE },
+      );
+    }
     const result = await recoverPublicFeedOperation(createPublicFeedHistoryDependencies({
-      supabase: createSupabaseAdminClient(), supabaseUrl: env.supabaseUrl,
+      supabase: createSupabaseAdminClientForServerEnv(env), supabaseUrl: env.supabaseUrl,
       adminId: admin.adminUserId, permissions: admin.permissions,
       feedBucket: env.SUPABASE_PUBLIC_FEEDS_BUCKET, feedPath: env.SUPABASE_PUBLIC_FEED_FILE,
-      environment: process.env,
+      executionTarget: executionTarget ?? undefined, environment,
     }));
     if (result.resultCode === 'COMPLETED' || result.resultCode === 'RELEASED'
         || result.resultCode === 'NO_RECOVERY_REQUIRED') {

@@ -42,9 +42,13 @@ import { SubmitForReviewButton } from '../../../../components/admin/SubmitForRev
 import { PublicationReadinessPanel } from '../../../../components/admin/PublicationReadinessPanel';
 import { getServerEnv } from '../../../../lib/env';
 import { PublicationPreparationPanel } from '../../../../components/admin/PublicationPreparationPanel';
-import { isLocalPublicationExecutionAvailable } from '../../../../projects/localPublicationExecution';
-import { isStagingPublicationExecutionAvailable } from '../../../../projects/publicationExecutionPolicy';
-import { isStagingRuntimeEnvironment } from '../../../../security/stagingRuntimeIdentity';
+import {
+  resolvePublicationExecutionTarget,
+} from '../../../../projects/publicationExecutionPolicy';
+import {
+  isProductionRuntimeEnvironment,
+  isStagingRuntimeEnvironment,
+} from '../../../../security/stagingRuntimeIdentity';
 import { LocalArchivePanel } from '../../../../components/admin/LocalArchivePanel';
 import type { AuthenticatedAdminContext } from '../../../../auth/authTypes';
 import {
@@ -137,9 +141,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let publicationReadiness: import('../../../../domain/publicationReadiness').PublicationReadinessResult | null = null;
   let publicationActionsAvailable = false;
   let canPreparePublicationPlan = false;
-  let localPublicationExecutionAvailable = false;
-  let publicationExecutionTarget: 'local' | 'staging' | null = null;
-  let archiveExecutionTarget: 'local' | 'staging' | 'staging-unavailable' | null = null;
+  let publicationExecutionTarget: 'local' | 'staging' | 'production' | 'production-unavailable' | null = null;
+  let archiveExecutionTarget: 'local' | 'staging' | 'production' | 'staging-unavailable' | 'production-unavailable' | null = null;
   let mediaItems: ProjectMediaPreviewItem[] = [];
   let mediaAvailable = false;
   let approvalMedia: ApprovalMediaInput | null = null;
@@ -214,20 +217,17 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       );
       canExecuteAssistiveChecks = assistiveAvailability.canEnqueue;
       assistiveUnavailableMessage = assistiveAvailability.message ?? undefined;
-      localPublicationExecutionAvailable = canPreparePublicationPlan && isLocalPublicationExecutionAvailable(env.supabaseUrl);
-      publicationExecutionTarget = localPublicationExecutionAvailable
-        ? 'local'
-        : canPreparePublicationPlan && isStagingPublicationExecutionAvailable(env.supabaseUrl)
-          ? 'staging'
-          : null;
+      const resolvedPublicationTarget = resolvePublicationExecutionTarget(env.supabaseUrl);
+      publicationExecutionTarget = canPreparePublicationPlan
+        ? resolvedPublicationTarget ?? (isProductionRuntimeEnvironment() ? 'production-unavailable' : null)
+        : null;
       if (hasPermission(adminContext.permissions, 'projects.archive')) {
-        archiveExecutionTarget = isLocalPublicationExecutionAvailable(env.supabaseUrl)
-          ? 'local'
-          : isStagingPublicationExecutionAvailable(env.supabaseUrl)
-            ? 'staging'
-            : isStagingRuntimeEnvironment()
-              ? 'staging-unavailable'
-              : null;
+        archiveExecutionTarget = resolvedPublicationTarget
+          ?? (isStagingRuntimeEnvironment()
+            ? 'staging-unavailable'
+            : isProductionRuntimeEnvironment()
+              ? 'production-unavailable'
+              : null);
       }
 
       const projectDbId = (async () => {
@@ -394,7 +394,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     canManageParticipantPreview: canManagePreview,
     canResolveParticipantCorrection: canResolveCorrection,
     canPreparePublication: canPreparePublicationPlan,
-    canExecuteArchive: archiveExecutionTarget === 'local' || archiveExecutionTarget === 'staging',
+    canExecuteArchive: archiveExecutionTarget === 'local'
+      || archiveExecutionTarget === 'staging'
+      || archiveExecutionTarget === 'production',
     participantResponse: previewStateAvailable ? previewResponseState.type : null,
     hasActivePreview: activePreview !== null,
     publicationReadiness,
@@ -763,10 +765,12 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             <ProjectReviewSection
               id="publication-lifecycle"
               title="Showcase publishing"
-              description={
-                laterStagesActive
-                  ? 'Review publication readiness, publish the project to the test showcase, or manage showcase removal.'
-                  : 'Becomes available after approval and participant confirmation. Approval alone does not publish a project.'
+               description={
+                 laterStagesActive
+                  ? isProductionRuntimeEnvironment()
+                    ? 'Review publication readiness, then use only an explicitly enabled production window to publish or remove the project from the live feed.'
+                    : 'Review publication readiness, publish the project to the test showcase, or manage showcase removal.'
+                   : 'Becomes available after approval and participant confirmation. Approval alone does not publish a project.'
               }
               icon={Rocket}
               collapsible={!laterStagesActive}
@@ -931,11 +935,20 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
             <div className={`flex items-start gap-2.5 p-4 ${PROJECT_DETAIL_SURFACE_CLASSES.context}`}>
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-foreground-subtle" aria-hidden="true" />
-              <p className="text-sm leading-relaxed">
-                <strong className="font-semibold text-foreground">Test environment.</strong> Changes
-                here affect test data and test publishing only. The live public showcase is not
-                changed.
-              </p>
+              {isProductionRuntimeEnvironment() ? (
+                <p className="text-sm leading-relaxed">
+                  <strong className="font-semibold text-foreground">Production-designated runtime.</strong>{' '}
+                  Treat data and controls as production-impacting. Live-feed controls appear only
+                  when the separate production publication gate and exact target identity pass;
+                  their presence does not replace institutional cutover authorization.
+                </p>
+              ) : (
+                <p className="text-sm leading-relaxed">
+                  <strong className="font-semibold text-foreground">Test environment.</strong>{' '}
+                  Changes here affect test data and test publishing only. The live public showcase
+                  is not changed.
+                </p>
+              )}
             </div>
           </aside>
         </div>

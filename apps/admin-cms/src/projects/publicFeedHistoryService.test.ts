@@ -124,6 +124,25 @@ function rollbackHead(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+describe('hosted production rollback boundary', () => {
+  it('keeps rollback unavailable even when production publication is enabled', async () => {
+    const production = dependencies({
+      supabaseUrl: 'https://synthetic-production.supabase.co',
+      environment: {
+        CAPSTONE_RUNTIME_ENV: 'production',
+        CAPSTONE_EXPECTED_SUPABASE_HOST: 'synthetic-production.supabase.co',
+        CAPSTONE_PRODUCTION_PUBLICATION_ENABLED: 'true',
+      },
+    });
+
+    await expect(preparePublicFeedRollback(production, 1)).resolves.toEqual({
+      resultCode: 'ROLLBACK_UNAVAILABLE',
+    });
+    await expect(executePublicFeedRollback(production, HANDLE, ACKNOWLEDGEMENT)).resolves.toEqual({
+      resultCode: 'ROLLBACK_UNAVAILABLE',
+    });
+  });
+});
 
 describe('activatePublicFeedHistory', () => {
   beforeEach(() => {
@@ -206,6 +225,31 @@ describe('activatePublicFeedHistory', () => {
     expect(listProjects).not.toHaveBeenCalled();
     expect(mocks.executePublicFeedWriter).not.toHaveBeenCalled();
   });
+
+  it('requests no rollback capability when production history is initially activated', async () => {
+    await activatePublicFeedHistory(dependencies({
+      supabaseUrl: 'https://synthetic-production.supabase.co',
+      environment: {
+        CAPSTONE_RUNTIME_ENV: 'production',
+        CAPSTONE_EXPECTED_SUPABASE_HOST: 'synthetic-production.supabase.co',
+        CAPSTONE_PRODUCTION_PUBLICATION_ENABLED: 'true',
+      },
+      listProjects: vi.fn(async () => []),
+    }));
+
+    expect(mocks.executePublicFeedWriter).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'activation',
+      rollbackCapability: false,
+    }));
+  });
+
+  it('performs no ledger or feed work before activation policy acceptance', async () => {
+    await expect(activatePublicFeedHistory(dependencies({
+      assertActivationEnvironment: vi.fn(() => { throw new Error('denied'); }),
+    }))).resolves.toEqual({ resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' });
+    expect(mocks.getHead).not.toHaveBeenCalled();
+    expect(mocks.executePublicFeedWriter).not.toHaveBeenCalled();
+  });
 });
 
 describe('recoverPublicFeedOperation', () => {
@@ -222,16 +266,17 @@ describe('recoverPublicFeedOperation', () => {
     });
   });
 
-  it('keeps rollback recovery blocked outside an explicitly verified rollback environment', async () => {
+  it('keeps rollback recovery blocked in production even when production publication is enabled', async () => {
     mocks.getBlockingOperation.mockResolvedValue(durableOperation('RECOVERY_REQUIRED', {
       kind: 'rollback', publicationMode: null, publicId: null, rollbackPreparationId: HANDLE,
     }));
 
     const result = await recoverPublicFeedOperation(dependencies({
-      supabaseUrl: 'https://staging.example.supabase.co',
+      supabaseUrl: 'https://synthetic-production.supabase.co',
       environment: {
-        CAPSTONE_RUNTIME_ENV: 'staging',
-        CAPSTONE_LOCAL_PUBLIC_FEED_ROLLBACK_ENABLED: 'true',
+        CAPSTONE_RUNTIME_ENV: 'production',
+        CAPSTONE_EXPECTED_SUPABASE_HOST: 'synthetic-production.supabase.co',
+        CAPSTONE_PRODUCTION_PUBLICATION_ENABLED: 'true',
       },
     }));
 
@@ -247,6 +292,7 @@ describe('recoverPublicFeedOperation', () => {
     mocks.getHead.mockResolvedValue(rollbackHead());
 
     const result = await recoverPublicFeedOperation(dependencies({
+      assertActivationEnvironment: vi.fn(() => { throw new Error('forward publication disabled'); }),
       supabaseUrl: 'https://synthetic-a06-staging.supabase.co',
       environment: {
         CAPSTONE_RUNTIME_ENV: 'staging',
@@ -323,6 +369,15 @@ describe('recoverPublicFeedOperation', () => {
     await expect(recoverPublicFeedOperation(dependencies({ permissions: [] })))
       .resolves.toEqual({ resultCode: 'PERMISSION_DENIED' });
     expect(mocks.getBlockingOperation).not.toHaveBeenCalled();
+  });
+
+  it('performs no ledger or feed work when neither recovery capability is authorized', async () => {
+    await expect(recoverPublicFeedOperation(dependencies({
+      environment: {}, // Do not accidentally supply the independent Local rollback grant.
+      assertActivationEnvironment: vi.fn(() => { throw new Error('denied'); }),
+    }))).resolves.toEqual({ resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' });
+    expect(mocks.getBlockingOperation).not.toHaveBeenCalled();
+    expect(mocks.executePublicFeedWriter).not.toHaveBeenCalled();
   });
 });
 
@@ -648,6 +703,27 @@ describe('executePublicFeedRollback response-loss idempotency', () => {
 
     await expect(executePublicFeedRollback(dependencies(), HANDLE, ACKNOWLEDGEMENT))
       .resolves.toEqual({ resultCode: 'STALE_PREPARATION' });
+    expect(mocks.executePublicFeedWriter).not.toHaveBeenCalled();
+  });
+});
+
+describe('independent recovery capabilities cannot cross-authorize operation kinds', () => {
+  it.each(['publication', 'removal', 'activation'])('a rollback-only staging window cannot recover %s', async kind => {
+    vi.clearAllMocks();
+    mocks.getBlockingOperation.mockResolvedValue(durableOperation('RESERVED', { kind, candidateFeedContent: null }));
+    const result = await recoverPublicFeedOperation(dependencies({
+      supabaseUrl: 'https://synthetic-a06-staging.supabase.co',
+      assertActivationEnvironment: () => { throw new Error('forward execution disabled'); },
+      environment: {
+        CAPSTONE_RUNTIME_ENV: 'staging',
+        CAPSTONE_EXPECTED_SUPABASE_HOST: 'synthetic-a06-staging.supabase.co',
+        CAPSTONE_STAGING_PUBLICATION_ENABLED: 'false',
+        CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED: 'true',
+      },
+    }));
+    expect(result).toEqual({ resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' });
+    expect(mocks.getBlockingOperation).toHaveBeenCalledOnce();
+    expect(mocks.claim).not.toHaveBeenCalled();
     expect(mocks.executePublicFeedWriter).not.toHaveBeenCalled();
   });
 });

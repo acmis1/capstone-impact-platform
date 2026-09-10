@@ -9,6 +9,11 @@ const mocks = vi.hoisted(() => ({
   listProjectsPage: vi.fn(),
   getProjectDashboardMetrics: vi.fn(),
   getProjectFilterOptions: vi.fn(),
+  getServerEnv: vi.fn(),
+  resolvePublicationExecutionTarget: vi.fn(),
+  isStagingRuntimeEnvironment: vi.fn(),
+  isProductionRuntimeEnvironment: vi.fn(),
+  projectTableProps: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
@@ -21,6 +26,20 @@ vi.mock('../../repositories/SupabaseProjectRepository', () => ({
     listProjectsPage = mocks.listProjectsPage;
     getProjectDashboardMetrics = mocks.getProjectDashboardMetrics;
     getProjectFilterOptions = mocks.getProjectFilterOptions;
+  },
+}));
+vi.mock('../../lib/env', () => ({ getServerEnv: mocks.getServerEnv }));
+vi.mock('../../projects/publicationExecutionPolicy', () => ({
+  resolvePublicationExecutionTarget: mocks.resolvePublicationExecutionTarget,
+}));
+vi.mock('../../security/stagingRuntimeIdentity', () => ({
+  isStagingRuntimeEnvironment: mocks.isStagingRuntimeEnvironment,
+  isProductionRuntimeEnvironment: mocks.isProductionRuntimeEnvironment,
+}));
+vi.mock('../../components/admin-dashboard/ProjectTableContainer', () => ({
+  ProjectTableContainer: (props: Record<string, unknown>) => {
+    mocks.projectTableProps(props);
+    return <div>Project table</div>;
   },
 }));
 
@@ -67,6 +86,10 @@ describe('Admin projects page authorization boundary', () => {
       archived: 0,
     });
     mocks.getProjectFilterOptions.mockResolvedValue({ years: [], programs: [], disciplines: [] });
+    mocks.getServerEnv.mockReturnValue({ supabaseUrl: 'http://127.0.0.1:54321' });
+    mocks.resolvePublicationExecutionTarget.mockReturnValue('local');
+    mocks.isStagingRuntimeEnvironment.mockReturnValue(false);
+    mocks.isProductionRuntimeEnvironment.mockReturnValue(false);
   });
 
   it.each([
@@ -124,5 +147,45 @@ describe('Admin projects page authorization boundary', () => {
     expect(mocks.getProjectFilterOptions).toHaveBeenCalledTimes(1);
     expect(markup).not.toContain('Projects are unavailable');
     expect(markup).toContain('No project records available');
+  });
+
+  it('derives bulk archive permission and the named target only on the server', async () => {
+    mocks.requireAdmin.mockResolvedValueOnce({
+      ...AUTHORIZED_CONTEXT,
+      permissions: [...AUTHORIZED_CONTEXT.permissions, 'projects.archive'],
+    });
+    mocks.listProjectsPage.mockResolvedValueOnce({
+      projects: [{ id: 1, publicId: 'published-1', title: 'Published project', status: 'published' }],
+      total: 1, page: 1, pageSize: 25, pageCount: 1,
+    });
+
+    await renderAdminPage();
+
+    expect(mocks.getServerEnv).toHaveBeenCalledOnce();
+    expect(mocks.resolvePublicationExecutionTarget).toHaveBeenCalledWith('http://127.0.0.1:54321');
+    expect(mocks.projectTableProps).toHaveBeenCalledWith(expect.objectContaining({
+      canArchiveBulk: true,
+      archiveExecutionTarget: 'local',
+    }));
+  });
+
+  it('passes a production-unavailable target when institutional enablement or identity is absent', async () => {
+    mocks.requireAdmin.mockResolvedValueOnce({
+      ...AUTHORIZED_CONTEXT,
+      permissions: [...AUTHORIZED_CONTEXT.permissions, 'projects.archive'],
+    });
+    mocks.listProjectsPage.mockResolvedValueOnce({
+      projects: [{ id: 1, publicId: 'published-1', title: 'Published project', status: 'published' }],
+      total: 1, page: 1, pageSize: 25, pageCount: 1,
+    });
+    mocks.resolvePublicationExecutionTarget.mockReturnValueOnce(null);
+    mocks.isProductionRuntimeEnvironment.mockReturnValue(true);
+
+    await renderAdminPage();
+
+    expect(mocks.projectTableProps).toHaveBeenCalledWith(expect.objectContaining({
+      canArchiveBulk: true,
+      archiveExecutionTarget: 'production-unavailable',
+    }));
   });
 });

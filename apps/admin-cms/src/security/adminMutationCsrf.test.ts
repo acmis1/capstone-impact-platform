@@ -26,6 +26,9 @@ const ADMIN_MUTATION_ROUTES = [
   'src/app/api/public-feed/rollback/prepare/route.ts',
   'src/app/api/public-feed/rollback/route.ts',
   'src/app/api/public-feed/rollback/capability/route.ts',
+  'src/app/api/projects/[publicId]/production-publication/route.ts',
+  'src/app/api/projects/[publicId]/production-archive/route.ts',
+  'src/app/api/projects/[publicId]/deployment-reconciliation/route.ts',
   'src/app/api/staff/invitations/route.ts',
 ] as const;
 

@@ -83,6 +83,9 @@ export function PublicFeedHistoryControls(props: {
   targetVersionNumber: number | null;
   targetIsCurrent: boolean;
   publishingActivity: PublishingActivity;
+  environment: 'local' | 'staging' | 'production';
+  executionAvailable: boolean;
+  recoveryOperationKind: string | null;
 }) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
@@ -90,6 +93,7 @@ export function PublicFeedHistoryControls(props: {
   const [preparation, setPreparation] = React.useState<Preparation | null>(null);
   const [acknowledgement, setAcknowledgement] = React.useState('');
   const [capabilityConfirmation, setCapabilityConfirmation] = React.useState('');
+  const [productionSetupAcknowledged, setProductionSetupAcknowledged] = React.useState(false);
   const prepareButtonRef = React.useRef<HTMLButtonElement>(null);
   const acknowledgementRef = React.useRef<HTMLInputElement>(null);
   const [preparationFocus, setPreparationFocus] = React.useState<{ origin: Element | null } | null>(null);
@@ -260,8 +264,14 @@ export function PublicFeedHistoryControls(props: {
     </div>
   ) : null;
 
-  const recoveryAvailable = props.publishingActivity === 'RECOVERY_AVAILABLE';
-  const setupAvailable = !props.historyActive && props.publishingActivity === 'IDLE';
+  const productionRollbackRecoveryBlocked = props.environment === 'production'
+    && props.recoveryOperationKind === 'rollback';
+  const productionExecutionUnavailable = props.environment === 'production'
+    && !props.executionAvailable;
+  const recoveryAvailable = props.publishingActivity === 'RECOVERY_AVAILABLE'
+    && props.executionAvailable && !productionRollbackRecoveryBlocked;
+  const setupAvailable = !props.historyActive && props.publishingActivity === 'IDLE'
+    && props.executionAvailable;
   const rollbackAvailable = props.historyActive && props.publishingActivity === 'IDLE'
     && props.rollbackAvailable && props.targetVersionNumber !== null && !props.targetIsCurrent;
   const capabilityVisible = props.canPublish && props.historyActive && props.rollbackExecutionTarget !== null
@@ -272,17 +282,38 @@ export function PublicFeedHistoryControls(props: {
     ? requiredCapabilityConfirmation(capabilityWillEnable, props.rollbackHeadEvidence)
     : '';
 
-  if (!recoveryAvailable && !setupAvailable && !rollbackAvailable && !capabilityVisible) {
+  if (!recoveryAvailable && !setupAvailable && !rollbackAvailable && !capabilityVisible
+      && !productionExecutionUnavailable && !productionRollbackRecoveryBlocked) {
     return outcome;
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {productionExecutionUnavailable && (
+        <section aria-labelledby="production-publishing-unavailable" className="rounded-xl border border-warning/40 bg-warning/5 p-5 shadow-xs">
+          <h2 id="production-publishing-unavailable" className="text-base font-semibold text-foreground">Production publishing unavailable</h2>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            The production publication flag is disabled or the exact production target identity is not verified. No setup, recovery, rollback, or reconciliation mutation is available. Repository code availability is not cutover authorization.
+          </p>
+        </section>
+      )}
+
+      {productionRollbackRecoveryBlocked && (
+        <section aria-labelledby="production-rollback-recovery-unavailable" className="rounded-xl border border-warning/40 bg-warning/5 p-5 shadow-xs">
+          <h2 id="production-rollback-recovery-unavailable" className="text-base font-semibold text-foreground">Production rollback recovery unavailable</h2>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            Historical public-feed rollback cannot be prepared, executed, or recovered in production. Keep other feed mutations stopped and escalate for an independently reviewed forward-recovery decision.
+          </p>
+        </section>
+      )}
+
       {recoveryAvailable && (
         <section aria-labelledby="publishing-recovery-heading" className="rounded-xl border border-warning/40 bg-warning/5 p-5 shadow-xs">
           <h2 id="publishing-recovery-heading" className="text-base font-semibold text-foreground">Publishing recovery available</h2>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            The earlier action&apos;s lease and safety window have expired. Recovery will either finish its durable publishing intent or clear an abandoned pre-write reservation.
+            {props.environment === 'production'
+              ? 'The earlier production action\'s lease and safety window have expired. Forward recovery will finish its exact durable publishing intent or clear an abandoned pre-write reservation; it cannot restore historical feed content.'
+              : 'The earlier action\'s lease and safety window have expired. Recovery will either finish its durable publishing intent or clear an abandoned pre-write reservation.'}
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button type="button" variant="outline" onClick={recover} disabled={pending}>
@@ -302,10 +333,24 @@ export function PublicFeedHistoryControls(props: {
         <section aria-labelledby="publishing-setup-heading" className="rounded-xl border border-border-structural bg-card p-5 shadow-xs">
           <h2 id="publishing-setup-heading" className="text-base font-semibold text-foreground">Showcase setup required</h2>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            Showcase publishing needs to be set up before projects can be published.
+            {props.environment === 'production'
+              ? 'Production feed history must be established before projects can be published. This is a live production mutation and does not enable historical rollback.'
+              : 'Showcase publishing needs to be set up before projects can be published.'}
           </p>
+          {props.environment === 'production' && (
+            <label className="mt-4 flex items-start gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={productionSetupAcknowledged}
+                disabled={pending}
+                onChange={(event) => setProductionSetupAcknowledged(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span>I understand this establishes production feed history, may write the live feed, and requires separate institutional cutover authorization.</span>
+            </label>
+          )}
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={activate} disabled={pending}>
+            <Button type="button" onClick={activate} disabled={pending || (props.environment === 'production' && !productionSetupAcknowledged)}>
               {pending ? 'Setting up…' : 'Set up showcase publishing'}
             </Button>
           </div>

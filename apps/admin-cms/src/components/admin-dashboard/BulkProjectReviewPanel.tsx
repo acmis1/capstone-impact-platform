@@ -17,6 +17,7 @@ interface BulkProjectReviewPanelProps {
   canSubmitBulk: boolean;
   canReviewBulk: boolean;
   onBusyChange?: (busy: boolean) => void;
+  sharedBusy?: boolean;
 }
 
 function actionLabel(action: BulkReviewAction): string {
@@ -30,6 +31,7 @@ export function BulkProjectReviewPanel({
   canSubmitBulk,
   canReviewBulk,
   onBusyChange,
+  sharedBusy = false,
 }: BulkProjectReviewPanelProps) {
   const [preflight, setPreflight] = React.useState<BulkReviewPreflightResponse | null>(null);
   const [execution, setExecution] = React.useState<BulkReviewExecutionResponse | null>(null);
@@ -67,7 +69,7 @@ export function BulkProjectReviewPanel({
   }, [execution]);
 
   const runPreflight = async (action: BulkReviewAction) => {
-    if (inFlight.current || selectedProjects.length === 0) return;
+    if (inFlight.current || sharedBusy || selectedProjects.length === 0) return;
     inFlight.current = true;
     setLoading(true);
     onBusyChange?.(true);
@@ -94,7 +96,7 @@ export function BulkProjectReviewPanel({
   };
 
   const execute = async () => {
-    if (inFlight.current || !preflight || !activeAction) return;
+    if (inFlight.current || sharedBusy || !preflight || !activeAction) return;
     inFlight.current = true;
     setLoading(true);
     onBusyChange?.(true);
@@ -154,7 +156,7 @@ export function BulkProjectReviewPanel({
             }}
             type="button"
             variant="outline"
-            disabled={loading}
+            disabled={loading || sharedBusy}
             onClick={() => runPreflight('submit_for_review')}
           >
             {loading && activeAction === 'submit_for_review' ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
@@ -169,7 +171,7 @@ export function BulkProjectReviewPanel({
               }}
               type="button"
               variant="outline"
-              disabled={loading}
+              disabled={loading || sharedBusy}
               onClick={() => runPreflight('approve')}
             >
               {loading && activeAction === 'approve' ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
@@ -181,7 +183,7 @@ export function BulkProjectReviewPanel({
               }}
               type="button"
               variant="outline"
-              disabled={loading}
+              disabled={loading || sharedBusy}
               onClick={() => runPreflight('request_changes')}
             >
               {loading && activeAction === 'request_changes' ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
@@ -226,11 +228,11 @@ export function BulkProjectReviewPanel({
             </label>
           )}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" disabled={loading || preflight.summary.eligible === 0 || (activeAction === 'request_changes' && !comments.trim())} onClick={execute}>
+            <Button type="button" disabled={loading || sharedBusy || preflight.summary.eligible === 0 || (activeAction === 'request_changes' && !comments.trim())} onClick={execute}>
               {loading ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
               Confirm and {actionLabel(activeAction).toLowerCase()}
             </Button>
-            <Button type="button" variant="ghost" disabled={loading} onClick={handleCancel}>
+            <Button type="button" variant="ghost" disabled={loading || sharedBusy} onClick={handleCancel}>
               Cancel
             </Button>
           </div>

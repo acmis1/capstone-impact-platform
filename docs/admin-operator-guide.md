@@ -101,6 +101,19 @@ Archiving changes the project lifecycle. Removing a project from the deployed fe
 4. Confirm the resulting lifecycle, public-feed membership, audit, and publishing history.
 5. Do not delete public or private media manually. Retention/deletion is an institutional policy decision.
 
+For a bounded bulk archive, use **Projects** and select only the current page. A batch accepts at
+most 50 selected rows. Review the displayed Local, Staging, or Production target and the exact
+count/list, enter one required reason, acknowledge feed removal, and confirm once. Qualified
+Published rows are sent sequentially through the same per-project archive control; this is not an
+atomic all-or-nothing change. Keep completed and already-completed/no-change results with any
+ineligible, denied, failed, unknown, and not-attempted rows. Stop on recovery, writer conflict,
+feed divergence, target/auth loss, or an ambiguous timeout/network result and inspect current
+state before explicitly selecting and confirming any retry. The batch never resumes itself. A
+120-project cohort therefore requires three separately authorized batches of 50, 50, and 20.
+Original assets remain stored. Production is unavailable until separate institutional enablement
+and exact runtime identity checks pass; an enabled production removal changes the live feed, while
+verification of the Duda presentation remains a separate operator step.
+
 Hosted rollback of application/database/Storage is not the **Publishing** restore control. Disposable-Local feed restoration only creates a new exact feed version and does not reverse project lifecycle or audit records.
 
 ## Assistive Checks

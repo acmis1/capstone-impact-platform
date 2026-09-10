@@ -1,6 +1,7 @@
 import { isIP } from 'node:net';
 
 export type StagingRuntimeEnvironment = Record<string, string | undefined>;
+export type HostedRuntimeIdentity = 'staging' | 'production';
 
 function ipv6Segments(address: string): number[] | null {
   const halves = address.split('::');
@@ -52,23 +53,27 @@ export function isStagingRuntimeEnvironment(
   return env.CAPSTONE_RUNTIME_ENV === 'staging';
 }
 
-/**
- * Verifies the shared staging runtime and Supabase target identity without applying any
- * CLI-specific mutation acknowledgement semantics.
- */
-export function assertVerifiedStagingRuntime(
+export function isProductionRuntimeEnvironment(
   env: StagingRuntimeEnvironment = process.env,
+): boolean {
+  return env.CAPSTONE_RUNTIME_ENV === 'production';
+}
+
+function assertVerifiedHostedRuntime(
+  identity: HostedRuntimeIdentity,
+  env: StagingRuntimeEnvironment,
 ): void {
-  if (!isStagingRuntimeEnvironment(env)) {
+  const label = identity === 'staging' ? 'Staging' : 'Production';
+  if (env.CAPSTONE_RUNTIME_ENV !== identity) {
     throw new Error(
-      'Staging Execution Refused: Environment identity is not configured for staging operations.',
+      `${label} Execution Refused: Environment identity is not configured for ${identity} operations.`,
     );
   }
 
   const expectedHost = env.CAPSTONE_EXPECTED_SUPABASE_HOST;
   if (!expectedHost || expectedHost === '' || expectedHost !== expectedHost.trim()
       || expectedHost.endsWith('.')) {
-    throw new Error('Staging Execution Refused: Expected target hostname is not configured.');
+    throw new Error(`${label} Execution Refused: Expected target hostname is not configured.`);
   }
 
   const expectedOrigin = `https://${expectedHost}`;
@@ -76,48 +81,65 @@ export function assertVerifiedStagingRuntime(
   try {
     parsedExpectedOrigin = new URL(expectedOrigin);
   } catch {
-    throw new Error('Staging Execution Refused: Expected target hostname is invalid.');
+    throw new Error(`${label} Execution Refused: Expected target hostname is invalid.`);
   }
   if (parsedExpectedOrigin.origin !== expectedOrigin
       || parsedExpectedOrigin.hostname !== expectedHost
       || parsedExpectedOrigin.pathname !== '/') {
-    throw new Error('Staging Execution Refused: Expected target hostname is not canonical.');
+    throw new Error(`${label} Execution Refused: Expected target hostname is not canonical.`);
   }
 
   const supabaseUrlRaw = env.NEXT_PUBLIC_SUPABASE_URL;
   if (!supabaseUrlRaw || !supabaseUrlRaw.trim()) {
-    throw new Error('Staging Execution Refused: Required Supabase URL variable is missing.');
+    throw new Error(`${label} Execution Refused: Required Supabase URL variable is missing.`);
   }
   if (supabaseUrlRaw !== supabaseUrlRaw.trim()) {
-    throw new Error('Staging Execution Refused: Target Supabase URL is not canonical.');
+    throw new Error(`${label} Execution Refused: Target Supabase URL is not canonical.`);
   }
 
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(supabaseUrlRaw);
   } catch {
-    throw new Error('Staging Execution Refused: Invalid target Supabase URL structure.');
+    throw new Error(`${label} Execution Refused: Invalid target Supabase URL structure.`);
   }
 
   if (parsedUrl.protocol !== 'https:') {
-    throw new Error('Staging Execution Refused: Target URL must use secure HTTPS protocol.');
+    throw new Error(`${label} Execution Refused: Target URL must use secure HTTPS protocol.`);
   }
 
   if (isLoopbackHost(parsedUrl.hostname)) {
-    throw new Error('Staging Execution Refused: Staging operations cannot target loopback endpoints.');
+    throw new Error(`${label} Execution Refused: ${label} operations cannot target loopback endpoints.`);
   }
 
   if (parsedUrl.hostname !== expectedHost) {
     throw new Error(
-      'Staging Execution Refused: Target hostname does not match expected staging target identity.',
+      `${label} Execution Refused: Target hostname does not match expected ${identity} target identity.`,
     );
   }
 
   if (parsedUrl.username !== '' || parsedUrl.password !== '' || parsedUrl.port !== ''
       || parsedUrl.pathname !== '/' || parsedUrl.search !== '' || parsedUrl.hash !== ''
       || (supabaseUrlRaw !== expectedOrigin && supabaseUrlRaw !== `${expectedOrigin}/`)) {
-    throw new Error('Staging Execution Refused: Target Supabase URL is not the approved canonical base URL.');
+    throw new Error(`${label} Execution Refused: Target Supabase URL is not the approved canonical base URL.`);
   }
+}
+
+/**
+ * Verifies the shared staging runtime and Supabase target identity without applying any
+ * CLI-specific mutation acknowledgement semantics.
+ */
+export function assertVerifiedStagingRuntime(
+  env: StagingRuntimeEnvironment = process.env,
+): void {
+  assertVerifiedHostedRuntime('staging', env);
+}
+
+/** Verifies the distinct hosted production runtime and exact Supabase target identity. */
+export function assertVerifiedProductionRuntime(
+  env: StagingRuntimeEnvironment = process.env,
+): void {
+  assertVerifiedHostedRuntime('production', env);
 }
 
 /** Fail-closed boolean form for server-rendered and route-handler eligibility checks. */
@@ -126,6 +148,17 @@ export function isVerifiedStagingRuntime(
 ): boolean {
   try {
     assertVerifiedStagingRuntime(env);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isVerifiedProductionRuntime(
+  env: StagingRuntimeEnvironment = process.env,
+): boolean {
+  try {
+    assertVerifiedProductionRuntime(env);
     return true;
   } catch {
     return false;
