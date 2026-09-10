@@ -17,15 +17,15 @@ import { collectLocalGate4Evidence } from './checkGate4SchemaEvidence';
 import { MIGRATION_MANAGED_BUCKETS } from '../local-development/localSupabaseFixtures';
 
 /**
- * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 migration transition on a stack this verifier
+ * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 migration transition on a stack this verifier
  * owns outright.
  *
  * The known hosted staging-v2 baseline is 48 migrations through
- * 20260831090000_postgres17_maintain_privilege_alignment. A clean 53-migration install proves the
+ * 20260831090000_postgres17_maintain_privilege_alignment. A clean 54-migration install proves the
  * end state but not the transition, and the existing deployment-ledger upgrade proves a different
  * single migration. This rehearsal provisions exactly the 48-migration baseline, seeds the minimum
  * representative synthetic evidence a real 48-state database would hold, applies 0049 through
- * 0053 one at a time in deterministic order, and asserts after each step that nothing existing was
+ * 0054 one at a time in deterministic order, and asserts after each step that nothing existing was
  * rewritten and that the new authority is exactly what the migration declares.
  *
  * Everything is disposable and loopback-only: its own project id, port block, Docker network,
@@ -39,6 +39,7 @@ const RELEASE_MIGRATIONS = [
   { ordinal: 51, version: '20260903130000', file: '20260903130000_participant_owned_corrections.sql' },
   { ordinal: 52, version: '20260906120000', file: '20260906120000_public_removal_completion_reconciliation.sql' },
   { ordinal: 53, version: '20260909120000', file: '20260909120000_staff_lifecycle_readiness.sql' },
+  { ordinal: 54, version: '20260910120000', file: '20260910120000_public_feed_rollback_capability.sql' },
 ] as const;
 
 const BASELINE_MIGRATION_COUNT = 48;
@@ -76,10 +77,13 @@ const CORRECTION_RPC_SIGNATURES = [
  * Rows that must survive 0049 through 0052 byte-identically. Shared taxonomy, publication and
  * deployment-ledger state are included because a release migration must never quietly touch them.
  */
-// The 41-table release inventory minus the four tables first created by 0051 is the exact
-// 37-table public contract at 6125bb56 (0048). Assert the live baseline set before fingerprinting.
+// The 44-table release inventory minus the four tables first created by 0051 and the three tables
+// first created by 0053/0054 is the exact 37-table public contract at 6125bb56 (0048). Assert the
+// live baseline set before fingerprinting.
 export const PRESERVED_PUBLIC_TABLES = ALL_REQUIRED_TABLES.filter(
   (table) => table !== 'staff_lifecycle_events'
+    && table !== 'public_feed_rollback_capability_events'
+    && table !== 'public_feed_rollback_preparation_capabilities'
     && !(CORRECTION_TABLES as readonly string[]).includes(table),
 );
 export const PRESERVED_EXECUTION_CONTROL_TABLES = [
@@ -945,6 +949,160 @@ function assertAfter53(
   console.log('PASS: Migration 0053 installed lifecycle, retained-token RLS, and immutable readiness authority without rewriting existing records');
 }
 
+function assertAfter54(
+  preservedTablesBefore54: Record<string, string>,
+  untrustedRoutineGrantsBefore54: string,
+): void {
+  assertPreservedTablesUnchanged(preservedTablesBefore54, 'Migration 0054');
+  assert.equal(
+    psql("SELECT pg_catalog.to_regclass('public.public_feed_rollback_capability_events') IS NOT NULL;"),
+    't',
+  );
+  assert.equal(
+    psql('SELECT pg_catalog.count(*)::text FROM public.public_feed_rollback_capability_events;'),
+    '0',
+    'Migration 0054 created a capability event without an operator transition.',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.to_regclass('public.public_feed_rollback_preparation_capabilities') IS NOT NULL;"),
+    't',
+  );
+  assert.equal(
+    psql('SELECT pg_catalog.count(*)::text FROM public.public_feed_rollback_preparation_capabilities;'),
+    '0',
+    'Migration 0054 bound a preexisting rollback preparation to a capability event.',
+  );
+  assert.equal(
+    psql("SELECT relrowsecurity::text || '|' || relforcerowsecurity::text"
+      + " FROM pg_catalog.pg_class WHERE oid = 'public.public_feed_rollback_capability_events'::regclass;"),
+    'true|true',
+  );
+  assert.equal(
+    psql("SELECT relrowsecurity::text || '|' || relforcerowsecurity::text"
+      + " FROM pg_catalog.pg_class WHERE oid = 'public.public_feed_rollback_preparation_capabilities'::regclass;"),
+    'true|true',
+  );
+  assert.equal(
+    tableGrantsFor('public_feed_rollback_capability_events'),
+    'service_role:SELECT',
+  );
+  assert.equal(
+    tableGrantsFor('public_feed_rollback_preparation_capabilities'),
+    'service_role:SELECT',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.count(*)::text FROM pg_catalog.pg_trigger"
+      + " WHERE tgrelid = 'public.public_feed_rollback_capability_events'::regclass"
+      + " AND tgname = 'reject_public_feed_rollback_capability_event_mutation' AND NOT tgisinternal;"),
+    '1',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.count(*)::text FROM pg_catalog.pg_indexes"
+      + " WHERE schemaname = 'public' AND tablename = 'public_feed_rollback_capability_events'"
+      + " AND indexname IN ('public_feed_rollback_capability_events_actor_idx',"
+      + " 'public_feed_rollback_capability_events_head_version_idx');"),
+    '2',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.count(*)::text FROM pg_catalog.pg_trigger"
+      + " WHERE tgrelid = 'public.public_feed_rollback_preparation_capabilities'::regclass"
+      + " AND tgname = 'reject_public_feed_rollback_preparation_capability_mutation' AND NOT tgisinternal;"),
+    '1',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.count(*)::text FROM pg_catalog.pg_indexes"
+      + " WHERE schemaname = 'public' AND tablename = 'public_feed_rollback_preparation_capabilities'"
+      + " AND indexname = 'public_feed_rollback_preparation_capabilities_event_idx';"),
+    '1',
+  );
+  for (const signature of [
+    'public.transition_public_feed_rollback_capability(uuid,boolean,boolean,bigint,bigint,text,integer,text)',
+    'public.prepare_verified_staging_public_feed_rollback(uuid,bigint,text,integer,jsonb)',
+    'public.reserve_verified_staging_public_feed_rollback(uuid,text,uuid,text,text,text)',
+  ]) {
+    assert.equal(
+      psql(`SELECT has_function_privilege('service_role', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('anon', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('authenticated', '${signature}', 'EXECUTE')::text;`),
+      'true|false|false',
+      `${signature} has an unsafe runtime EXECUTE grant.`,
+    );
+    assert.equal(
+      psql(`SELECT prosecdef::text || '|' || pg_catalog.array_to_string(proconfig, ',')`
+        + ` FROM pg_catalog.pg_proc WHERE oid = '${signature}'::regprocedure;`),
+      'true|search_path=""',
+      `${signature} is not a search-path-pinned SECURITY DEFINER function.`,
+    );
+  }
+  const transition = routineDefinition('transition_public_feed_rollback_capability');
+  for (const requiredFragment of [
+    'SECURITY DEFINER',
+    "SET search_path TO ''",
+    'public_feed_canonical_writer',
+    'p_require_exact_head_event',
+    'RECOVERY_REQUIRED',
+    'PUBLICATION_IN_PROGRESS',
+    'CONFIRMATION_MISMATCH',
+    'confirmation_digest',
+  ]) {
+    assert.ok(transition.includes(requiredFragment), `Migration 0054 RPC is missing ${requiredFragment}.`);
+  }
+  const actorGuard = routineDefinition('public_feed_actor_is_admin');
+  for (const requiredFragment of [
+    'capstone.staff_lifecycle_admin_invariant',
+    "lifecycle_status = 'active'",
+    'auth_user_id IS NOT NULL',
+    "status = 'pending_activation'",
+    'FOR SHARE',
+  ]) {
+    assert.ok(actorGuard.includes(requiredFragment), `Migration 0054 active-admin guard is missing ${requiredFragment}.`);
+  }
+  assert.equal(
+    psql(`SELECT public.public_feed_actor_is_admin('${ADMIN_ID}'::uuid)::text;`),
+    'false',
+    'Migration 0054 treated a historical profile without a canonical Auth identity as active.',
+  );
+  assert.equal(
+    psql("SELECT public.transition_public_feed_rollback_capability("
+      + `'${ADMIN_ID}'::uuid,true,true,1,1,repeat('0',64),0,`
+      + "'ENABLE PUBLIC FEED ROLLBACK FOR VERSION 1 GENERATION 1 HASH "
+      + "0000000000000000000000000000000000000000000000000000000000000000 COUNT 0'"
+      + ")->>'resultCode';"),
+    'PERMISSION_DENIED',
+  );
+  assert.equal(
+    psql("SELECT public.prepare_verified_staging_public_feed_rollback("
+      + `'${ADMIN_ID}'::uuid,1,repeat('0',64),0,'{}'::jsonb)->>'resultCode';`),
+    'PERMISSION_DENIED',
+  );
+  assert.equal(
+    psql("SELECT public.reserve_verified_staging_public_feed_rollback("
+      + `'${ADMIN_ID}'::uuid,repeat('x',32),'00000000-0000-4000-8000-000000000001'::uuid,`
+      + "'synthetic acknowledgement','public-feeds','capstones-latest.json')->>'resultCode';"),
+    'PERMISSION_DENIED',
+  );
+  assert.equal(
+    psql('SELECT pg_catalog.count(*)::text FROM public.public_feed_rollback_capability_events;'),
+    '0',
+    'A denied Migration 0054 request created a capability event.',
+  );
+  assert.equal(
+    psql('SELECT pg_catalog.count(*)::text FROM public.public_feed_rollback_preparation_capabilities;'),
+    '0',
+    'A denied Migration 0054 request created a preparation binding.',
+  );
+  assert.equal(
+    untrustedRoutineExecuteGrants(),
+    untrustedRoutineGrantsBefore54,
+    'Migration 0054 introduced an unsafe direct routine grant.',
+  );
+  assert.equal(
+    psql('SELECT public.get_release_capability_sentinel();'),
+    '20260910120000_public_feed_rollback_capability|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1',
+  );
+  console.log('PASS: Migration 0054 installed disabled-by-default exact-head rollback authority and empty immutable audit without rewriting existing records');
+}
+
 async function verifyUpgrade(workdir: string, networkId: string): Promise<void> {
   assertBaseline();
   seedBaselineEvidence();
@@ -954,7 +1112,7 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   const baselineGate4Errors = gate4ContractErrors();
   assert.ok(
     baselineGate4Errors.length > 0,
-    'The current 53-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
+    'The current 54-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
   );
   console.log(
     `PASS: current Gate 4 contract refuses the 48-state source (${baselineGate4Errors.length} findings)`,
@@ -990,6 +1148,11 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   applyRelease(workdir, networkId, 53);
   assertAfter53(baseline, historicalAdminUsersBefore53);
   await assertStorageUnchanged(storageClient, baseline, 'Migration 0053');
+  const preservedTablesBefore54 = fingerprintPreservedTables();
+  const untrustedRoutineGrantsBefore54 = untrustedRoutineExecuteGrants();
+  applyRelease(workdir, networkId, 54);
+  assertAfter54(preservedTablesBefore54, untrustedRoutineGrantsBefore54);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0054');
 
   const applied = appliedMigrations();
   assert.equal(applied.length, RELEASE_MIGRATION_COUNT, 'The upgraded head is not the full release migration set.');
@@ -1036,7 +1199,7 @@ async function main(): Promise<void> {
     startAttempted = true;
     runSupabase('start', workdir, networkId);
     await verifyUpgrade(workdir, networkId);
-    console.log('PASS: staging migration 0048 -> 0053 upgrade rehearsal');
+    console.log('PASS: staging migration 0048 -> 0054 upgrade rehearsal');
     console.log('HOSTED_SYSTEMS_CONTACTED = NO');
     exitCode = 0;
   } catch (error) {

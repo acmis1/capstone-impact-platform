@@ -31,7 +31,7 @@ export type PublicFeedWriterResult =
       recordCount: number;
       feedPublicUrl: string;
     }
-  | { resultCode: 'PERMISSION_DENIED' | 'PUBLICATION_IN_PROGRESS' | 'RECOVERY_REQUIRED' | 'HISTORY_NOT_ACTIVE' | 'ALREADY_ACTIVE' | 'STALE_PREPARATION' | 'NOT_READY' | 'NOT_PUBLISHED' | 'ALREADY_DEPLOYED' }
+  | { resultCode: 'PERMISSION_DENIED' | 'PUBLICATION_IN_PROGRESS' | 'RECOVERY_REQUIRED' | 'HISTORY_NOT_ACTIVE' | 'ALREADY_ACTIVE' | 'STALE_PREPARATION' | 'ROLLBACK_UNAVAILABLE' | 'NOT_READY' | 'NOT_PUBLISHED' | 'ALREADY_DEPLOYED' }
   | { resultCode: 'EXECUTION_FAILED'; failureCode: string };
 
 export interface PreparedPublicFeedCandidate {
@@ -54,6 +54,8 @@ export interface PublicFeedWriterParameters {
   feedBucket: string;
   feedPath: string;
   rollbackCapability?: boolean;
+  /** Selects the exact-head, capability-event-bound staging reservation RPC for rollback only. */
+  verifiedStagingRollback?: boolean;
   /**
    * Exact current-contract lifecycle projection that may upgrade the sole supported pre-gallery
    * baseline shape. Honored only for a fresh activation with no ledger head; never browser-derived.
@@ -111,6 +113,7 @@ function mapReservationFailure(code: string): PublicFeedWriterResult | null {
   if (code === 'HISTORY_NOT_ACTIVE') return { resultCode: 'HISTORY_NOT_ACTIVE' };
   if (code === 'ALREADY_ACTIVE') return { resultCode: 'ALREADY_ACTIVE' };
   if (code === 'STALE_PREPARATION') return { resultCode: 'STALE_PREPARATION' };
+  if (code === 'ROLLBACK_UNAVAILABLE') return { resultCode: 'ROLLBACK_UNAVAILABLE' };
   if (code === 'NOT_READY') return { resultCode: 'NOT_READY' };
   if (code === 'NOT_PUBLISHED') return { resultCode: 'NOT_PUBLISHED' };
   if (code === 'ALREADY_DEPLOYED') return { resultCode: 'ALREADY_DEPLOYED' };
@@ -356,6 +359,7 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
         rollbackAcknowledgement: params.rollbackAcknowledgement,
         storageBucket: params.feedBucket, storagePath: params.feedPath,
         rollbackCapability: params.rollbackCapability === true,
+        verifiedStagingRollback: params.verifiedStagingRollback === true,
       });
       const reservationFailure = mapReservationFailure(rpcCode(reservation));
       if (reservationFailure) return reservationFailure;

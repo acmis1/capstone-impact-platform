@@ -49,10 +49,11 @@ const RUNTIME_TIMEOUT_MS = 600_000;
 const CORRECTION_MIGRATIONS = [
   '20260906120000_public_removal_completion_reconciliation.sql',
   '20260909120000_staff_lifecycle_readiness.sql',
+  '20260910120000_public_feed_rollback_capability.sql',
 ];
 
 const PRE_CORRECTION_MIGRATION_COUNT = 51;
-const CURRENT_MAIN_MIGRATION_COUNT = 53;
+const CURRENT_MAIN_MIGRATION_COUNT = 54;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -330,6 +331,10 @@ function verifyCorrectionUpgrade(workdir: string): void {
   );
   assert.equal(
     psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260909120000';"),
+    '1',
+  );
+  assert.equal(
+    psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260910120000';"),
     '1',
   );
   assert.equal(psql('SELECT public.get_release_capability_sentinel();'), RELEASE_CAPABILITY_SENTINEL);

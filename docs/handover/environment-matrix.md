@@ -62,6 +62,7 @@ Names only.
 | `CAPSTONE_RUNTIME_ENV` | Unset | `staging` | Gates every hosted operation |
 | `CAPSTONE_EXPECTED_SUPABASE_HOST` | Unset | Canonical hostname | Must equal the project URL's host |
 | `CAPSTONE_STAGING_PUBLICATION_ENABLED` | Unset | `true` only when deliberately enabled | Never enables live production publication |
+| `CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED` | Unset | `true` only for a supervised rollback window | Requires canonical staging identity plus a separate exact-head database transition; never enables production or Duda/Render rollback |
 | `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` | Unset | `true` only when an executor is ready | Necessary but not sufficient |
 | `CAPSTONE_ASSISTIVE_EXPECTED_WORKER_DEPLOYMENT_VERSION` | Unset | The registered 40-character commit | Admin fails closed on drift |
 | `CAPSTONE_ASSISTIVE_EXPECTED_WORKER_IMAGE_DIGEST` | Unset | The registered `sha256:` digest | Admin fails closed on drift |

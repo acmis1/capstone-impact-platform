@@ -202,8 +202,8 @@ npm run capture:recovery-backup -- \
 Required terminal evidence includes `SOURCE_CAPTURE_COMPLETE`, the exact reviewed SHA and its
 matching migration manifest, bounded database/Auth/execution-control counts, canonical bucket
 summaries, `SOURCE_MUTATIONS = NONE`, and `PRIVATE_RECOVERY_EVIDENCE_NEVER_COMMIT`. The current
-repository candidate contains 53 migrations through
-`20260909120000_staff_lifecycle_readiness.sql`; the latest active staging-v2 evidence remains 52 migrations through
+repository candidate contains 54 migrations through
+`20260910120000_public_feed_rollback_capability.sql`; the latest active staging-v2 evidence remains 52 migrations through
 `20260906120000_public_removal_completion_reconciliation.sql`, with four buckets. Historical 48/48 evidence
 through `20260831090000` remains historical; current Gate 4 evidence is a 52-migration structural match.
 Source parity must still be separately verified before any authorized hosted-origin capture.
@@ -246,7 +246,7 @@ removes that partial target. Diagnostics distinguish `ROLE_PLATFORM_ACL_COMPATIB
 then restores only approved PP1 managed-schema customizations, restores Storage through the API,
 and checks:
 
-- all 53 migrations and latest migration;
+- all 54 migrations and latest migration;
 - the complete public application and execution-control table inventory;
 - safe table row counts and order-independent checksums;
 - Auth user/identity counts and zero orphan identities;

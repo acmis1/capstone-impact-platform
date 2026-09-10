@@ -106,6 +106,10 @@ environment:
     required: false
     source: fail-closed-default
     value: false
+  - name: CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED
+    required: false
+    source: fail-closed-default
+    value: false
   - name: CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED
     required: false
     source: fail-closed-default

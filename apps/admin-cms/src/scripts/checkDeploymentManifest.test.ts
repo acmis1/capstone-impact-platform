@@ -42,6 +42,9 @@ describe('admin CMS deployment manifest', () => {
     ['publication enabled', (manifest: TestManifest) => {
       environmentEntry(manifest, 'CAPSTONE_STAGING_PUBLICATION_ENABLED').value = true;
     }],
+    ['rollback enabled', (manifest: TestManifest) => {
+      environmentEntry(manifest, 'CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED').value = true;
+    }],
     ['secret value', (manifest: TestManifest) => {
       environmentEntry(manifest, 'SUPABASE_SECRET_KEY').value = 'sb_secret_in_test_only';
     }],

@@ -21,6 +21,11 @@ const ADMIN_MUTATION_ROUTES = [
   'src/app/api/projects/[publicId]/publication-plan/route.ts',
   'src/app/api/projects/[publicId]/local-publication/route.ts',
   'src/app/api/projects/[publicId]/local-archive/route.ts',
+  'src/app/api/public-feed/activation/route.ts',
+  'src/app/api/public-feed/recovery/route.ts',
+  'src/app/api/public-feed/rollback/prepare/route.ts',
+  'src/app/api/public-feed/rollback/route.ts',
+  'src/app/api/public-feed/rollback/capability/route.ts',
   'src/app/api/staff/invitations/route.ts',
 ] as const;
 
