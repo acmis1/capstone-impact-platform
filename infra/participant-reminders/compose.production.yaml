@@ -1,0 +1,18 @@
+name: capstone-participant-preview-reminders-production
+
+services:
+  participant-preview-reminders:
+    build:
+      context: ../..
+      dockerfile: infra/participant-reminders/Dockerfile
+    # Supply an approved file outside the repository. Run exactly one service instance.
+    env_file:
+      - ${PARTICIPANT_PREVIEW_REMINDERS_ENV_FILE:?Set PARTICIPANT_PREVIEW_REMINDERS_ENV_FILE to an approved env file}
+    # Independent host values prevent the env file from relabelling the target or authorizations.
+    environment:
+      CAPSTONE_RUNTIME_ENV: production
+      CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF: ${CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF-}
+      CAPSTONE_PRODUCTION_REMINDERS_ENABLED: ${CAPSTONE_PRODUCTION_REMINDERS_ENABLED-}
+      CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT: ${CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT-}
+    init: true
+    restart: on-failure

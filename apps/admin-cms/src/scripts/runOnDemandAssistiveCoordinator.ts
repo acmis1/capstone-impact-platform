@@ -49,6 +49,7 @@ runOnDemandAssistiveWorker({
       languageToolArchive: config.languageToolArchive,
       languageToolJar: config.languageToolJar,
       heartbeatIdentity: {
+        environment: config.runtimeEnvironment,
         workerInstanceId: config.workerInstanceId,
         deploymentVersion: config.deploymentVersion,
       },

@@ -117,10 +117,16 @@ function unavailableResponse(status: number): Response {
 }
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
-  return renderPreviewResponse((await params).token);
+  return renderPreviewResponse((await params).token, undefined, true);
 }
 
-async function renderPreviewResponse(token: string, correctionError?: CorrectionFormState['error']) {
+// HEAD validates availability but cannot count as a prepared HTML GET observation.
+export async function HEAD(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  const response = await renderPreviewResponse((await params).token);
+  return new Response(null, { status: response.status, headers: response.headers });
+}
+
+async function renderPreviewResponse(token: string, correctionError?: CorrectionFormState['error'], observeAccess = false) {
   if (!isPlausibleRawPreviewToken(token)) {
     return unavailableResponse(404);
   }
@@ -186,6 +192,13 @@ async function renderPreviewResponse(token: string, correctionError?: Correction
     html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews, responseState, correctionForm });
   } catch {
     return unavailableResponse(404);
+  }
+  if (observeAccess) {
+    try {
+      if (!await repository.recordResponsePrepared(resolved.previewId, tokenHash)) return unavailableResponse(404);
+    } catch {
+      return unavailableResponse(503);
+    }
   }
   return new Response(html, { status: correctionError ? 400 : 200, headers: RESPONSE_HEADERS });
 }

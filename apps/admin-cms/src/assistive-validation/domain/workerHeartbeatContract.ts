@@ -26,11 +26,11 @@ export const assistiveWorkerAvailabilityResponseSchema = z.discriminatedUnion('r
 ]);
 
 export const ASSISTIVE_WORKER_COMPATIBILITY = {
-  environment: 'staging',
   pipelineVersion: ASSISTIVE_PIPELINE_VERSION,
   ocrCapability: ASSISTIVE_OCR_CAPABILITY,
   languageCapability: ASSISTIVE_LANGUAGE_CAPABILITY,
 } as const;
 
+export type AssistiveWorkerEnvironment = 'staging' | 'production';
 export type AssistiveWorkerHealthState = 'READY' | 'STOPPING';
 export type AssistiveWorkerAvailabilityResponse = z.infer<typeof assistiveWorkerAvailabilityResponseSchema>;

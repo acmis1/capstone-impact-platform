@@ -12,6 +12,7 @@ import {
   SupabaseBulkAssistiveExecutionGateway,
   resolveAssistiveExecutionAvailability,
   SupabaseAssistiveWorkerHeartbeatRepository,
+  resolveAssistiveWorkerRuntimeIdentity,
   SupabaseAssistiveExecutionControlRepository,
 } from '../../../../../assistive-validation';
 import { getServerEnv } from '../../../../../lib/env';
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
       env.supabaseUrl,
       new SupabaseAssistiveWorkerHeartbeatRepository(
         supabase,
-        process.env.CAPSTONE_DEPLOYMENT_VERSION ?? process.env.RENDER_GIT_COMMIT ?? '',
+        resolveAssistiveWorkerRuntimeIdentity(process.env),
       ),
       new SupabaseAssistiveExecutionControlRepository(supabase),
     );

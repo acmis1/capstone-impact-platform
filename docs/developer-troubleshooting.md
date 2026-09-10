@@ -163,7 +163,7 @@ Try these steps **in order**. Do not skip ahead.
 ## 4. Safe Reset & Shutdown Reference
 
 > [!WARNING]
-> `npm run supabase:reset` destroys the local database state and replays all 54 migrations through Migration 0054 from scratch. This affects **local** containers only. It does **not** touch hosted staging or production data.
+> `npm run supabase:reset` destroys the local database state and replays all 56 migrations through Migration 0056 from scratch. This affects **local** containers only. It does **not** touch hosted staging or production data.
 
 - **Safe Full Rerun (recommended after any partial failure):**
   ```bash

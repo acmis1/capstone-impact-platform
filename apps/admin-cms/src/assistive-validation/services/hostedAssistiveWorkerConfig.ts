@@ -1,10 +1,17 @@
 import { basename, isAbsolute } from 'node:path';
 
 import { classifySupabaseCredential } from '../../lib/supabaseCredential';
-import { assertVerifiedStagingRuntime, type StagingRuntimeEnvironment } from '../../security/stagingRuntimeIdentity';
+import { isProductionAssistiveEnabled } from '../../security/operationalProductionCapabilities';
+import {
+  assertVerifiedProductionRuntime,
+  assertVerifiedStagingRuntime,
+  type StagingRuntimeEnvironment,
+} from '../../security/stagingRuntimeIdentity';
 import type { AssistiveExecutionMode } from '../domain/executionControlContract';
+import type { AssistiveWorkerEnvironment } from '../domain/workerHeartbeatContract';
 
 export interface HostedAssistiveWorkerConfig {
+  runtimeEnvironment: AssistiveWorkerEnvironment;
   supabaseUrl: string;
   supabaseSecretKey: string;
   workerInstanceId: string;
@@ -48,7 +55,15 @@ export function getHostedAssistiveWorkerConfig(
   }
 
   const supabaseUrl = requiredCanonicalValue(env, 'CAPSTONE_ASSISTIVE_SUPABASE_URL');
-  assertVerifiedStagingRuntime({ ...env, NEXT_PUBLIC_SUPABASE_URL: supabaseUrl });
+  const runtimeEnv = { ...env, NEXT_PUBLIC_SUPABASE_URL: supabaseUrl };
+  if (env.CAPSTONE_RUNTIME_ENV === 'production') {
+    if (!isProductionAssistiveEnabled(env)) {
+      throw new Error('Production assistive worker execution is not explicitly enabled.');
+    }
+    assertVerifiedProductionRuntime(runtimeEnv);
+  } else {
+    assertVerifiedStagingRuntime(runtimeEnv);
+  }
 
   const supabaseSecretKey = requiredCanonicalValue(env, 'SUPABASE_SECRET_KEY');
   if (classifySupabaseCredential(supabaseSecretKey, true) !== 'secret') {
@@ -64,11 +79,18 @@ export function getHostedAssistiveWorkerConfig(
     throw new Error('Hosted assistive worker instance identity is invalid.');
   }
 
+  const canonicalDeploymentVersion = env.CAPSTONE_DEPLOYMENT_VERSION;
+  const legacyDeploymentVersion = env.RENDER_GIT_COMMIT;
+  if (canonicalDeploymentVersion !== undefined
+      && legacyDeploymentVersion !== undefined
+      && canonicalDeploymentVersion !== legacyDeploymentVersion) {
+    throw new Error('Hosted assistive worker deployment identity is invalid.');
+  }
   const deploymentVersion = neutralValue(
     env,
     'CAPSTONE_DEPLOYMENT_VERSION',
     'RENDER_GIT_COMMIT',
-  ).toLowerCase();
+  );
   if (!/^[a-f0-9]{40}$/.test(deploymentVersion)) {
     throw new Error('Hosted assistive worker deployment identity is invalid.');
   }
@@ -78,11 +100,14 @@ export function getHostedAssistiveWorkerConfig(
     throw new Error('Hosted assistive worker execution mode is invalid.');
   }
   const executionMode: AssistiveExecutionMode = requestedMode;
+  if (env.CAPSTONE_RUNTIME_ENV === 'production' && executionMode !== 'CONTINUOUS') {
+    throw new Error('Production assistive worker execution must use continuous mode.');
+  }
 
   let imageDigest: string | null = null;
   let reservation: HostedAssistiveWorkerConfig['reservation'] = null;
   if (executionMode === 'ON_DEMAND') {
-    imageDigest = requiredCanonicalValue(env, 'CAPSTONE_ASSISTIVE_IMAGE_DIGEST').toLowerCase();
+    imageDigest = requiredCanonicalValue(env, 'CAPSTONE_ASSISTIVE_IMAGE_DIGEST');
     if (!/^sha256:[a-f0-9]{64}$/.test(imageDigest)) {
       throw new Error('Hosted assistive worker image identity is invalid.');
     }
@@ -108,6 +133,7 @@ export function getHostedAssistiveWorkerConfig(
   }
 
   return {
+    runtimeEnvironment: env.CAPSTONE_RUNTIME_ENV === 'production' ? 'production' : 'staging',
     supabaseUrl,
     supabaseSecretKey,
     workerInstanceId,

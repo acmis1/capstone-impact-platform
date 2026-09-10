@@ -501,6 +501,8 @@ describe('staff-facing availability', () => {
     CAPSTONE_EXPECTED_SUPABASE_HOST: 'staging-project.supabase.co',
     CAPSTONE_ASSISTIVE_EXPECTED_WORKER_DEPLOYMENT_VERSION: COMMIT,
     CAPSTONE_ASSISTIVE_EXPECTED_WORKER_IMAGE_DIGEST: DIGEST,
+    RENDER: 'true',
+    RENDER_GIT_COMMIT: COMMIT,
   };
   const url = 'https://staging-project.supabase.co';
 

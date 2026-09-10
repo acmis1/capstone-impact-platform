@@ -16,6 +16,7 @@ import { ParticipantCorrectionReview } from '../../../../components/admin/Partic
 import { PrePreviewPackageReplacement } from '../../../../components/admin/PrePreviewPackageReplacement';
 import { loadCorrectionReviewView, type CorrectionReviewView } from '../../../../previews/participantCorrectionReview';
 import { ParticipantPreviewPanel } from '../../../../components/admin/ParticipantPreviewPanel';
+import { ParticipantPreviewAccessEvidence } from '../../../../components/admin/ParticipantPreviewAccessEvidence';
 import { SupabaseParticipantPreviewRepository } from '../../../../repositories/SupabaseParticipantPreviewRepository';
 import { SupabaseParticipantPreviewNotificationRepository } from '../../../../repositories/SupabaseParticipantPreviewNotificationRepository';
 import { isParticipantPreviewEmailEnabled } from '../../../../notifications/participantPreviewEmailConfig';
@@ -30,6 +31,7 @@ import {
   SupabaseAssistiveValidationRepository,
   SupabaseAssistiveInputRepository,
   SupabaseAssistiveWorkerHeartbeatRepository,
+  resolveAssistiveWorkerRuntimeIdentity,
   SupabaseAssistiveExecutionControlRepository,
   ASSISTIVE_PIPELINE_VERSION,
   type AssistiveInspectionView,
@@ -127,6 +129,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let activePreview: { createdAt: string; expiresAt: string } | null = null;
   let previewResponseState: import('../../../../domain/participantPreview').ParticipantPreviewResponseState = { type: 'unresponded' };
   let previewStateAvailable = false;
+  let previewAccessEvidence: import('../../../../previews/participantPreviewAccessEvidence').PreviewAccessEvidence = { available: false };
   let previewNotification: import('../../../../notifications/participantPreviewNotification').ParticipantPreviewNotificationView | null = null;
   let previewReminders: import('../../../../reminders/participantPreviewReminder').ParticipantPreviewReminderView[] = [];
   // Server-only enablement. The browser never learns the SMTP configuration, only whether the
@@ -211,7 +214,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         env.supabaseUrl,
         new SupabaseAssistiveWorkerHeartbeatRepository(
           supabase,
-          process.env.CAPSTONE_DEPLOYMENT_VERSION ?? process.env.RENDER_GIT_COMMIT ?? '',
+          resolveAssistiveWorkerRuntimeIdentity(process.env),
         ),
         new SupabaseAssistiveExecutionControlRepository(supabase),
       );
@@ -262,17 +265,20 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               responseState: { type: 'unresponded' as const },
               notification: null,
               reminders,
+              accessEvidence: { available: false as const },
             };
           }
-          const [responseState, notification] = await Promise.all([
+          const [responseState, notification, accessEvidence] = await Promise.all([
             previewRepository.getResponseState(preview.previewId),
             notificationRepository.getNotificationForPreview(preview.previewId),
+            previewRepository.getAccessEvidence(preview.previewId),
           ]);
           return {
             activePreview: { createdAt: preview.createdAt, expiresAt: preview.expiresAt },
             responseState,
             notification,
             reminders,
+            accessEvidence,
           };
         },
         loadResolutionStatus: async () => previewRepository.getCorrectionResolutionStatus(await projectDbId),
@@ -289,6 +295,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       previewStateAvailable = auxiliary.previewStateAvailable;
       previewNotification = auxiliary.previewState.notification;
       previewReminders = auxiliary.previewState.reminders;
+      previewAccessEvidence = auxiliary.previewState.accessEvidence ?? { available: false };
       resolutionStatus = auxiliary.resolutionStatus;
       resolutionStatusAvailable = auxiliary.resolutionStatusAvailable;
       if (resolutionStatusAvailable) correctionReview = await loadCorrectionReviewView(supabase, publicId, resolutionStatus?.correctionRequestId ?? null);
@@ -759,6 +766,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 canResolveCorrection={canResolveCorrection}
                 projectStatus={project.status}
               />
+              {activePreview && <ParticipantPreviewAccessEvidence evidence={previewAccessEvidence} />}
               {resolutionStatus && <ParticipantCorrectionReview publicId={publicId} view={correctionReview} canDecide={canResolveCorrection} />}
             </ProjectReviewSection>
 

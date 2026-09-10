@@ -69,6 +69,7 @@
     "verify:import-batch-review-submit-runtime": "npm run verify:import-batch-review-submit-runtime --workspace=apps/admin-cms",
     "verify:snapshot-image-alt-text-runtime": "npm run verify:snapshot-image-alt-text-runtime --workspace=apps/admin-cms",
     "verify:participant-preview-runtime": "npm run verify:participant-preview-runtime --workspace=apps/admin-cms",
+    "report:kpi09-preview-evidence": "npm run report:kpi09-preview-evidence --workspace=apps/admin-cms --",
     "verify:participant-preview-notification-runtime": "npm run verify:participant-preview-notification-runtime --workspace=apps/admin-cms",
     "verify:participant-preview-reminder-runtime": "npm run verify:participant-preview-reminder-runtime --workspace=apps/admin-cms",
     "run:participant-preview-reminders": "npm run run:participant-preview-reminders --workspace=apps/admin-cms",

@@ -12,10 +12,12 @@ import {
   PARTICIPANT_PREVIEW_REMINDERS_ENABLED_VAR,
 } from './participantPreviewReminderConfig';
 import {
+  assertVerifiedProductionRuntime,
   assertVerifiedStagingRuntime,
   type StagingRuntimeEnvironment,
 } from '../security/stagingRuntimeIdentity';
 import { isValidMutationConfirmationLabel } from '../security/stagingExecutionGuard';
+import { isProductionRemindersEnabled } from '../security/operationalProductionCapabilities';
 
 export const PARTICIPANT_PREVIEW_REMINDERS_SUPABASE_URL_VAR =
   'PARTICIPANT_PREVIEW_REMINDERS_SUPABASE_URL';
@@ -23,6 +25,8 @@ export const CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF_VAR =
   'CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF';
 export const CAPSTONE_STAGING_MUTATION_CONFIRMATION_VAR =
   'CAPSTONE_STAGING_MUTATION_CONFIRMATION';
+export const CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT_VAR =
+  'CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT';
 export const PARTICIPANT_PREVIEW_REMINDERS_POLL_INTERVAL_MS_VAR =
   'PARTICIPANT_PREVIEW_REMINDERS_POLL_INTERVAL_MS';
 export const PARTICIPANT_PREVIEW_REMINDERS_BATCH_LIMIT_VAR =
@@ -42,6 +46,7 @@ export type HostedParticipantPreviewReminderDisabledReason =
 
 export type HostedParticipantPreviewReminderInvalidReason =
   | 'EMAIL_CONFIGURATION_INCOMPLETE'
+  | 'PRODUCTION_CAPABILITY_DISABLED'
   | 'TARGET_IDENTITY_INVALID'
   | 'MUTATION_CONFIRMATION_INVALID'
   | 'SUPABASE_CREDENTIAL_INVALID'
@@ -139,10 +144,12 @@ function targetIdentityIsUnambiguous(
   }
 
   try {
-    assertVerifiedStagingRuntime({
-      ...env,
-      NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
-    });
+    const runtimeEnv = { ...env, NEXT_PUBLIC_SUPABASE_URL: supabaseUrl };
+    if (env.CAPSTONE_RUNTIME_ENV === 'production') {
+      assertVerifiedProductionRuntime(runtimeEnv);
+    } else {
+      assertVerifiedStagingRuntime(runtimeEnv);
+    }
     return true;
   } catch {
     return false;
@@ -165,6 +172,11 @@ export function resolveHostedParticipantPreviewReminderConfig(
 
   if (!isParticipantPreviewEmailEnabledValue(env[PARTICIPANT_PREVIEW_EMAIL_ENABLED_VAR])) {
     return disabled('EMAIL_DELIVERY_DISABLED');
+  }
+
+  const production = env.CAPSTONE_RUNTIME_ENV === 'production';
+  if (production && !isProductionRemindersEnabled(env)) {
+    return { state: 'CONFIGURATION_INVALID', reason: 'PRODUCTION_CAPABILITY_DISABLED' };
   }
 
   const secureFlag = env[PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE_VAR]?.trim().toLowerCase();
@@ -207,7 +219,9 @@ export function resolveHostedParticipantPreviewReminderConfig(
   }
 
   // This is an operator acknowledgment label, not cryptographic proof of target identity.
-  const mutationConfirmation = env[CAPSTONE_STAGING_MUTATION_CONFIRMATION_VAR];
+  const mutationConfirmation = production
+    ? env[CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT_VAR]
+    : env[CAPSTONE_STAGING_MUTATION_CONFIRMATION_VAR];
   if (!mutationConfirmation || !isValidMutationConfirmationLabel(mutationConfirmation)) {
     return { state: 'CONFIGURATION_INVALID', reason: 'MUTATION_CONFIRMATION_INVALID' };
   }

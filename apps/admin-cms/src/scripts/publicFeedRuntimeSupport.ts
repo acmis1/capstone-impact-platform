@@ -37,6 +37,7 @@ export interface RuntimeFixture {
 export interface PublicFeedRuntimeHarness {
   db: SupabaseClient;
   apiUrl: string;
+  anonKey: string;
   adminId: string;
   reviewerId: string;
   projects: SupabaseProjectRepositoryCore;
@@ -200,7 +201,7 @@ export async function createPublicFeedRuntimeHarness(): Promise<PublicFeedRuntim
   };
 
   return {
-    db, apiUrl: local.API_URL!, adminId: ADMIN_ID, reviewerId: REVIEWER_ID, projects, previews,
+    db, apiUrl: local.API_URL!, anonKey: local.ANON_KEY!, adminId: ADMIN_ID, reviewerId: REVIEWER_ID, projects, previews,
     psql, quoted, createProject, makeReady, ensureActiveHead, storedFeed,
     count: async (table, column, value) =>
       (await db.from(table).select('id', { count: 'exact', head: true }).eq(column, value)).count ?? 0,

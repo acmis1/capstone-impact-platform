@@ -99,11 +99,11 @@ export function getAssistiveDispatcherConfig(
   const databaseUrl = required(env, 'CAPSTONE_ASSISTIVE_DISPATCHER_DB_URL');
   assertDispatcherDatabaseUrl(databaseUrl, projectRef);
 
-  const deploymentVersion = required(env, 'CAPSTONE_DEPLOYMENT_VERSION').toLowerCase();
+  const deploymentVersion = required(env, 'CAPSTONE_DEPLOYMENT_VERSION');
   if (!/^[a-f0-9]{40}$/.test(deploymentVersion)) {
     throw new Error('Assistive dispatcher deployment identity is invalid.');
   }
-  const imageDigest = required(env, 'CAPSTONE_ASSISTIVE_IMAGE_DIGEST').toLowerCase();
+  const imageDigest = required(env, 'CAPSTONE_ASSISTIVE_IMAGE_DIGEST');
   if (!/^sha256:[a-f0-9]{64}$/.test(imageDigest)) {
     throw new Error('Assistive dispatcher worker image identity is invalid.');
   }

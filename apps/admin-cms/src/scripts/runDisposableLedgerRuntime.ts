@@ -4,6 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import {
   dockerProxyCustomHeaders,
   startDockerLoopbackProxy,
@@ -36,6 +37,8 @@ const RUNTIME_SCRIPTS: Record<string, RuntimeScript> = {
   publication: { file: 'verifyControlledPublicationRuntime.ts' },
   'annual-publication': { file: 'verifyAnnualPublicationEvidenceRuntime.ts' },
   removal: { file: 'verifyControlledPublicRemovalRuntime.ts' },
+  'preview-access': { file: 'verifyParticipantPreviewAccessRuntime.ts' },
+  'worker-heartbeat': { file: 'verifyAssistiveWorkerHeartbeatRuntime.ts' },
 };
 const DEFAULT_RUNTIME_NAMES = ['ledger', 'publication', 'removal'];
 const DOCKER_COMMAND_TIMEOUT_MS = 30_000;
@@ -50,10 +53,12 @@ const CORRECTION_MIGRATIONS = [
   '20260906120000_public_removal_completion_reconciliation.sql',
   '20260909120000_staff_lifecycle_readiness.sql',
   '20260910120000_public_feed_rollback_capability.sql',
+  '20260910120100_participant_preview_access_observations.sql',
+  '20260910120200_assistive_worker_production_identity.sql',
 ];
 
 const PRE_CORRECTION_MIGRATION_COUNT = 51;
-const CURRENT_MAIN_MIGRATION_COUNT = 54;
+const CURRENT_MAIN_MIGRATION_COUNT = 56;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -86,6 +91,28 @@ function configurePorts(config: string): string {
     updated = updated.replace(pattern, `${key} = ${port}`);
   }
   return `${updated}\n[analytics]\nenabled = true\nport = ${portBase + 7}\n`;
+}
+
+async function assertPortBlockAvailable(): Promise<void> {
+  const listeners: net.Server[] = [];
+  try {
+    for (let port = portBase; port < portBase + 8; port += 1) {
+      const listener = net.createServer();
+      listeners.push(listener);
+      await new Promise<void>((resolve, reject) => {
+        listener.once('error', reject);
+        listener.listen({ host: '127.0.0.1', port, exclusive: true }, resolve);
+      });
+    }
+  } catch {
+    throw new Error(`Disposable runtime port block ${portBase}-${portBase + 7} is unavailable.`);
+  } finally {
+    await Promise.all(listeners.map((listener) => new Promise<void>((resolve) => {
+      if (!listener.listening) resolve();
+      else listener.close(() => resolve());
+    })));
+  }
+  console.log(`PASS: disposable loopback port block ${portBase}-${portBase + 7} is available`);
 }
 
 function createWorkdir(
@@ -337,6 +364,14 @@ function verifyCorrectionUpgrade(workdir: string): void {
     psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260910120000';"),
     '1',
   );
+  assert.equal(
+    psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260910120100';"),
+    '1',
+  );
+  assert.equal(
+    psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260910120200';"),
+    '1',
+  );
   assert.equal(psql('SELECT public.get_release_capability_sentinel();'), RELEASE_CAPABILITY_SENTINEL);
   const completionDefinition = routineDefinition('complete_public_feed_operation');
   assert.ok(completionDefinition.includes("v_project.status <> 'archived'"));
@@ -418,7 +453,7 @@ function runSupabase(command: 'start' | 'stop' | 'migrate', workdir: string, net
   }
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const upgradeRequested = selected.includes(UPGRADE_MODE);
   const scriptModes = selected.filter((name) => name !== UPGRADE_MODE);
   const annualPublicationRequested = scriptModes.includes('annual-publication');
@@ -432,6 +467,7 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
+  await assertPortBlockAvailable();
   // An upgrade run must start from the exact pre-correction migration database; a script run starts
   // from a fresh full install. Provisioning one stack per invocation keeps both baselines exact.
   const workdir = createWorkdir(
@@ -501,4 +537,4 @@ function main(): void {
   process.exitCode = exitCode;
 }
 
-main();
+void main();

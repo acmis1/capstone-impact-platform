@@ -202,8 +202,8 @@ npm run capture:recovery-backup -- \
 Required terminal evidence includes `SOURCE_CAPTURE_COMPLETE`, the exact reviewed SHA and its
 matching migration manifest, bounded database/Auth/execution-control counts, canonical bucket
 summaries, `SOURCE_MUTATIONS = NONE`, and `PRIVATE_RECOVERY_EVIDENCE_NEVER_COMMIT`. The current
-repository candidate contains 54 migrations through
-`20260910120000_public_feed_rollback_capability.sql`; the latest active staging-v2 evidence remains 52 migrations through
+repository candidate contains 56 migrations through
+`20260910120200_assistive_worker_production_identity.sql`; the latest active staging-v2 evidence remains 52 migrations through
 `20260906120000_public_removal_completion_reconciliation.sql`, with four buckets. Historical 48/48 evidence
 through `20260831090000` remains historical; current Gate 4 evidence is a 52-migration structural match.
 Source parity must still be separately verified before any authorized hosted-origin capture.
@@ -246,7 +246,7 @@ removes that partial target. Diagnostics distinguish `ROLE_PLATFORM_ACL_COMPATIB
 then restores only approved PP1 managed-schema customizations, restores Storage through the API,
 and checks:
 
-- all 54 migrations and latest migration;
+- all 56 migrations and latest migration;
 - the complete public application and execution-control table inventory;
 - safe table row counts and order-independent checksums;
 - Auth user/identity counts and zero orphan identities;
@@ -256,7 +256,7 @@ and checks:
 - recovery-only table-grant compatibility (`TABLE_GRANT_PORTABILITY_COMPATIBILITY`);
 - launch guard `staging / 40 / 31 / 1`, reservation count/checksum, and executor registrations;
 - all canonical bucket configurations and the exact object set, lengths, content types, and SHA-256;
-- current Gate 4 structure: 44 tables, 84 application RPC signatures across 83 names, four
+- current Gate 4 structure: 45 tables, 92 application RPC signatures across 91 names, four
   dispatcher routines, and four buckets;
 - `/api/health` 200, `/login` 200 with the stable marker, and a truthful non-staging readiness
   classification; and

@@ -272,9 +272,15 @@ describe('staging application rollback immutable source preflight', () => {
       .toThrowError(expect.objectContaining<Partial<StagingRollbackInputError>>({ code: 'TARGET_COMMIT_UNREACHABLE' }));
   });
 
-  it('fails closed for the wrong environment before any hosted mutation', () => {
+  it('gives production background flags no historical staging rollback authority', () => {
     const plan = prepareStagingApplicationRollback(options({
-      env: { ...env, CAPSTONE_RUNTIME_ENV: 'production' },
+      env: {
+        ...env,
+        CAPSTONE_RUNTIME_ENV: 'production',
+        CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED: 'true',
+        CAPSTONE_PRODUCTION_REMINDERS_ENABLED: 'true',
+        CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT: 'production-reminders-approved',
+      },
       authorize: true,
       confirmation: `capstone-staging:rollback:${TARGET}`,
     }));

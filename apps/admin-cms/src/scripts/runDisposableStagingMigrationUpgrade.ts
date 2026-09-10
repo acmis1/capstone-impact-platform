@@ -17,15 +17,15 @@ import { collectLocalGate4Evidence } from './checkGate4SchemaEvidence';
 import { MIGRATION_MANAGED_BUCKETS } from '../local-development/localSupabaseFixtures';
 
 /**
- * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 migration transition on a stack this verifier
+ * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 -> 55 -> 56 migration transition on a stack this verifier
  * owns outright.
  *
  * The known hosted staging-v2 baseline is 48 migrations through
- * 20260831090000_postgres17_maintain_privilege_alignment. A clean 54-migration install proves the
+ * 20260831090000_postgres17_maintain_privilege_alignment. A clean 56-migration install proves the
  * end state but not the transition, and the existing deployment-ledger upgrade proves a different
  * single migration. This rehearsal provisions exactly the 48-migration baseline, seeds the minimum
  * representative synthetic evidence a real 48-state database would hold, applies 0049 through
- * 0054 one at a time in deterministic order, and asserts after each step that nothing existing was
+ * 0056 one at a time in deterministic order, and asserts after each step that nothing existing was
  * rewritten and that the new authority is exactly what the migration declares.
  *
  * Everything is disposable and loopback-only: its own project id, port block, Docker network,
@@ -40,6 +40,8 @@ const RELEASE_MIGRATIONS = [
   { ordinal: 52, version: '20260906120000', file: '20260906120000_public_removal_completion_reconciliation.sql' },
   { ordinal: 53, version: '20260909120000', file: '20260909120000_staff_lifecycle_readiness.sql' },
   { ordinal: 54, version: '20260910120000', file: '20260910120000_public_feed_rollback_capability.sql' },
+  { ordinal: 55, version: '20260910120100', file: '20260910120100_participant_preview_access_observations.sql' },
+  { ordinal: 56, version: '20260910120200', file: '20260910120200_assistive_worker_production_identity.sql' },
 ] as const;
 
 const BASELINE_MIGRATION_COUNT = 48;
@@ -78,10 +80,11 @@ const CORRECTION_RPC_SIGNATURES = [
  * deployment-ledger state are included because a release migration must never quietly touch them.
  */
 // The 44-table release inventory minus the four tables first created by 0051 and the three tables
-// first created by 0053/0054 is the exact 37-table public contract at 6125bb56 (0048). Assert the
+// first created by 0053/0054/0055 is the exact 37-table public contract at 6125bb56 (0048). Assert the
 // live baseline set before fingerprinting.
 export const PRESERVED_PUBLIC_TABLES = ALL_REQUIRED_TABLES.filter(
   (table) => table !== 'staff_lifecycle_events'
+    && table !== 'participant_preview_access_observations'
     && table !== 'public_feed_rollback_capability_events'
     && table !== 'public_feed_rollback_preparation_capabilities'
     && !(CORRECTION_TABLES as readonly string[]).includes(table),
@@ -93,6 +96,16 @@ export const PRESERVED_EXECUTION_CONTROL_TABLES = [
 ] as const;
 const PRESERVED_TABLES = [
   ...PRESERVED_PUBLIC_TABLES.map((table) => `public.${table}`),
+  ...PRESERVED_EXECUTION_CONTROL_TABLES,
+];
+const CURRENT_54_TABLES = [
+  ...ALL_REQUIRED_TABLES
+    .filter((table) => table !== 'participant_preview_access_observations')
+    .map((table) => `public.${table}`),
+  ...PRESERVED_EXECUTION_CONTROL_TABLES,
+];
+const CURRENT_55_TABLES = [
+  ...ALL_REQUIRED_TABLES.map((table) => `public.${table}`),
   ...PRESERVED_EXECUTION_CONTROL_TABLES,
 ];
 
@@ -243,6 +256,16 @@ function fingerprintPreservedTables(): Record<string, string> {
   const fingerprints: Record<string, string> = {};
   for (const table of PRESERVED_TABLES) fingerprints[table] = tableFingerprint(table);
   return fingerprints;
+}
+
+function fingerprintTables(tables: readonly string[]): Record<string, string> {
+  return Object.fromEntries(tables.map((table) => [table, tableFingerprint(table)]));
+}
+
+function assertTablesUnchanged(before: Record<string, string>, stage: string): void {
+  for (const [table, fingerprint] of Object.entries(before)) {
+    assert.equal(tableFingerprint(table), fingerprint, `${stage} changed existing rows in ${table}.`);
+  }
 }
 
 function assertPreservedTablesUnchanged(
@@ -1103,6 +1126,141 @@ function assertAfter54(
   console.log('PASS: Migration 0054 installed disabled-by-default exact-head rollback authority and empty immutable audit without rewriting existing records');
 }
 
+function assertAfter55(
+  current54Tables: Record<string, string>,
+  untrustedRoutineGrantsBefore55: string,
+): void {
+  assert.equal(Object.keys(current54Tables).length, 47, 'The current 0054 table inventory is incomplete.');
+  assertTablesUnchanged(current54Tables, 'Migration 0055');
+  assert.equal(
+    psql("SELECT pg_catalog.to_regclass('public.participant_preview_access_observations') IS NOT NULL;"),
+    't',
+  );
+  assert.equal(
+    psql('SELECT pg_catalog.count(*)::text FROM public.participant_preview_access_observations;'),
+    '0',
+    'Migration 0055 backfilled historical access observations.',
+  );
+  assert.equal(
+    psql("SELECT relrowsecurity::text || '|' || relforcerowsecurity::text"
+      + " FROM pg_catalog.pg_class WHERE oid = 'public.participant_preview_access_observations'::regclass;"),
+    'true|true',
+  );
+  assert.equal(tableGrantsFor('participant_preview_access_observations'), 'service_role:SELECT');
+  assert.equal(
+    psql("SELECT has_function_privilege('service_role',"
+      + " 'public.record_participant_preview_response_prepared(uuid,text)', 'EXECUTE')::text"
+      + " || '|' || has_function_privilege('anon',"
+      + " 'public.record_participant_preview_response_prepared(uuid,text)', 'EXECUTE')::text"
+      + " || '|' || has_function_privilege('authenticated',"
+      + " 'public.record_participant_preview_response_prepared(uuid,text)', 'EXECUTE')::text;"),
+    'true|false|false',
+  );
+  assert.equal(
+    psql("SELECT prosecdef::text || '|' || pg_catalog.array_to_string(proconfig, ',')"
+      + " FROM pg_catalog.pg_proc WHERE oid ="
+      + " 'public.record_participant_preview_response_prepared(uuid,text)'::regprocedure;"),
+    'true|search_path=""',
+  );
+  const observation = routineDefinition('record_participant_preview_response_prepared');
+  for (const requiredFragment of [
+    'SECURITY DEFINER', "SET search_path TO ''", 'participant_preview_id',
+    'token_hash = p_token_hash', 'FOR SHARE', "status <> 'active'", 'expires_at <= v_observed_at',
+    'ON CONFLICT (participant_preview_id) DO NOTHING',
+  ]) {
+    assert.ok(observation.includes(requiredFragment), `Migration 0055 RPC is missing ${requiredFragment}.`);
+  }
+  assert.equal(
+    untrustedRoutineExecuteGrants(),
+    untrustedRoutineGrantsBefore55,
+    'Migration 0055 introduced an unsafe direct routine grant.',
+  );
+  assert.equal(psql('SELECT public.get_release_capability_sentinel();'),
+    '20260910120100_participant_preview_access_observations|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1');
+  console.log('PASS: Migration 0055 preserved all current 0054 data, performed no backfill, and installed narrow response-observation authority');
+}
+
+function assertAfter56(
+  current55Tables: Record<string, string>,
+  publicTableGrantsBefore56: string,
+  untrustedRoutineGrantsBefore56: string,
+): void {
+  assert.equal(Object.keys(current55Tables).length, 48, 'The current 0055 table inventory is incomplete.');
+  assertTablesUnchanged(current55Tables, 'Migration 0056');
+  assert.equal(publicTableGrants(), publicTableGrantsBefore56, 'Migration 0056 changed direct table grants.');
+  assert.equal(
+    untrustedRoutineExecuteGrants(),
+    untrustedRoutineGrantsBefore56,
+    'Migration 0056 introduced an unsafe direct routine grant.',
+  );
+  assert.equal(
+    psql("SELECT relrowsecurity::text || '|' || relforcerowsecurity::text"
+      + " FROM pg_catalog.pg_class WHERE oid = 'public.assistive_worker_heartbeats'::regclass;"),
+    'true|true',
+  );
+  assert.equal(tableGrantsFor('assistive_worker_heartbeats'), 'NONE');
+  const environmentConstraint = psql("SELECT pg_catalog.pg_get_constraintdef(oid)"
+    + " FROM pg_catalog.pg_constraint WHERE conrelid='public.assistive_worker_heartbeats'::regclass"
+    + " AND conname='check_assistive_worker_environment';");
+  assert.ok(environmentConstraint.includes('staging') && environmentConstraint.includes('production'));
+
+  for (const signature of [
+    'public.upsert_assistive_worker_heartbeat(text,text,text,text,text,text,text)',
+    'public.get_assistive_worker_availability(text,text,text,text,text,integer)',
+  ]) {
+    assert.equal(
+      psql(`SELECT has_function_privilege('service_role', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('anon', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('authenticated', '${signature}', 'EXECUTE')::text;`),
+      'true|false|false',
+    );
+    assert.equal(
+      psql(`SELECT prosecdef::text || '|' || pg_catalog.array_to_string(proconfig, ',')`
+        + ` FROM pg_catalog.pg_proc WHERE oid = '${signature}'::regprocedure;`),
+      'true|search_path=""',
+    );
+  }
+
+  const heartbeatArguments = `'assistive-deterministic-checks/v3','${'a'.repeat(40)}',`
+    + "'paddle-title/pp-ocrv6-small@3.7.0','languagetool/en-au@6.6'";
+  assert.equal(
+    psql(`SELECT public.get_assistive_worker_availability('production',${heartbeatArguments},60)->>'resultCode';`),
+    'UNAVAILABLE',
+    'Synthetic staging evidence qualified production at the same deployment and capabilities.',
+  );
+  assert.equal(
+    psql(`SELECT public.upsert_assistive_worker_heartbeat('upgrade-synthetic-staging','production',${heartbeatArguments},'READY')->>'resultCode';`),
+    'VALIDATION_FAILED',
+    'Migration 0056 allowed a synthetic staging instance ID to be relabelled as production.',
+  );
+  assert.equal(
+    psql("SELECT environment FROM public.assistive_worker_heartbeats"
+      + " WHERE worker_instance_id='upgrade-synthetic-staging';"),
+    'staging',
+  );
+  assert.equal(
+    psql(`SELECT public.upsert_assistive_worker_heartbeat('upgrade-synthetic-production','production',${heartbeatArguments},'READY')->>'resultCode';`),
+    'HEARTBEAT_RECORDED',
+  );
+  assert.equal(
+    psql(`SELECT public.get_assistive_worker_availability('production',${heartbeatArguments},60)->>'compatibleWorkerCount';`),
+    '1',
+  );
+  assert.equal(
+    psql(`SELECT public.get_assistive_worker_availability('staging',${heartbeatArguments},60)->>'compatibleWorkerCount';`),
+    '1',
+  );
+  assert.equal(
+    psql(`SELECT public.get_assistive_worker_availability('local',${heartbeatArguments},60)->>'resultCode';`),
+    'VALIDATION_FAILED',
+  );
+  assert.equal(
+    psql('SELECT public.get_release_capability_sentinel();'),
+    '20260910120200_assistive_worker_production_identity|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1',
+  );
+  console.log('PASS: Migration 0056 preserved all current 0055 data and installed exact, service-only staging/production heartbeat identity');
+}
+
 async function verifyUpgrade(workdir: string, networkId: string): Promise<void> {
   assertBaseline();
   seedBaselineEvidence();
@@ -1112,7 +1270,7 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   const baselineGate4Errors = gate4ContractErrors();
   assert.ok(
     baselineGate4Errors.length > 0,
-    'The current 54-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
+    'The current 56-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
   );
   console.log(
     `PASS: current Gate 4 contract refuses the 48-state source (${baselineGate4Errors.length} findings)`,
@@ -1153,6 +1311,24 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   applyRelease(workdir, networkId, 54);
   assertAfter54(preservedTablesBefore54, untrustedRoutineGrantsBefore54);
   await assertStorageUnchanged(storageClient, baseline, 'Migration 0054');
+  const current54Tables = fingerprintTables(CURRENT_54_TABLES);
+  const untrustedRoutineGrantsBefore55 = untrustedRoutineExecuteGrants();
+  applyRelease(workdir, networkId, 55);
+  assertAfter55(current54Tables, untrustedRoutineGrantsBefore55);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0055');
+  psql(`INSERT INTO public.assistive_worker_heartbeats (
+    worker_instance_id, environment, pipeline_version, deployment_version,
+    ocr_capability, language_capability, health_state, heartbeat_at
+  ) VALUES (
+    'upgrade-synthetic-staging', 'staging', 'assistive-deterministic-checks/v3', '${'a'.repeat(40)}',
+    'paddle-title/pp-ocrv6-small@3.7.0', 'languagetool/en-au@6.6', 'READY', pg_catalog.statement_timestamp()
+  );`);
+  const current55Tables = fingerprintTables(CURRENT_55_TABLES);
+  const publicTableGrantsBefore56 = publicTableGrants();
+  const untrustedRoutineGrantsBefore56 = untrustedRoutineExecuteGrants();
+  applyRelease(workdir, networkId, 56);
+  assertAfter56(current55Tables, publicTableGrantsBefore56, untrustedRoutineGrantsBefore56);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0056');
 
   const applied = appliedMigrations();
   assert.equal(applied.length, RELEASE_MIGRATION_COUNT, 'The upgraded head is not the full release migration set.');
@@ -1199,7 +1375,7 @@ async function main(): Promise<void> {
     startAttempted = true;
     runSupabase('start', workdir, networkId);
     await verifyUpgrade(workdir, networkId);
-    console.log('PASS: staging migration 0048 -> 0054 upgrade rehearsal');
+    console.log('PASS: staging migration 0048 -> 0056 upgrade rehearsal');
     console.log('HOSTED_SYSTEMS_CONTACTED = NO');
     exitCode = 0;
   } catch (error) {

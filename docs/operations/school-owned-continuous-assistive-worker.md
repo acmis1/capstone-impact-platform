@@ -2,7 +2,8 @@
 
 **Status:** Repository deployment profile
 
-**Scope:** Exactly one continuous Profile B worker on a School/user-controlled Docker host
+**Scope:** Exactly one staging or explicitly qualified production continuous Profile B worker on a
+School/user-controlled Docker host
 
 **Ingress:** None
 
@@ -20,10 +21,10 @@ the institution remains responsible for its licence review and local-use decisio
 - Docker Engine with the Compose v2 plugin and Git. Start with 2 CPUs and 4 GiB RAM for the worker;
   these are operational allocation defaults pending acceptance on the chosen host, not proven hard
   minimums.
-- Outbound HTTPS access to the approved staging Supabase hostname. No inbound firewall rule, proxy,
+- Outbound HTTPS access to the approved Supabase hostname for the selected profile. No inbound firewall rule, proxy,
   DNS record, TLS certificate, or published port is required.
 - The reviewed repository checkout at the exact commit that will be deployed.
-- The staging server secret supplied through the School's approved secret procedure.
+- The matching server secret supplied through the School's approved secret procedure.
 
 Do not publish this image to a registry. It contains the qualified PP-OCRv6 Small and LanguageTool
 artifacts, whose hashes remain enforced during the local build.
@@ -66,6 +67,15 @@ The Compose definition fixes these reviewed runtime values without source change
   explicit unprivileged `1000:1000` runtime user,
   `pull_policy: never`, `unless-stopped` restart, and a ten-minute graceful-stop allowance.
 
+The existing `compose.yaml` remains staging-only. Production uses the separate
+`compose.production.yaml` and `worker.production.env.example`; it pins
+`CAPSTONE_RUNTIME_ENV=production`, remains `CONTINUOUS`, and additionally requires
+`CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED=true` exactly. The same exact flag is required in the
+production Admin/CMS runtime before its availability consumer will query heartbeat evidence.
+Missing, false, padded, or case-varied values fail closed. Production never checks the on-demand
+execution-control gateway and this profile does not authorize the staging-only Azure dispatcher,
+budget controls, cloud launch, SQL, publication, or historical rollback.
+
 ## Level 1: offline/local acceptance
 
 The verifier reads values without sourcing the external file and never prints the secret. Run its
@@ -78,6 +88,14 @@ published ports, a privileged runtime user, incorrect mode, scale, pull policy, 
 sh infra/assistive-worker/verify.sh self-test
 sh infra/assistive-worker/verify.sh config /etc/capstone/assistive-worker.env
 sh infra/assistive-worker/verify.sh image /etc/capstone/assistive-worker.env
+```
+
+For a separately approved production candidate, pass `production` as the final verifier argument.
+This qualifies repository configuration only; it does not infer an approved production account,
+host, credential, or launch:
+
+```sh
+sh infra/assistive-worker/verify.sh config /etc/capstone/assistive-worker-production.env production
 ```
 
 Image verification additionally rejects any staged change, unstaged tracked change, or relevant
@@ -142,6 +160,17 @@ the worker, it must:
 Do not manufacture or backdate heartbeat or latency evidence. Historical hosted runs and the stale
 heartbeat from an older deployment do not satisfy current acceptance.
 
+Production operational acceptance is a distinct institutional gate. Its Admin/CMS and worker must
+use the same reviewed deployment version and exact production target identity, and availability
+requires a newly observed compatible heartbeat. Staging evidence, stale/incompatible heartbeats,
+on-demand registration, image credentials, and historical acceptance records cannot establish
+production readiness. Core editing, review, and publication remain available when assistive
+execution is unavailable.
+
+Migration 0056 enforces that boundary in persisted evidence: availability matches the exact
+`staging` or `production` label, and an existing worker instance ID cannot be relabelled into the
+other environment. The migration does not relabel, delete, or backfill existing heartbeat rows.
+
 ## Routine operation and replacement
 
 Use `docker compose stop` to pause and the same `up -d --no-build` command to resume. Queued jobs wait
@@ -171,6 +200,6 @@ external file and its acceptance records when the host is decommissioned.
 ## What remains institutional
 
 The repository package removes the Profile A cloud subscription and public-image redistribution
-dependencies. It cannot supply the School-controlled Docker host, staging server secret, outbound
-network approval, Admin/CMS expected-version deployment, or authorised staging acceptance evidence.
+dependencies. It cannot supply the School-controlled Docker host, target server secret, outbound
+network approval, Admin/CMS expected-version deployment, or authorised staging/production acceptance evidence.
 Those remain explicit orchestrator/institution responsibilities.

@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { recordPreviewResponsePrepared, readPreviewAccessEvidence } from '../previews/participantPreviewAccessEvidence';
 import { ParticipantPreviewExecutionError } from './ParticipantPreviewRepository';
 import {
   ParticipantPreviewConfirmationResult,
@@ -169,6 +170,14 @@ function parseMediaSnapshot(raw: unknown[]): ParticipantPreviewMediaRef[] | null
 
 export class SupabaseParticipantPreviewRepositoryCore {
   constructor(protected supabase: SupabaseClient) {}
+
+  recordResponsePrepared(previewId: string, tokenHash: string): Promise<boolean> {
+    return recordPreviewResponsePrepared(this.supabase, previewId, tokenHash);
+  }
+
+  getAccessEvidence(previewId: string) {
+    return readPreviewAccessEvidence(this.supabase, previewId);
+  }
 
   /**
    * Atomically generates a new participant preview via the service-role-only

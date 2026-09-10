@@ -29,6 +29,8 @@ describe('hosted participant preview reminder entrypoint', () => {
     await expect(runHostedParticipantPreviewReminders({
       env: {
         CAPSTONE_RUNTIME_ENV: 'production',
+        CAPSTONE_PRODUCTION_REMINDERS_ENABLED: 'true',
+        CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT: 'production-reminders-approved',
         CAPSTONE_EXPECTED_SUPABASE_HOST: 'staging-project.supabase.co',
         PARTICIPANT_PREVIEW_REMINDERS_SUPABASE_URL: 'https://staging-project.supabase.co',
         PARTICIPANT_PREVIEW_REMINDERS_ENABLED: 'true',
