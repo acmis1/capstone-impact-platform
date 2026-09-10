@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseGitBatchObjects, readGitMigrationObjects } from './gitBatchParser';
+import {
+  listGitMigrationFilenames,
+  parseGitBatchObjects,
+  readGitMigrationObjects,
+} from './gitBatchParser';
 
 const oid = 'a'.repeat(40);
 const object = (text: string) => {
@@ -8,6 +12,13 @@ const object = (text: string) => {
 };
 
 describe('bounded binary Git batch parser', () => {
+  it('lists migration filenames from a committed Git tree', () => {
+    const files = listGitMigrationFilenames(process.cwd(), 'HEAD');
+
+    expect(files).toEqual([...files].sort());
+    expect(files).toContain('20260828120000_assistive_worker_heartbeat.sql');
+  });
+
   it('returns ordered blobs using byte lengths, including UTF-8, embedded newlines and empty content', () => {
     const bodies = ['alpha\nbeta', 'Tiếng Việt — 日本語', '', '\0\n'];
     const result = parseGitBatchObjects(Buffer.concat(bodies.map(object)), bodies.length);

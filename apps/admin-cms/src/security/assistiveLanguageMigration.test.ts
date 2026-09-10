@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { EXPECTED_MIGRATION_FILENAMES } from '../scripts/onboardingCheck';
+import { listGitMigrationFilenames, readGitMigrationObjects } from '../test-support/gitBatchParser';
 
 describe('assistive language finding migration contract', () => {
   const root = path.resolve(__dirname, '../../../..');
@@ -15,16 +16,25 @@ describe('assistive language finding migration contract', () => {
 
   it('remains byte-identical to current main in the combined migration inventory', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
+    const baselineFiles = listGitMigrationFilenames(root, 'origin/main');
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
     expect(files).toHaveLength(56);
     expect(files).toContain(filename);
+    expect(files).toEqual(expect.arrayContaining(baselineFiles));
+
+    const baselineObjects = readGitMigrationObjects(
+      root,
+      baselineFiles.map((file) => `origin/main:infra/supabase/migrations/${file}`),
+    );
+    const candidateObjects = readGitMigrationObjects(
+      root,
+      baselineFiles.map((file) => `HEAD:infra/supabase/migrations/${file}`),
+    );
+    expect(candidateObjects).toEqual(baselineObjects);
+
     expect(() => execFileSync(
       'git',
-      ['diff', '--exit-code', 'origin/main', '--', ...files
-        .filter((file) => ![
-          '20260909120000_staff_lifecycle_readiness.sql',
-          '20260910120000_public_feed_rollback_capability.sql',
-        ].includes(file))
+      ['diff', '--exit-code', 'HEAD', '--', ...baselineFiles
         .map((file) => `infra/supabase/migrations/${file}`)],
       { cwd: root, stdio: 'pipe' },
     )).not.toThrow();

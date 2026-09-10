@@ -2,7 +2,7 @@
 
 **STATUS:** Current — handover entry point
 **PURPOSE:** Operations
-**LAST VERIFIED:** 2026-08-28
+**LAST VERIFIED:** 2026-09-10
 
 If you have just been given responsibility for the Capstone Impact Platform, start here. This page
 is the map: it tells you what the system is, which document answers which question, and what still
@@ -127,7 +127,7 @@ npm run verify:all         # the full quality gate
 Then confirm you can:
 
 - sign in with a synthetic local account;
-- verify the 51-file repository migration manifest (`npm run onboarding:check`), then verify applied history separately through Gate 3 of the staging reconciliation runbook;
+- verify the 56-file repository migration manifest (`npm run onboarding:check`), then verify applied history separately through Gate 3 of the staging reconciliation runbook;
 - build the assistive worker image (`docker build -f apps/assistive-worker/Dockerfile.hosted .`);
 - run the worker locally and watch it process a queued project;
 - read current executor readiness and remaining launch capacity;

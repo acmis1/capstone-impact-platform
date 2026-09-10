@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 import { EXPECTED_MIGRATION_FILENAMES } from '../scripts/onboardingCheck';
+import { listGitMigrationFilenames, readGitMigrationObjects } from '../test-support/gitBatchParser';
 import {
   EXPECTED_REPOSITORY_MIGRATIONS,
   EXPECTED_REPOSITORY_MIGRATION_COUNT,
@@ -81,15 +82,22 @@ describe('participant-preview controlled-links migration (0050)', () => {
 
   it('edits no migration that already exists on origin/main', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
+    const baselineFiles = listGitMigrationFilenames(root, 'origin/main');
+    expect(files).toEqual(expect.arrayContaining(baselineFiles));
+
+    const baselineObjects = readGitMigrationObjects(
+      root,
+      baselineFiles.map((file) => `origin/main:infra/supabase/migrations/${file}`),
+    );
+    const candidateObjects = readGitMigrationObjects(
+      root,
+      baselineFiles.map((file) => `HEAD:infra/supabase/migrations/${file}`),
+    );
+    expect(candidateObjects).toEqual(baselineObjects);
 
     expect(() => execFileSync('git', [
-      'diff', '--exit-code', 'origin/main', '--',
-      ...files
-        .filter((file) => ![
-          '20260909120000_staff_lifecycle_readiness.sql',
-          '20260910120000_public_feed_rollback_capability.sql',
-        ].includes(file))
-        .map((file) => `infra/supabase/migrations/${file}`),
+      'diff', '--exit-code', 'HEAD', '--',
+      ...baselineFiles.map((file) => `infra/supabase/migrations/${file}`),
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
   });
 

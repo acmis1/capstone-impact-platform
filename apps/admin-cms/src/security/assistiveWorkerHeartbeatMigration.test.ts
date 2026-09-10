@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { EXPECTED_MIGRATION_FILENAMES } from '../scripts/onboardingCheck';
+import { readGitMigrationObjects } from '../test-support/gitBatchParser';
 
 describe('assistive worker heartbeat migration and deployment boundary', () => {
   const root = path.resolve(__dirname, '../../../..');
@@ -22,12 +23,16 @@ describe('assistive worker heartbeat migration and deployment boundary', () => {
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
     expect(files).toHaveLength(56);
     expect(files).toContain(filename);
-    const historicalManifest = files.slice(0, -1).map((file) => {
-      const digest = createHash('sha256').update(fs.readFileSync(path.join(migrations, file))).digest('hex');
+    const historicalObjects = readGitMigrationObjects(
+      root,
+      files.slice(0, -1).map((file) => `HEAD:infra/supabase/migrations/${file}`),
+    );
+    const historicalManifest = files.slice(0, -1).map((file, index) => {
+      const digest = createHash('sha256').update(historicalObjects[index]).digest('hex');
       return `${file}:${digest}`;
     }).join('\n');
     expect(createHash('sha256').update(historicalManifest).digest('hex'))
-      .toBe('e5fbdd068f0ca044516f4d502b4e1707427f079fd8bf3045eb79e0844ff4b217');
+      .toBe('3d74bbe01e433a6f35935fb29ad7c150274b455ce5304fe1560d731a90079058');
   });
 
   it('exposes only fixed, bounded service-role heartbeat RPCs', () => {
