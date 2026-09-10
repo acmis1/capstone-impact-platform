@@ -46,7 +46,7 @@ describe('admin CMS deployment manifest', () => {
       environmentEntry(manifest, 'CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED').value = true;
     }],
     ['secret value', (manifest: TestManifest) => {
-      environmentEntry(manifest, 'SUPABASE_SECRET_KEY').value = 'sb_secret_in_test_only';
+      environmentEntry(manifest, 'SUPABASE_SECRET_KEY').value = 'test-secret-placeholder';
     }],
     ['default URL', (manifest: TestManifest) => {
       environmentEntry(manifest, 'NEXT_PUBLIC_SUPABASE_URL').value = 'https://example.invalid';
@@ -65,5 +65,70 @@ describe('admin CMS deployment manifest', () => {
     expect(source).not.toMatch(/sb_(?:secret|publishable)_[A-Za-z0-9]/);
     expect(source).not.toMatch(/eyJ[A-Za-z0-9_-]{20,}/);
     expect(source).not.toMatch(/https?:\/\/[^\s#]+supabase\.co/);
+  });
+});
+
+describe('deployment environment completeness and provider ownership', () => {
+  it.each([
+    'CAPSTONE_STAGING_PUBLICATION_ENABLED',
+    'CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED',
+    'STAFF_PROVISIONING_ENABLED',
+    'CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED',
+    'GEMINI_ASSISTIVE_EXTRACTION_ENABLED',
+  ])(
+    'rejects silently removing the disabled capability %s', name => {
+      const manifest = manifestCopy();
+      manifest.environment = (manifest.environment as TestManifest[]).filter(entry => entry.name !== name);
+      expect(verifyDeploymentManifest(repoRoot, manifest)).toContain(`environment: missing ${name}`);
+    },
+  );
+
+  it.each(['RENDER', 'RENDER_GIT_COMMIT', 'RENDER_EXTERNAL_URL'])(
+    'requires provider identity %s without fabricating it', name => {
+      const manifest = manifestCopy();
+      manifest.platformEnvironment = (manifest.platformEnvironment as TestManifest[])
+        .filter(entry => entry.name !== name);
+      expect(verifyDeploymentManifest(repoRoot, manifest)).toContain(`platformEnvironment: missing ${name}`);
+    },
+  );
+
+  it('rejects a hardcoded provider identity', () => {
+    const manifest = manifestCopy();
+    (manifest.platformEnvironment as TestManifest[])[0].value = 'true';
+    expect(verifyDeploymentManifest(repoRoot, manifest).some(error =>
+      error.includes('provider-injected without a stored value')
+      || error.includes('must remain null'),
+    )).toBe(true);
+  });
+
+  it('rejects provider identity in owner configuration even with a null value', () => {
+    const manifest = manifestCopy();
+    (manifest.environment as TestManifest[]).push({ name: 'RENDER_GIT_COMMIT', value: null, source: 'owner-config' });
+    expect(verifyDeploymentManifest(repoRoot, manifest)).toContain(
+      'environment.RENDER_GIT_COMMIT: provider identity must not become owner-supplied configuration',
+    );
+  });
+
+  it('rejects production capability configuration from the staging manifest', () => {
+    const manifest = manifestCopy();
+    (manifest.environment as TestManifest[]).push({
+      name: 'CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED',
+      value: false,
+      source: 'fail-closed-default',
+    });
+    expect(verifyDeploymentManifest(repoRoot, manifest)).toContain(
+      'environment.CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED: unexpected staging web variable',
+    );
+  });
+
+  it('requires the platform identity consumer paths to remain source-backed', () => {
+    const manifest = manifestCopy();
+    const render = (manifest.platformEnvironment as TestManifest[])
+      .find((entry) => entry.name === 'RENDER');
+    if (!render) throw new Error('missing RENDER platform environment entry');
+    render.consumer = 'apps/admin-cms/src/auth/csrf.ts';
+    expect(verifyDeploymentManifest(repoRoot, manifest)).toContain(
+      'platformEnvironment.RENDER: current consumer must be documented',
+    );
   });
 });

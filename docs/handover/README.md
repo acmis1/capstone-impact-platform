@@ -59,7 +59,9 @@ Read in this order:
 4. **[M6 Operational Readiness and Recovery](../m6-operational-readiness.md)** — backup and restore
    scope, recovery evidence, monitoring, incident handling, deployment and rollback.
 5. **[Environment Matrix](environment-matrix.md)** — which environment may do what.
-6. **[Tan — Poster PDF and Controlled Project Links Integration Record](tan-poster-pdf-controlled-links-integration.md)** —
+6. **[Runtime Configuration Contract](runtime-configuration-contract.md)** — source-backed variable
+   ownership, defaults, parsing, process boundaries, provider identity and enablement state.
+7. **[Tan — Poster PDF and Controlled Project Links Integration Record](tan-poster-pdf-controlled-links-integration.md)** —
    contribution provenance for PR #255, every integration/hardening change applied through PR #262,
    final migration lineage, verification, and guidance for continuing the work from current `main`.
 
@@ -180,3 +182,7 @@ Code cannot complete these. Each needs a person with institutional authority.
 
 **Until these are done, this is a handover package, not a completed handover.** Nothing in this
 repository claims otherwise, and nothing should be marked complete without evidence.
+
+For the exact runtime contract, use [Runtime Configuration Contract](runtime-configuration-contract.md).
+A manifest or environment example documents intended configuration only; neither proves that a
+running process adopted it nor supplies deployment or institutional authorization.
