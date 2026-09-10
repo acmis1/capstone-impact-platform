@@ -347,6 +347,13 @@ Record a release as last known good only when it has full SHA, approval/CI, comp
 
 Only an authorized Render operator may execute this later:
 
+Run the non-mutating, exact-commit and database-compatibility gate in
+[Staging Admin/CMS Application Rollback and Redeployment](operations/staging-application-rollback.md)
+before step 1. The authorization must be witnessed during the fresh direct check; a retained plan
+alone is not proof. Post-deploy tooling reports bounded technical verification while explicitly
+leaving prior authorization unproven, so the supervising operator/reviewer must correlate both
+records before release acceptance continues.
+
 1. Open an incident/change record and preserve the failing release SHA and evidence.
 2. Decide whether a same-SHA redeploy addresses a build/runtime fault or whether the recorded last known good SHA is required.
 3. Confirm database compatibility. Never roll application code back across an incompatible forward-only schema change.
