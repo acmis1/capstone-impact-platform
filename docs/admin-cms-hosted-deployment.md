@@ -340,5 +340,8 @@ A green hosted smoke result is only an application/configuration/dependency and 
 
 The complete M6 release, backup/restore, RPO/RTO, monitoring, incident, and Render web-service
 redeploy/rollback acceptance contract is in [M6 Operational Readiness and Recovery](m6-operational-readiness.md).
+The machine-verifiable, non-mutating exact-commit rollback/redeployment gate and its explicit
+database forward-recovery boundary are in
+[Staging Admin/CMS Application Rollback and Redeployment](operations/staging-application-rollback.md).
 The 2026-09-03 Render application-release rehearsal is already `VERIFIED_STAGING`; any
 future release still requires the supervised evidence checklist against exact reviewed commits.
