@@ -92,11 +92,28 @@ export async function createPublicFeedRuntimeHarness(): Promise<PublicFeedRuntim
   };
   const quoted = (value: string) => `'${value.replaceAll("'", "''")}'`;
 
+  const existingAdmin = await db.from('admin_users').select('auth_user_id')
+    .eq('id', ADMIN_ID).maybeSingle();
+  assert.equal(existingAdmin.error, null, existingAdmin.error?.message);
+  let adminAuthUserId = existingAdmin.data?.auth_user_id as string | null | undefined;
+  if (!adminAuthUserId) {
+    const created = await db.auth.admin.createUser({
+      email: `ledger-runtime-admin-${projectId}@example.invalid`,
+      email_confirm: true,
+    });
+    assert.equal(created.error, null, created.error?.message);
+    adminAuthUserId = created.data.user?.id;
+  }
+  assert.ok(adminAuthUserId);
+
   psql(`
-    INSERT INTO public.admin_users(id,email,full_name) VALUES
-      (${quoted(ADMIN_ID)}::uuid,'ledger-runtime-admin@example.invalid','Ledger Runtime Admin'),
-      (${quoted(REVIEWER_ID)}::uuid,'ledger-runtime-reviewer@example.invalid','Ledger Runtime Reviewer')
-      ON CONFLICT (id) DO UPDATE SET full_name=EXCLUDED.full_name;
+    INSERT INTO public.admin_users(id,auth_user_id,email,full_name) VALUES
+      (${quoted(ADMIN_ID)}::uuid,${quoted(adminAuthUserId)}::uuid,
+       'ledger-runtime-admin@example.invalid','Ledger Runtime Admin'),
+      (${quoted(REVIEWER_ID)}::uuid,NULL,
+       'ledger-runtime-reviewer@example.invalid','Ledger Runtime Reviewer')
+      ON CONFLICT (id) DO UPDATE SET full_name=EXCLUDED.full_name,
+        auth_user_id=COALESCE(public.admin_users.auth_user_id,EXCLUDED.auth_user_id);
     INSERT INTO public.user_roles(user_id,role) VALUES
       (${quoted(ADMIN_ID)}::uuid,'admin'), (${quoted(REVIEWER_ID)}::uuid,'reviewer')
       ON CONFLICT (user_id,role) DO NOTHING;

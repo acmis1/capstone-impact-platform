@@ -12,7 +12,7 @@ import { GET, HEAD } from './route';
 
 const VALID_COMMIT = 'A75F4D8861CE693DDD264F9797D8AF656911154F';
 const RELEASE_CAPABILITY_SENTINEL =
-  '20260909120000_staff_lifecycle_readiness|active_staff_catalog_rls_v1|staff_lifecycle_v1';
+  '20260910120000_public_feed_rollback_capability|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1';
 const VALID_ENV = {
   NEXT_PUBLIC_SUPABASE_URL: 'https://synthetic-readiness.supabase.co',
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_public-test-value',
@@ -147,8 +147,8 @@ describe('GET/HEAD /api/readiness', () => {
       databaseCapability: 'current',
       deploymentCommit: { state: 'valid', value: VALID_COMMIT.toLowerCase() },
       expectedMigrations: {
-        count: 53,
-        latest: '20260909120000_staff_lifecycle_readiness',
+        count: 54,
+        latest: '20260910120000_public_feed_rollback_capability',
       },
     });
   });

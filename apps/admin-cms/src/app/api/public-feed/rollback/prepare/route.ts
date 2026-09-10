@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSameOrigin } from '../../../../../auth/csrf';
+import { AdminAuthError } from '../../../../../auth/authTypes';
+import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from '../../../../../auth/authHttp';
 import { requireAdmin } from '../../../../../auth/requireAdmin';
 import { canPreparePublication } from '../../../../../auth/permissions';
 import { getServerEnv } from '../../../../../lib/env';
 import { createSupabaseAdminClient } from '../../../../../lib/supabase/admin';
 import { createPublicFeedHistoryDependencies } from '../../../../../projects/createPublicFeedHistoryDependencies';
+import { isPublicFeedRollbackEnvironmentAvailable } from '../../../../../projects/publicFeedRollbackPolicy';
 import { preparePublicFeedRollback } from '../../../../../projects/publicFeedHistoryService';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -23,6 +26,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Validation failed.' }, { status: 400, headers: NO_STORE });
     }
     const env = getServerEnv();
+    if (!isPublicFeedRollbackEnvironmentAvailable(env.supabaseUrl, process.env)) {
+      return NextResponse.json({
+        success: false, code: 'ROLLBACK_UNAVAILABLE', error: 'Rollback preparation is unavailable.',
+      }, { status: 404, headers: NO_STORE });
+    }
     const result = await preparePublicFeedRollback(createPublicFeedHistoryDependencies({
       supabase: createSupabaseAdminClient(), supabaseUrl: env.supabaseUrl,
       adminId: admin.adminUserId, permissions: admin.permissions,
@@ -35,7 +43,13 @@ export async function POST(request: NextRequest) {
     const status = result.resultCode === 'PERMISSION_DENIED' ? 403
       : ['ROLLBACK_UNAVAILABLE', 'VERSION_NOT_FOUND'].includes(result.resultCode) ? 404 : 409;
     return NextResponse.json({ success: false, code: result.resultCode, error: 'Rollback preparation is unavailable.' }, { status, headers: NO_STORE });
-  } catch {
+  } catch (error) {
+    if (error instanceof AdminAuthError) {
+      return NextResponse.json(
+        { success: false, error: getPublicAuthErrorMessage(error.type) },
+        { status: getAuthErrorHttpStatus(error.type), headers: NO_STORE },
+      );
+    }
     console.error('[Public feed rollback preparation]: PREPARATION_UNAVAILABLE');
     return NextResponse.json({ success: false, error: 'Rollback preparation is unavailable.' }, { status: 500, headers: NO_STORE });
   }

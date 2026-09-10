@@ -16,7 +16,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | **Instance Status** | Active / Separate (Never touch) | **ACTIVE_HEALTHY** (Active Target) | **PAUSED / INACTIVE** (Do not modify) |
 | **Region** | `ap-southeast-1` | `ap-southeast-1` | `ap-southeast-1` |
 | **Hosting Service** | Existing Render static/web service | **Separate** Render/Cloud Web Service | — |
-| **Database State** | Prohibited from mutation | Historical read-only observations recorded 46 then 48/48 rows; the latest hosted Gate 3/4 evidence is the prior 52-migration contract through `20260906120000_public_removal_completion_reconciliation`. The repository candidate now expects Migration 0053 and requires fresh governed Gate 3/4 evidence after authorized application. | Historical manually evolved baseline; migration history untracked |
+| **Database State** | Prohibited from mutation | Historical read-only observations recorded 46 then 48/48 rows; the latest hosted Gate 3/4 evidence is the prior 52-migration contract through `20260906120000_public_removal_completion_reconciliation`. The repository candidate now expects Migrations 0053–0054 and requires fresh governed Gate 3/4 evidence after authorized application. | Historical manually evolved baseline; migration history untracked |
 
 > [!IMPORTANT]
 > The existing Render service configured for `Prototype/` must **NEVER** be repurposed or pointed to `apps/admin-cms`. The Admin/CMS requires an independent web service with its own environment variables and deployment pipeline. Furthermore, the Prototype Supabase project (`capstone-prototype-recovery-2026`) is completely isolated and must never be targeted by Admin/CMS operations.
@@ -129,6 +129,7 @@ The final line is deterministic. `HOSTED_SMOKE_CLASSIFICATION = READY_FOR_SUPERV
 | `PARTICIPANT_PREVIEW_REMINDERS_ENABLED` | `false` | Reminder scheduler disabled. Scheduled reminders are skipped safely. |
 | `STAFF_PROVISIONING_ENABLED` | `false` | New staff invitations and staging-only direct UAT account creation are disabled. Existing pending invitations can still be activated. Direct creation additionally requires exact staging runtime and Supabase-host identity checks. |
 | `CAPSTONE_STAGING_PUBLICATION_ENABLED` | `false` | Staging showcase publication is absent from the UI and route fails closed. Exact `true` enables it only when the staging runtime identity and expected Supabase host also match. It never enables live production publication. |
+| `CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED` | `false` | Historical rollback controls are absent unless the exact staging identity also passes. Enabling this flag is necessary but insufficient: an active administrator must separately enable the exact database head, and no writer/recovery may be active. Production and Duda/Render rollback remain unavailable. |
 | `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` | `false` | Hosted assistive enqueue remains disabled. Exact `true` is necessary but insufficient: the web service must also prove the staging target identity and observe a fresh compatible worker heartbeat. |
 
 ### E. Assistive Execution
@@ -262,7 +263,7 @@ The active Admin/CMS staging stack uses Render service `capstone-admin-cms-stagi
 - **Migration History (Gate 3) — later historical observation**: 48/48 repository migrations were recorded through `20260831090000_postgres17_maintain_privilege_alignment`.
 - **Migration History (Gate 3) — current verified observation**: 52 rows were recorded, from earliest `20260601035138` through `20260906120000_public_removal_completion_reconciliation`.
 - **Schema, Grants, and RPCs (Gate 4)**: Independent structural evidence is `GATE4_MATCH` for the 52-migration contract: 44 tables, 514 columns, 387 constraints, 31 policies, 84 application RPC signatures across 83 names, 1 canonical staff-role helper, 4 dispatcher routines, and 4 Storage buckets, with zero differences and validation errors. This is a separate structural evidence layer from the current deployment identity.
-- **Repository release candidate**: The source manifest now contains 53 migrations through `20260909120000_staff_lifecycle_readiness`. The candidate inventory contains 42 public application tables and 88 exact service-role application RPC signatures across 87 names. This is repository evidence only; it is not applied-hosted or fresh Gate 3/4 evidence.
+- **Repository release candidate**: The source manifest now contains 54 migrations through `20260910120000_public_feed_rollback_capability`. The candidate inventory contains 44 public application tables and 91 exact service-role application RPC signatures across 90 names. This is repository evidence only; it is not applied-hosted or fresh Gate 3/4 evidence.
 - **Latest verified application deployment evidence (2026-09-08)**: Render service `capstone-admin-cms-staging-v2` targets branch `main` and is authoritative at deployment `dep-dafimfn9l3cc73c8blog`, with deployed application commit `50d02632f4403f3acb5620d6b9a2e482e8ac5688`. GET `/api/health` and `/api/readiness` returned 200 with that deployment identity, readiness `READY`, and canonical feed `[]`; the publication gate was restored to disabled. Later documentation-only repository commits do not by themselves change this deployed application baseline.
 - **Render application-release rehearsal (2026-09-03)**: A genuine staging forward deployment, official Render rollback, and exact-SHA redeployment completed with `/api/health` 200, `/login` 200, `/api/readiness` `READY`, and deployment identity matching at every stage. Timings were 145.2 s forward, 52.7 s rollback, and 145.1 s final redeploy; auto-deploy remained disabled. This is `VERIFIED_STAGING` application-release evidence, not database recovery RTO.
 - **Current-52 recovery evidence (2026-09-08)**: The current staging-origin logical capture and isolated PostgreSQL 17 restore are recorded as bounded `VERIFIED_STAGING` evidence in [Current-52 Recovery Evidence](m6-current52-recovery-evidence-2026-09-08.md). This does not establish managed hosted PITR or hosted-to-hosted recovery.
@@ -291,12 +292,12 @@ The automated checker queries the PostgREST Data API and OpenAPI schema. It inte
 - **RPC Signatures**: OpenAPI metadata proves RPC names, but may collapse or omit full overloaded parameter signatures.
 - **Fail-Closed Design**: The checker deliberately refuses to synthesize `SCHEMA_BASELINE = MATCH` or `READY_FOR_MUTATION_DECISION` without explicit, governed Gate 3/4 manual verification inputs.
 
-The checker compares against the current repository contract: 42 public application tables, 87 application RPC names across 88 exact signatures, and 4 canonical Storage buckets. Expected automated inspection output on a target that already matches that contract:
+The checker compares against the current repository contract: 44 public application tables, 90 application RPC names across 91 exact signatures, and 4 canonical Storage buckets. Expected automated inspection output on a target that already matches that contract:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
-- `REQUIRED_TABLE_SET = PRESENT` (All 42 public application tables detected or the documented privilege-hidden subset separately evidenced)
-- `REQUIRED_RPC_NAMES = PRESENT` (All 87 application RPC names detected; 88 exact signatures including the expected overload)
+- `REQUIRED_TABLE_SET = PRESENT` (All 44 public application tables detected or the documented privilege-hidden subset separately evidenced)
+- `REQUIRED_RPC_NAMES = PRESENT` (All 90 application RPC names detected; 91 exact signatures including the expected overload)
 - `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 4 canonical buckets detected)
 - `AUTH_FOUNDATION = READY`
 - `MANUAL_EVIDENCE_REQUIRED = YES`
@@ -306,8 +307,8 @@ A historical target at the 48-migration baseline predates migrations 0049–0051
 
 ### B. Governed Evidence Boundary
 The active staging-v2 migration history is a separate Gate 3 evidence layer from the Gate 4 schema, grant, RLS, and RPC verification that may be required for a release:
-- **Migration History (Gate 3)**: Latest hosted evidence is 52 rows from `20260601035138` through `20260906120000_public_removal_completion_reconciliation`; the 53-migration repository candidate requires fresh evidence after authorized application. The 46-row and 48/48 records remain historical observations.
-- **Schema & Grants (Gate 4)**: The supplied 52-migration hosted structural evidence is `GATE4_MATCH`; it is not evidence for the 53-migration repository candidate, and matching migration-history count alone would not prove schema/grant/RPC parity.
+- **Migration History (Gate 3)**: Latest hosted evidence is 52 rows from `20260601035138` through `20260906120000_public_removal_completion_reconciliation`; the 54-migration repository candidate requires fresh evidence after authorized application. The 46-row and 48/48 records remain historical observations.
+- **Schema & Grants (Gate 4)**: The supplied 52-migration hosted structural evidence is `GATE4_MATCH`; it is not evidence for the 54-migration repository candidate, and matching migration-history count alone would not prove schema/grant/RPC parity.
 - **Other Gates**: Render deployment identity has separately matched `50d02632f4403f3acb5620d6b9a2e482e8ac5688` in bounded read-only smoke. Current-52 Auth/Storage recovery is separately documented above; UAT, monitoring, formal RPO/RTO, and release acceptance remain their own gates.
 
 Auth readiness is verified via:
@@ -340,5 +341,8 @@ A green hosted smoke result is only an application/configuration/dependency and 
 
 The complete M6 release, backup/restore, RPO/RTO, monitoring, incident, and Render web-service
 redeploy/rollback acceptance contract is in [M6 Operational Readiness and Recovery](m6-operational-readiness.md).
+The machine-verifiable, non-mutating exact-commit rollback/redeployment gate and its explicit
+database forward-recovery boundary are in
+[Staging Admin/CMS Application Rollback and Redeployment](operations/staging-application-rollback.md).
 The 2026-09-03 Render application-release rehearsal is already `VERIFIED_STAGING`; any
 future release still requires the supervised evidence checklist against exact reviewed commits.

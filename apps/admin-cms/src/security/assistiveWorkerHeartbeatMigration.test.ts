@@ -16,11 +16,14 @@ describe('assistive worker heartbeat migration and deployment boundary', () => {
   it('remains byte-identical to current main in the combined migration inventory', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(53);
+    expect(files).toHaveLength(54);
     expect(files).toContain(filename);
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'origin/main', '--',
-      ...files.filter((file) => file !== '20260909120000_staff_lifecycle_readiness.sql')
+      ...files.filter((file) => ![
+        '20260909120000_staff_lifecycle_readiness.sql',
+        '20260910120000_public_feed_rollback_capability.sql',
+      ].includes(file))
               .map((file) => `infra/supabase/migrations/${file}`)
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
   });

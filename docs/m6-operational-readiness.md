@@ -2,7 +2,7 @@
 
 This document is the canonical PP1 M6 operational-readiness contract for the active Admin/CMS. It defines what the repository can prove now, what a supervised hosted rehearsal must prove later, and which decisions remain with the institution. It does not authorize a deployment, hosted mutation, restore, rollback, DNS change, Duda change, email, or secret access.
 
-Executable application code, migrations, and tests on the reviewed commit remain the source of truth. The current package contains 53 migration files ending at `20260909120000_staff_lifecycle_readiness`; `npm run check:operational-readiness` verifies that exact manifest and fails closed when it changes unexpectedly.
+Executable application code, migrations, and tests on the reviewed commit remain the source of truth. The current package contains 54 migration files ending at `20260910120000_public_feed_rollback_capability`; `npm run check:operational-readiness` verifies that exact manifest and fails closed when it changes unexpectedly.
 
 ## Evidence vocabulary
 
@@ -43,7 +43,7 @@ KPI-15 rules and does not turn machine evidence into human evidence.
 | `/api/readiness` dependency readiness | `IMPLEMENTED_AND_TESTED` | Route and tests require Render runtime context, bind the reported deployment identity to a valid `RENDER_GIT_COMMIT`, and use a bounded service-role RPC to require the exact database capability sentinel. Missing, malformed, timed-out, oversized, or stale evidence fails closed with 503. This proves the named release capability, not the complete schema or workflows. |
 | Read-only hosted smoke | `VERIFIED_STAGING` | On the 2026-09-08 verified Render deployment `dep-dafimfn9l3cc73c8blog`, deployed application commit `50d02632f4403f3acb5620d6b9a2e482e8ac5688`, the M6 GET/HEAD verifier passed `/api/health` and `/api/readiness` plus `GET /login`, with `HOSTED_MUTATIONS = NONE` and classification `READ_ONLY_HOSTED_CHECK_PASSED`. A separate read-only fetch confirmed the canonical public feed was `[]`, and the publication gate was restored to `CAPSTONE_STAGING_PUBLICATION_ENABLED=false`. This is point-in-time application evidence; later documentation-only repository commits do not by themselves change the deployed application baseline. It is not production, workflow, recovery, monitoring, or human-acceptance evidence. |
 | Latest verified hosted application identity | `VERIFIED_STAGING` | Active Render service `capstone-admin-cms-staging-v2` targets branch `main`; the latest verified deployment is `dep-dafimfn9l3cc73c8blog` at deployed application commit `50d02632f4403f3acb5620d6b9a2e482e8ac5688`. The repository and hosted migration manifest at that verification point both contained 52 migrations, latest `20260906120000_public_removal_completion_reconciliation`. This is a separate deployment/release gate from migration-history evidence. |
-| Migration manifest and readiness inspection | `VERIFIED_STAGING` | At the latest hosted verification point, the then-current repository manifest and active staging-v2 migration history both contained 52 migrations through `20260906120000_public_removal_completion_reconciliation`. The current repository candidate contains Migration 0053 and has no hosted evidence in this patch. Historical 46-row and 48/48 observations remain earlier evidence. Alignment must be rechecked for each release candidate. |
+| Migration manifest and readiness inspection | `VERIFIED_STAGING` | At the latest hosted verification point, the then-current repository manifest and active staging-v2 migration history both contained 52 migrations through `20260906120000_public_removal_completion_reconciliation`. The current repository candidate contains Migrations 0053–0054 and has no hosted evidence in this patch. Historical 46-row and 48/48 observations remain earlier evidence. Alignment must be rechecked for each release candidate. |
 | Exact Gate 4 schema evidence | `VERIFIED_STAGING` | Independent hosted structural evidence matched the 52-migration Gate 4 contract: 44 tables, 514 columns, 387 constraints, 31 policies, 84 application RPC signatures across 83 names, 1 canonical staff-role helper, 4 dispatcher routines, and 4 Storage buckets; differences and validation errors were zero. This remains a separate structural evidence capture and does not prove row contents, Auth customizations, recovery, monitoring, or UAT. |
 | Historical staging reconciliation | `DOCUMENTED_ONLY` | The runbook preserves the manual-repair background for the old paused staging instance. Active staging-v2 has separate current history evidence; any future repair consideration requires read-only mismatch evidence and separate authorization. |
 | Local database recovery mechanics | `IMPLEMENTED_AND_TESTED` | The bounded verifier owns, backs up, destroys, restores, verifies, and cleans only its synthetic Local schema. |
@@ -329,7 +329,7 @@ The authoritative application contract is in [Admin/CMS Hosted Staging Deploymen
 
 1. Record the exact reviewed full SHA, source branch, approval, and clean CI for that SHA.
 2. Run `npm run check:operational-readiness -- --expected-commit=<sha>`.
-3. Record hosted migration history/schema evidence against the exact reviewed repository manifest (currently the 53-file candidate). Preserve the latest hosted 52-file observation as historical evidence, and do not infer the complete applied migration history from `/api/readiness`.
+3. Record hosted migration history/schema evidence against the exact reviewed repository manifest (currently the 54-file candidate). Preserve the latest hosted 52-file observation as historical evidence, and do not infer the complete applied migration history from `/api/readiness`.
 4. Confirm backup/recovery evidence required by the change and the last known good release.
 5. Confirm environment variable **names**, target identity, secret ownership, and rotation status without exposing values.
 6. Confirm the Render web service uses the Admin/CMS root/commands and `/api/readiness`, not the Prototype service.
@@ -346,6 +346,13 @@ Record a release as last known good only when it has full SHA, approval/CI, comp
 ### Controlled redeploy or rollback
 
 Only an authorized Render operator may execute this later:
+
+Run the non-mutating, exact-commit and database-compatibility gate in
+[Staging Admin/CMS Application Rollback and Redeployment](operations/staging-application-rollback.md)
+before step 1. The authorization must be witnessed during the fresh direct check; a retained plan
+alone is not proof. Post-deploy tooling reports bounded technical verification while explicitly
+leaving prior authorization unproven, so the supervising operator/reviewer must correlate both
+records before release acceptance continues.
 
 1. Open an incident/change record and preserve the failing release SHA and evidence.
 2. Decide whether a same-SHA redeploy addresses a build/runtime fault or whether the recorded last known good SHA is required.

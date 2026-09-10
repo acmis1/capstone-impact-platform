@@ -7,7 +7,7 @@ This directory contains the version-controlled database schema migrations, polic
 ## ⚠️ Current Environment & Staging Status
 
 > [!NOTE]
-> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. The current 53-file timestamped migration manifest through `20260909120000_staff_lifecycle_readiness.sql` is the executable repository candidate and passes its automated manifest contract. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
+> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. The current 54-file timestamped migration manifest through `20260910120000_public_feed_rollback_capability.sql` is the executable repository candidate and passes its automated manifest contract. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
 > * **Active Hosted Staging (`capstone-admin-cms-staging-v2-2026`):** Historical read-only observations recorded 46 rows through `20260828120000`, then 48/48 through `20260831090000_postgres17_maintain_privilege_alignment`. Current independent Gate 3 evidence records 52 rows through `20260906120000_public_removal_completion_reconciliation`; Gate 4 is a 52-migration structural `GATE4_MATCH`. This proves the collected schema/grant/RPC contract, not application data, Auth identities, Storage objects, recovery, monitoring, UAT, or production acceptance.
 > * **Historical/Paused Hosted Staging (`capstone-admin-cms-staging-2026`):** This is the environment associated with the old manually evolved migration baseline. Its history must not be confused with the active staging-v2 evidence.
 > * **Corrective Fix:** Migration `0006` corrected the initial administrator bootstrap runtime by replacing `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
@@ -73,7 +73,7 @@ npm run supabase:stop
 
 ---
 
-## Selected Migration Inventory (53 Migrations Total)
+## Selected Migration Inventory (54 Migrations Total)
 
 The executable files under `migrations/` and the exact manifest enforced by
 `apps/admin-cms/src/deployment/hostedDeploymentReadiness.ts` are authoritative. The entries below
@@ -115,3 +115,4 @@ highlight major milestones rather than replacing that complete manifest.
 * **[20260903130000_participant_owned_corrections.sql](./migrations/20260903130000_participant_owned_corrections.sql):** Repository implementation of immutable participant and staff pre-preview package submissions, exact-revision review, recoverable acceptance, and service-role-SELECT-only correction evidence tables. Hosted deployment and verification remain separately governed and are not asserted here.
 * **[20260906120000_public_removal_completion_reconciliation.sql](./migrations/20260906120000_public_removal_completion_reconciliation.sql):** Atomically reconciles a removal target's project state when the exact bound canonical-feed observation completes, and narrowly repairs historical pending rows backed by one unambiguous completed-removal ledger trail. It performs no Storage I/O and adds no schema objects.
 * **[20260909120000_staff_lifecycle_readiness.sql](./migrations/20260909120000_staff_lifecycle_readiness.sql):** Adds audited, version-fenced staff lifecycle governance and token-fenced Auth-provider reconciliation; preserves staff history; immediately denies deactivated sessions at the Admin and catalog-RLS boundaries; and installs the immutable service-role-only release capability sentinel consumed by public readiness.
+* **[20260910120000_public_feed_rollback_capability.sql](./migrations/20260910120000_public_feed_rollback_capability.sql):** Adds service-role-only, exact-head rollback capability transitions for verified staging/disposable Local, active-admin and writer/recovery fences, immutable truthful transition audit, and immutable preparation-to-capability bindings for verified staging; migration apply changes no existing row and emits no event.
