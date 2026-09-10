@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execSync } from 'node:child_process';
+import { readGitMigrationObjects } from '../test-support/gitBatchParser';
 
 describe('Migration 0016 Participant Preview Correction Resolution Security Contract Tests', () => {
   const repoRoot = path.resolve(__dirname, '../../../..');
@@ -35,16 +35,14 @@ describe('Migration 0016 Participant Preview Correction Resolution Security Cont
     const priorMigrationFiles = sqlFiles.slice(0, 15);
     expect(priorMigrationFiles.length).toBe(15);
 
-    for (const file of priorMigrationFiles) {
+    const inheritedObjects = readGitMigrationObjects(repoRoot, (priorMigrationFiles).map(file => `origin/main:infra/supabase/migrations/${file}`));
+    for (const [index, file] of (priorMigrationFiles).entries()) {
       const filePath = path.join(migrationsDir, file);
       expect(fs.existsSync(filePath)).toBe(true);
       const localContent = fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n');
       const localHash = crypto.createHash('sha256').update(localContent, 'utf8').digest('hex');
 
-      const mainContent = execSync(
-        `git show origin/main:infra/supabase/migrations/${file}`,
-        { cwd: repoRoot, encoding: 'utf8' }
-      ).replace(/\r\n/g, '\n');
+      const mainContent = inheritedObjects[index].toString('utf8').replace(/\r\n/g, '\n');
       const mainHash = crypto.createHash('sha256').update(mainContent, 'utf8').digest('hex');
 
       expect(localHash).toBe(mainHash);

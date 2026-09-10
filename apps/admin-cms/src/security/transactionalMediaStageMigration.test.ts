@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execSync } from 'node:child_process';
+import { readGitMigrationObjects } from '../test-support/gitBatchParser';
 
 describe('Migration 0011 Atomic Browser Import Media Stage Security Contract Tests', () => {
   const repoRoot = path.resolve(__dirname, '../../../..');
@@ -35,16 +35,14 @@ describe('Migration 0011 Atomic Browser Import Media Stage Security Contract Tes
   });
 
   it('2. Existing migrations 0001 through 0010 remain byte-for-byte unmodified against origin/main', () => {
-    for (const file of expectedPriorMigrations) {
+    const inheritedObjects = readGitMigrationObjects(repoRoot, (expectedPriorMigrations).map(file => `origin/main:infra/supabase/migrations/${file}`));
+    for (const [index, file] of (expectedPriorMigrations).entries()) {
       const filePath = path.join(migrationsDir, file);
       expect(fs.existsSync(filePath)).toBe(true);
       const localContent = fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n');
       const localHash = crypto.createHash('sha256').update(localContent, 'utf8').digest('hex');
 
-      const mainContent = execSync(
-        `git show origin/main:infra/supabase/migrations/${file}`,
-        { cwd: repoRoot, encoding: 'utf8' }
-      ).replace(/\r\n/g, '\n');
+      const mainContent = inheritedObjects[index].toString('utf8').replace(/\r\n/g, '\n');
       const mainHash = crypto.createHash('sha256').update(mainContent, 'utf8').digest('hex');
 
       expect(localHash).toBe(mainHash);
