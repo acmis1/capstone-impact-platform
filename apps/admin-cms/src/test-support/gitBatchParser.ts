@@ -3,24 +3,22 @@ import { execFileSync } from 'node:child_process';
 const MAX_GIT_BATCH_OUTPUT_BYTES = 8 * 1024 * 1024;
 const MIGRATIONS_PATH = 'infra/supabase/migrations';
 
-export function listGitMigrationFilenames(root: string, revision: string): string[] {
-  if (!revision || /[\r\n\0]/.test(revision)) {
-    throw new Error('GIT_TREE_INVALID_REVISION');
+export function assertGitMigrationBaselineUnchanged(root: string): void {
+  const comparisons = [
+    ['origin/main', 'HEAD'],
+    ['HEAD'],
+  ];
+
+  for (const revisions of comparisons) {
+    execFileSync('git', [
+      'diff', '--exit-code', '--no-ext-diff', '--diff-filter=DMRT', ...revisions, '--', MIGRATIONS_PATH,
+    ], {
+      cwd: root,
+      maxBuffer: MAX_GIT_BATCH_OUTPUT_BYTES,
+      timeout: 10_000,
+      stdio: 'pipe',
+    });
   }
-
-  const output = execFileSync('git', ['ls-tree', '-r', '--name-only', '--full-tree', revision, '--', MIGRATIONS_PATH], {
-    cwd: root,
-    maxBuffer: MAX_GIT_BATCH_OUTPUT_BYTES,
-    timeout: 10_000,
-  }) as Buffer;
-  const prefix = `${MIGRATIONS_PATH}/`;
-  const paths = output.toString('utf8').split(/\r?\n/).filter(Boolean);
-
-  if (paths.some((file) => !file.startsWith(prefix) || file.slice(prefix.length).includes('/'))) {
-    throw new Error('GIT_TREE_MALFORMED_PATH');
-  }
-
-  return paths.map((file) => file.slice(prefix.length)).sort();
 }
 
 export function parseGitBatchObjects(output: Buffer, expectedObjectCount: number): Buffer[] {

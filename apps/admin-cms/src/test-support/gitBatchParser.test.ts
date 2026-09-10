@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  listGitMigrationFilenames,
+  assertGitMigrationBaselineUnchanged,
   parseGitBatchObjects,
   readGitMigrationObjects,
 } from './gitBatchParser';
@@ -12,11 +12,8 @@ const object = (text: string) => {
 };
 
 describe('bounded binary Git batch parser', () => {
-  it('lists migration filenames from a committed Git tree', () => {
-    const files = listGitMigrationFilenames(process.cwd(), 'HEAD');
-
-    expect(files).toEqual([...files].sort());
-    expect(files).toContain('20260828120000_assistive_worker_heartbeat.sql');
+  it('accepts the current committed baseline and clean working tree', () => {
+    expect(() => assertGitMigrationBaselineUnchanged(process.cwd())).not.toThrow();
   });
 
   it('returns ordered blobs using byte lengths, including UTF-8, embedded newlines and empty content', () => {

@@ -1,10 +1,9 @@
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { EXPECTED_MIGRATION_FILENAMES } from '../scripts/onboardingCheck';
-import { listGitMigrationFilenames, readGitMigrationObjects } from '../test-support/gitBatchParser';
+import { assertGitMigrationBaselineUnchanged } from '../test-support/gitBatchParser';
 
 describe('assistive language finding migration contract', () => {
   const root = path.resolve(__dirname, '../../../..');
@@ -16,28 +15,10 @@ describe('assistive language finding migration contract', () => {
 
   it('remains byte-identical to current main in the combined migration inventory', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
-    const baselineFiles = listGitMigrationFilenames(root, 'origin/main');
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
     expect(files).toHaveLength(56);
     expect(files).toContain(filename);
-    expect(files).toEqual(expect.arrayContaining(baselineFiles));
-
-    const baselineObjects = readGitMigrationObjects(
-      root,
-      baselineFiles.map((file) => `origin/main:infra/supabase/migrations/${file}`),
-    );
-    const candidateObjects = readGitMigrationObjects(
-      root,
-      baselineFiles.map((file) => `HEAD:infra/supabase/migrations/${file}`),
-    );
-    expect(candidateObjects).toEqual(baselineObjects);
-
-    expect(() => execFileSync(
-      'git',
-      ['diff', '--exit-code', 'HEAD', '--', ...baselineFiles
-        .map((file) => `infra/supabase/migrations/${file}`)],
-      { cwd: root, stdio: 'pipe' },
-    )).not.toThrow();
+    expect(() => assertGitMigrationBaselineUnchanged(root)).not.toThrow();
   });
 
   it('keeps language evidence non-authoritative and grants no browser or direct table access', () => {
