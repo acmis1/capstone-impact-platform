@@ -32,8 +32,15 @@ async function main(): Promise<void> {
   const harness = await createPublicFeedRuntimeHarness();
   const { db, apiUrl, adminId, reviewerId, psql, quoted, storedFeed, count } = harness;
   const wrongAdminId = crypto.randomUUID();
-  psql(`INSERT INTO public.admin_users(id,email,full_name)
-    VALUES (${quoted(wrongAdminId)}::uuid,${quoted(`issue-268-other-admin-${wrongAdminId}@example.invalid`)},'Issue 268 Other Admin');
+  const wrongAdminEmail = `issue-268-other-admin-${wrongAdminId}@example.invalid`;
+  // This scenario needs a genuine active administrator who is not the operation owner.
+  // A role-only fixture now correctly fails Migration 0053 lifecycle authority before ownership.
+  const wrongAdminAuth = await db.auth.admin.createUser({ email: wrongAdminEmail, email_confirm: true });
+  assert.equal(wrongAdminAuth.error, null, wrongAdminAuth.error?.message);
+  assert.ok(wrongAdminAuth.data.user?.id);
+  psql(`INSERT INTO public.admin_users(id,auth_user_id,email,full_name)
+    VALUES (${quoted(wrongAdminId)}::uuid,${quoted(wrongAdminAuth.data.user.id)}::uuid,
+      ${quoted(wrongAdminEmail)},'Issue 268 Other Admin');
     INSERT INTO public.user_roles(user_id,role) VALUES (${quoted(wrongAdminId)}::uuid,'admin');`);
   const prefix = `controlled-removal-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   const { scenario, passed } = createScenarioRunner();
