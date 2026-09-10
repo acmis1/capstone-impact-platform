@@ -815,6 +815,20 @@
             elevatedMedia = "poster";
         }
 
+        // Resource ownership is pure: content probes must not consume render state.
+        const hasPrimaryPosterAction = templateId === "poster_showcase"
+            || (templateId === "technical_detail" && canShowPoster
+                && elevatedMedia !== "video" && elevatedMedia !== "snapshots");
+        const renderPosterLink = (pdfClass, imageClass = pdfClass) => {
+            if (project.posterPdf && !isHidden("posterPdf")) {
+                return `<a href="${escapeHTML(project.posterPdf)}" class="${pdfClass}" target="_blank" rel="noopener noreferrer">Download Poster PDF</a>`;
+            }
+            if (project.poster && !isHidden("poster")) {
+                return `<a href="${escapeHTML(project.poster)}" class="${imageClass}" target="_blank" rel="noopener noreferrer">View Poster</a>`;
+            }
+            return "";
+        };
+
         const renderMetadataChips = (light = false) => {
             if (isHidden("metadata")) return "";
             const chipValues = [
@@ -856,20 +870,19 @@
         };
 
         const renderLinks = (large = false) => {
-            const showPosterPdf = !!(project.posterPdf && !isHidden("posterPdf"));
-            const showPosterImgLink = !!(!showPosterPdf && project.poster && !isHidden("poster"));
+            const posterLink = hasPrimaryPosterAction ? ""
+                : renderPosterLink("btn-cta poster-download", "btn-cta btn-cta-link");
             const showExternal = !isHidden("externalLinks") && !isHidden("links");
             const extLinks = Array.isArray(project.externalLinks) ? project.externalLinks : [];
             const hasExternal = showExternal && (project.demoUrl || project.repositoryUrl || extLinks.length > 0);
-            if (!hasExternal && !showPosterPdf && !showPosterImgLink) return "";
+            if (!hasExternal && !posterLink) return "";
 
             return `
                 <div class="cip-links ${large ? "cip-links-large" : ""}">
                     ${showExternal && project.demoUrl ? `<a href="${escapeHTML(project.demoUrl)}" class="btn-cta btn-cta-demo" target="_blank" rel="noopener noreferrer">Open Live Demo</a>` : ""}
                     ${showExternal && project.repositoryUrl ? `<a href="${escapeHTML(project.repositoryUrl)}" class="btn-cta btn-cta-code" target="_blank" rel="noopener noreferrer">View Code Repository</a>` : ""}
                     ${showExternal ? extLinks.map(lnk => `<a href="${escapeHTML(lnk.url)}" class="btn-cta btn-cta-link" target="_blank" rel="noopener noreferrer">${escapeHTML(lnk.label || "Project Link")}</a>`).join("") : ""}
-                    ${showPosterPdf ? `<a href="${escapeHTML(project.posterPdf)}" class="btn-cta poster-download" target="_blank" rel="noopener noreferrer">Download Poster PDF</a>` : ""}
-                    ${showPosterImgLink ? `<a href="${escapeHTML(project.poster)}" class="btn-cta btn-cta-link" target="_blank" rel="noopener noreferrer">View Poster</a>` : ""}
+                    ${posterLink}
                 </div>
             `;
         };
@@ -943,7 +956,9 @@
         };
 
         const renderSection = (sec, numbered = false) => {
-            if (isHidden(sec)) return "";
+            // External-link visibility does not also hide an independently allowed poster action.
+            // renderLinks owns the separate external, PDF and image visibility checks.
+            if (isHidden(sec) && sec !== "links" && sec !== "externalLinks") return "";
             if (sec === "video" && elevatedMedia === "video") return "";
             if (sec === "snapshots" && elevatedMedia === "snapshots") return "";
 
@@ -963,7 +978,7 @@
         };
 
         const allPossibleSections = ["background", "solution", "snapshots", "video", "team", "links", "externalLinks", "citations", "accessibilityText"];
-        const fullOrder = [...sectionOrder];
+        const fullOrder = [...new Set(sectionOrder.map(sec => sec === "externalLinks" ? "links" : sec))];
         allPossibleSections.forEach(sec => {
             if (!fullOrder.includes(sec)) {
                 if (sec === "links" && fullOrder.includes("externalLinks")) return;
@@ -972,7 +987,7 @@
             }
         });
 
-        const consumedSections = [];
+        const consumedSections = templateId === "media_rich" ? ["links", "externalLinks"] : [];
         if (elevatedMedia === "video") consumedSections.push("video");
         if (elevatedMedia === "snapshots") consumedSections.push("snapshots");
         if (elevatedMedia === "poster") consumedSections.push("poster");
@@ -988,7 +1003,7 @@
         const numberedKeys = ["background", "solution", "links", "externalLinks", "snapshots", "video", "citations"];
         const activeNumberedSections = [];
         bodySections.forEach(sec => {
-            if (numberedKeys.includes(sec) && !isHidden(sec)) {
+            if (numberedKeys.includes(sec) && (!isHidden(sec) || sec === "links" || sec === "externalLinks")) {
                 const isLinkSec = sec === "links" || sec === "externalLinks";
                 if (isLinkSec && activeNumberedSections.some(s => s === "links" || s === "externalLinks")) {
                     return;
@@ -1060,14 +1075,14 @@
                     <div class="technical-poster-card">
                         <p class="technical-poster-eyebrow">Appendix Poster</p>
                         <img src="${escapeHTML(project.poster || 'https://via.placeholder.com/400x600?text=No+Poster')}" alt="${escapeHTML(posterAlt)}" class="technical-poster-image">
-                        ${project.posterPdf ? `<a href="${escapeHTML(project.posterPdf)}" class="btn-cta btn-cta-demo technical-poster-button" target="_blank" rel="noopener noreferrer">Download Poster PDF</a>` : ""}
+                        ${renderPosterLink("btn-cta btn-cta-demo technical-poster-button")}
                     </div>
                 `;
             }
             return "";
         })();
 
-        const snapshotStripHTML = templateId === "poster_showcase" && snapshotItems.length > 0 && elevatedMedia !== "snapshots"
+        const snapshotStripHTML = templateId === "poster_showcase" && canShowSnapshots && elevatedMedia !== "snapshots"
             ? `
                 <div class="exhibition-strip">
                     <div>
@@ -1176,7 +1191,7 @@
                             <h1>${escapeHTML(project.title)}</h1>
                             ${renderMetadataChips(false)}
                             ${project.summary ? `<p class="lead-summary section-text">${escapeHTML(project.summary)}</p>` : ""}
-                            ${!isHidden("posterPdf") && project.posterPdf ? `<a href="${escapeHTML(project.posterPdf)}" class="poster-download" target="_blank" rel="noopener noreferrer">Download Poster PDF</a>` : (!isHidden("poster") && project.poster ? `<a href="${escapeHTML(project.poster)}" class="poster-download" target="_blank" rel="noopener noreferrer">View Poster</a>` : "")}
+                            ${renderPosterLink("poster-download")}
                         </div>
                     </div>
                     ${snapshotStripHTML}
