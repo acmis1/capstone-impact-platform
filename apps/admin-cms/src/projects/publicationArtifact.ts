@@ -29,7 +29,7 @@ export interface PublicationMediaSource {
   mimeType: string;
   fileSizeBytes: number;
   isPublicApproved: boolean;
-  /** Authoritative staff-authored text alternative; null for assets that carry none. */
+  /** Authoritative project-team-authored text alternative; null for assets that carry none. */
   altTextPublic: string | null;
   /**
    * Declared text-equivalent contract for a snapshot image. Null classification means the

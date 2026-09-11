@@ -554,7 +554,7 @@ describe('staff-facing availability', () => {
     );
     expect(availability.state).toBe('BUDGET_REACHED');
     expect(availability.canEnqueue).toBe(false);
-    expect(availability.message).toMatch(/continue reviewing and editing project information manually/);
+    expect(availability.message).toMatch(/requesting corrected project-team packages through the normal workflow/);
   });
 
   it.each([

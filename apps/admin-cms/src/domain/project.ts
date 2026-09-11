@@ -26,7 +26,7 @@ export interface ValidationFlagRecord {
 /**
  * One public snapshot image paired with the text alternative that describes it. Both values are
  * public-safe by construction: the URL is the promoted public object and the alt text is the
- * staff-authored description carried through from the media asset.
+ * project-team-authored description carried through from the media asset.
  */
 export interface PublicSnapshotMedia extends Partial<PublicSnapshotTextEquivalent> {
   url: string;
@@ -77,7 +77,7 @@ export interface Project {
   accessibilityText: string; // Public-safe accessibility description text
   snapshots: string[]; // Array of public snapshot image URLs
   /**
-   * The same public snapshot URLs as `snapshots`, each paired with its authoritative staff-authored
+   * The same public snapshot URLs as `snapshots`, each paired with its authoritative project-team-authored
    * text alternative. Structured pairing rather than a parallel `snapshotAltTexts` array, because
    * two independent arrays can silently drift out of order and publish an image with someone else's
    * description.

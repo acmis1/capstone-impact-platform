@@ -98,7 +98,7 @@ Standard Project Package / Excel
 *   **Approved-Only Public Feed**: Stripping administrative metadata and updating the stable JSON feed.
 *   **Search & Dynamic Filters**: Repository public-renderer search plus metadata filtering (Year, Program, Discipline, Industry) is implemented and tested; the authorized Duda TEST configuration passed bounded synthetic acceptance, while production/live cutover remains pending.
 *   **Archive/Unpublish Flows**: Safe archival of database records and removal of projects from the public feed.
-*   **Measurement Metrics**: Demonstrating at least a **50% publishing time or manpower reduction** compared to manual Duda page creation.
+*   **Measurement Metrics**: Demonstrating, on the same comparable cohort, at least a **50% end-to-end elapsed publishing-time reduction and at least a 50% human-manpower reduction measured in total person-hours** compared with the current manual workflow. Both independent thresholds must pass; neither result may compensate for the other. The [manual efficiency instrument](templates/release-evaluation-manual-efficiency.md) is currently unfilled, so BRIEF-SC01 remains `NOT MEASURED`.
 
 ### B. Optional Capabilities
 *   **Community Voting**: Public participant voting or feedback modules (Voting must remain optional and outside the critical publishing path).

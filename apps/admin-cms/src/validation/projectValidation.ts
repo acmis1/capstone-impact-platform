@@ -140,8 +140,8 @@ export function validateProjectForApproval(
 
   // Accessible poster content blocks approval, whether it is absent or beyond its bounded ceiling.
   // The published page must carry a full text version of its poster and a text alternative for the
-  // poster image; both are staff-authored or imported, and the metadata editor is the correction
-  // path in either direction. Oversized content is never downgraded to a warning.
+  // poster image; both are project-team-authored package content, and exact correction-package
+  // acceptance is the correction path in either direction. Oversized content is never downgraded to a warning.
   for (const field of ['posterText', 'accessibilityText'] as const) {
     const problem = getAccessibleContentProblem(project[field], field);
     if (problem) {

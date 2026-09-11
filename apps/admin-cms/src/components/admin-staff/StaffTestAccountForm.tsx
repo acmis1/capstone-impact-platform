@@ -28,7 +28,7 @@ const ROLE_LABELS: Record<StaffTestAccountRole, string> = {
 };
 const ROLE_DESCRIPTIONS: Record<StaffTestAccountRole, string> = {
   reviewer: 'Can read projects and complete review decisions.',
-  editor: 'Can read and edit project metadata and import projects.',
+  editor: 'Can import and submit projects and manage supported correction packages.',
 };
 
 export interface StaffTestAccountFormProps {

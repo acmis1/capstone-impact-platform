@@ -23,7 +23,7 @@ export interface ExpectedBrowserImportMediaFile {
    * Text alternative for a `snapshot_image`, derived here from the server-reparsed package manifest
    * and never from anything the browser sends. `null` for every other asset type, and for a legacy
    * `project.json` snapshot whose manifest carries no alt text — that row is registered with a NULL
-   * alt and held by the downstream workflow gates until staff supply one.
+   * alt and held by the downstream workflow gates until an accepted corrected package supplies one.
    *
    * The poster image keeps its project-level `accessibilityText`; it is deliberately not duplicated
    * onto the media asset.

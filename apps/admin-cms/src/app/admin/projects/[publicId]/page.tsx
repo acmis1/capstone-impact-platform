@@ -612,8 +612,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 icon={FileText}
               >
                 <p role="status" className="text-sm text-muted-foreground">
-                  Project metadata editing is temporarily unavailable. The read-only project content below
-                  remains visible.
+                  Project information details are temporarily unavailable. The read-only project content below remains visible; request a corrected project-team package rather than editing participant-owned content.
                 </p>
               </ProjectReviewSection>
             )}

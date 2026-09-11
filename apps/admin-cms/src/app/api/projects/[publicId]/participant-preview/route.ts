@@ -289,7 +289,7 @@ function handleParticipantPreviewError(error: unknown, actionLabel: 'Generate' |
         );
       case 'MEDIA_ACCESSIBILITY_REQUIRED':
         return NextResponse.json(
-          { success: false, error: 'The snapshot image needs alt text before a participant preview can be generated. Request changes, add it in the project media section, then approve again.', code: 'MEDIA_ACCESSIBILITY_REQUIRED' },
+          { success: false, error: 'The snapshot image needs project-team-authored alt text before a participant preview can be generated. Request changes, obtain and accept a complete corrected package, then approve again.', code: 'MEDIA_ACCESSIBILITY_REQUIRED' },
           { status: 409, headers: NO_STORE }
         );
       case 'PUBLICATION_IN_PROGRESS':

@@ -36,7 +36,7 @@ const UNAVAILABLE_MESSAGE =
   'Assistive checks are temporarily unavailable because the processing worker is not ready.';
 const BUDGET_MESSAGE =
   'Assistive checks have reached their processing limit for now. You can continue reviewing and '
-  + 'editing project information manually.';
+  + 'requesting corrected project-team packages through the normal workflow.';
 
 function unavailable(): AssistiveExecutionAvailability {
   return { state: 'TEMPORARILY_UNAVAILABLE', canEnqueue: false, message: UNAVAILABLE_MESSAGE };

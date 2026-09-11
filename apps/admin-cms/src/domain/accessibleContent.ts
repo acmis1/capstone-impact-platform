@@ -5,9 +5,9 @@
  * poster. `accessibilityText` is the concise descriptive text alternative/context for the poster
  * image. The two serve different purposes and are deliberately never required to match.
  *
- * These values are staff-authored or imported from the project workbook. Nothing in this codebase
- * generates them — no OCR, no AI, no derivation from other fields. Future OCR assistance may only
- * ever populate a draft suggestion for staff to accept; it must never become publication authority.
+ * These values are project-team-authored and imported from an accepted project package. Assistive OCR
+ * and language checks may produce non-authoritative review evidence, but they never generate or
+ * silently replace these accepted values and can never become publication authority.
  */
 
 /**

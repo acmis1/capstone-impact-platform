@@ -19,7 +19,7 @@ export interface MediaAsset {
   fileSizeBytes?: number;
   isPublicApproved: boolean;
   /**
-   * Staff-authored text alternative for this asset, or null when it has none.
+   * Project-team-authored text alternative for this asset, or null when it has none.
    *
    * Required for `snapshot_image` before the project may progress through review, approval,
    * participant preview or publication. Null is correct for `poster_pdf`, and for `poster_image`
