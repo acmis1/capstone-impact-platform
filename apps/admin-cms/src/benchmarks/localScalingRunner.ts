@@ -28,6 +28,7 @@ import {
   adaptSyntheticProjectForDb,
   createDeterministicStoragePayload,
   scopeSyntheticTaxonomyName,
+  SYNTHETIC_SECONDARY_INDUSTRY,
 } from './localScalingFixtureAdapter';
 
 export interface LocalScalingRunnerOptions {
@@ -295,6 +296,18 @@ function assertScopedProjects(result: ProjectListResult, expectedIds: Set<string
   assertCondition(new Set(projectIds).size === projectIds.length, `${label} returned duplicate parent projects`);
 }
 
+function assertExactProjectIds(result: ProjectListResult, expected: Project[], label: string): void {
+  const expectedIds = expected.map((project) => project.publicId).filter(Boolean);
+  const actualIds = result.projects.map((project) => project.publicId).filter(Boolean);
+  const expectedSet = new Set(expectedIds);
+  assertCondition(
+    actualIds.length === expectedIds.length
+      && new Set(actualIds).size === expectedSet.size
+      && actualIds.every((id) => expectedSet.has(id)),
+    `${label} returned an unexpected parent identity set`,
+  );
+}
+
 export function assertSorted(
   projects: Project[],
   value: (project: Project) => string | number,
@@ -353,11 +366,14 @@ export function assertFilterOptions(
   postSeed: ProjectFilterOptions,
   syntheticProjects: Project[],
 ): void {
+  const industryValues = syntheticProjects.flatMap((project) =>
+    (project as Project & { taxonomyIndustryNames?: string[] }).taxonomyIndustryNames || [project.industry],
+  );
   const checks: Array<[keyof ProjectFilterOptions, string[]]> = [
     ['years', syntheticProjects.map((project) => project.year)],
     ['programs', syntheticProjects.map((project) => project.program)],
     ['disciplines', syntheticProjects.map((project) => project.discipline)],
-    ['industries', syntheticProjects.map((project) => project.industry)],
+    ['industries', industryValues],
   ];
   for (const [key, expectedSyntheticValues] of checks) {
     const postValues = new Set(postSeed[key]);
@@ -717,6 +733,7 @@ export async function runLocalScalingVerification(
       discipline: String(adapted[index].projectRow.discipline || ''),
       disciplines: adapted[index].taxonomyMappingIntents.disciplineNames,
       industry: String(adapted[index].projectRow.industry || ''),
+      taxonomyIndustryNames: adapted[index].taxonomyMappingIntents.industryCategoryNames,
     }));
     const expectedIds = new Set(scopedSyntheticProjects.map((project) => project.publicId as string));
     syntheticPublishedProjects = scopedSyntheticProjects.filter((project) => project.status === 'published').length;
@@ -795,6 +812,7 @@ export async function runLocalScalingVerification(
     const primaryDiscipline = scopeSyntheticTaxonomyName(runPrefix, 'discipline', 'Synthetic Software Engineering');
     const secondaryDiscipline = scopeSyntheticTaxonomyName(runPrefix, 'discipline', 'Synthetic Cross-Discipline');
     const technologyIndustry = scopeSyntheticTaxonomyName(runPrefix, 'industry', 'Synthetic Technology');
+    const secondaryIndustry = scopeSyntheticTaxonomyName(runPrefix, 'industry', SYNTHETIC_SECONDARY_INDUSTRY);
     let feedProjects: Project[] = [];
     let compiledFeed = compilePublicFeed([]);
 
@@ -889,23 +907,34 @@ export async function runLocalScalingVerification(
         search: runPrefix,
         pageSize: 10,
       }, (result) => {
-        const expected = scopedSyntheticProjects.filter((project) => project.industry === technologyIndustry);
+        const expected = scopedSyntheticProjects.filter((project) => project.taxonomyIndustryNames.includes(technologyIndustry));
         assertCondition(result.total === expected.length && result.projects.every((project) => project.industry === technologyIndustry), 'industry filtering was incorrect');
         assertScopedProjects(result, expectedIds, 'industry filter');
       }),
-      pageOperation('Filter (Discipline + Industry Intersection)', 'filtering', {
-        discipline: primaryDiscipline,
-        industry: technologyIndustry,
+      pageOperation('Filter (Secondary Industry)', 'filtering', {
+        industry: secondaryIndustry,
         search: runPrefix,
         pageSize: 10,
       }, (result) => {
-        const expected = scopedSyntheticProjects.filter((project) => project.disciplines.includes(primaryDiscipline) && project.industry === technologyIndustry);
+        const expected = scopedSyntheticProjects.filter((project) => project.taxonomyIndustryNames.includes(secondaryIndustry));
+        assertCondition(expected.length > 0 && result.total === expected.length, 'secondary industry filtering count was incorrect');
+        assertExactProjectIds(result, expected, 'secondary industry filter');
+        assertScopedProjects(result, expectedIds, 'secondary industry filter');
+      }),
+      pageOperation('Filter (Discipline + Industry Intersection)', 'filtering', {
+        discipline: secondaryDiscipline,
+        industry: secondaryIndustry,
+        search: runPrefix,
+        pageSize: 10,
+      }, (result) => {
+        const expected = scopedSyntheticProjects.filter((project) => project.disciplines.includes(secondaryDiscipline) && project.taxonomyIndustryNames.includes(secondaryIndustry));
         assertCondition(
           expected.length > 0
             && result.total === expected.length
-            && result.projects.every((project) => project.disciplines.includes(primaryDiscipline) && project.industry === technologyIndustry),
+            && result.projects.every((project) => project.disciplines.includes(secondaryDiscipline)),
           'discipline/industry intersection filtering was incorrect',
         );
+        assertExactProjectIds(result, expected, 'discipline/industry intersection filter');
         assertScopedProjects(result, expectedIds, 'discipline/industry intersection filter');
       }),
       pageOperation('Sort (Created At Descending)', 'sorting', { search: runPrefix, sort: 'created_at', direction: 'desc', pageSize: 10 }, (result) => {

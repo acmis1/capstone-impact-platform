@@ -13,6 +13,8 @@ export interface AdaptedProjectDbRecord {
 
 export type SyntheticTaxonomyKind = 'discipline' | 'industry';
 
+export const SYNTHETIC_SECONDARY_INDUSTRY = 'Synthetic Cross-Industry';
+
 /**
  * Gives every local scaling run an isolated taxonomy namespace. The name-based intent keeps
  * database IDs out of the domain fixture while making concurrent runs safe under catalogue
@@ -54,7 +56,12 @@ export function adaptSyntheticProjectForDb(
   const disciplineNames = [...new Set((project.disciplines.length > 0 ? project.disciplines : [project.discipline]).filter(Boolean))]
     .map((name) => scopeSyntheticTaxonomyName(runPrefix, 'discipline', name));
   const industryCategoryNames = project.industry
-    ? [scopeSyntheticTaxonomyName(runPrefix, 'industry', project.industry)]
+    ? [
+      scopeSyntheticTaxonomyName(runPrefix, 'industry', project.industry),
+      ...(project.publicId?.endsWith('-0001')
+        ? [scopeSyntheticTaxonomyName(runPrefix, 'industry', SYNTHETIC_SECONDARY_INDUSTRY)]
+        : []),
+    ]
     : [];
 
   const projectRow: Record<string, unknown> = {

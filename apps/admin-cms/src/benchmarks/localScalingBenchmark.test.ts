@@ -16,6 +16,7 @@ import {
   adaptSyntheticProjectForDb,
   createDeterministicStoragePayload,
   scopeSyntheticTaxonomyName,
+  SYNTHETIC_SECONDARY_INDUSTRY,
 } from './localScalingFixtureAdapter';
 import { parseCliArgs } from '../scripts/benchmarkLocalScaling';
 import { generateSyntheticProjects } from '../fixtures/syntheticProjects';
@@ -204,6 +205,12 @@ describe('Local Scaling Fixture Adapter & Storage Payloads', () => {
     );
     expect(adapted.taxonomyMappingIntents.industryCategoryNames).toEqual([
       scopeSyntheticTaxonomyName(runPrefix, 'industry', project.industry),
+      scopeSyntheticTaxonomyName(runPrefix, 'industry', SYNTHETIC_SECONDARY_INDUSTRY),
+    ]);
+    const [, secondProject] = generateSyntheticProjects({ count: 100 });
+    const secondAdapted = adaptSyntheticProjectForDb(secondProject, runPrefix);
+    expect(secondAdapted.taxonomyMappingIntents.industryCategoryNames).toEqual([
+      scopeSyntheticTaxonomyName(runPrefix, 'industry', secondProject.industry),
     ]);
     expect(adapted.projectRow.discipline).toBe(adapted.taxonomyMappingIntents.disciplineNames[0]);
     expect(adapted.projectRow.industry).toBe(adapted.taxonomyMappingIntents.industryCategoryNames[0]);
