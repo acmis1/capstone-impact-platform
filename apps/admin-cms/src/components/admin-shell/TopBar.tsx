@@ -31,11 +31,12 @@ export interface UserSummaryProps {
   email?: string | null;
   roles?: string[];
   canManageStaff?: boolean;
+  canManageTaxonomy?: boolean;
   environment?: 'staging' | 'production';
   logoutAction: () => Promise<void>;
 }
 
-export function TopBar({ displayName, email, roles = [], canManageStaff = false, environment = 'staging', logoutAction }: UserSummaryProps) {
+export function TopBar({ displayName, email, roles = [], canManageStaff = false, canManageTaxonomy = false, environment = 'staging', logoutAction }: UserSummaryProps) {
   const pathname = usePathname() || '/admin';
   const descriptor = getRouteDescriptor(pathname);
   const hasNavigableBreadcrumb = descriptor.breadcrumbs.some((item) => item.href);
@@ -66,7 +67,7 @@ export function TopBar({ displayName, email, roles = [], canManageStaff = false,
                 Main navigation drawer for administrative sections.
               </SheetDescription>
             </SheetHeader>
-            <SidebarNav onNavClick={() => setMobileOpen(false)} canManageStaff={canManageStaff} />
+            <SidebarNav onNavClick={() => setMobileOpen(false)} canManageStaff={canManageStaff} canManageTaxonomy={canManageTaxonomy} />
           </SheetContent>
         </Sheet>
 

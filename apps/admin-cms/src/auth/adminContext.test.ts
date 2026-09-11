@@ -71,6 +71,7 @@ describe('resolveAdminContextFromAuthUser', () => {
         'projects.edit',
         'projects.publish',
         'staff.manage',
+        'taxonomy.manage',
       ],
     });
   });

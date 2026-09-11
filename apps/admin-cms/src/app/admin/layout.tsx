@@ -1,6 +1,6 @@
 import React from 'react';
 import { requireAdmin } from '../../auth/requireAdmin';
-import { canManageStaff } from '../../auth/permissions';
+import { canManageStaff, canManageTaxonomy } from '../../auth/permissions';
 import { logoutAction } from '../login/actions';
 import { redirect } from 'next/navigation';
 import { AdminAuthError } from '../../auth/authTypes';
@@ -67,6 +67,7 @@ export default async function AdminLayout({
       email={adminContext.email}
       roles={adminContext.roles}
       canManageStaff={canManageStaff(adminContext.permissions)}
+      canManageTaxonomy={canManageTaxonomy(adminContext.permissions)}
       environment={isProductionRuntimeEnvironment() ? 'production' : 'staging'}
       logoutAction={logoutAction}
     >
