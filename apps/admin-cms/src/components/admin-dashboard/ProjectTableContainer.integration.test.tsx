@@ -322,7 +322,9 @@ describe('ProjectTableContainer preference integration', () => {
       publicId: `release-ui-${String(index + 1).padStart(3, '0')}`,
       title: `Synthetic UI project ${index + 1}`,
     }));
-    renderTable('', { rows, total: 120, page: 1, pageSize: 50, pageCount: 3 });
+    renderTable('discipline=Artificial%20Intelligence&industry=Technology&pageSize=50', { rows, total: 120, page: 1, pageSize: 50, pageCount: 3 });
+
+    expect(screen.getByRole('navigation', { name: 'Project results pages' }).textContent).toContain('Page 1 of 3');
 
     fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select current page' }))[0]);
 
@@ -460,6 +462,7 @@ describe('ProjectTableContainer preference integration', () => {
   it.each([
     ['search', 'q=atlas'],
     ['filter', 'status=approved'],
+    ['industry filter', 'industry=Healthcare'],
     ['sort', 'sort=title&direction=asc'],
     ['page size', 'pageSize=25'],
   ])('clears selection when the %s query scope changes', async (_label, nextSearch) => {

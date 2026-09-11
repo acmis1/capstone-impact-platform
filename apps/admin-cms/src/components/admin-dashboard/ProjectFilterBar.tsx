@@ -34,6 +34,7 @@ const PREFERENCE_QUERY_KEYS = [
   'year',
   'program',
   'discipline',
+  'industry',
   'pageSize',
   'sort',
   'direction',
@@ -41,13 +42,14 @@ const PREFERENCE_QUERY_KEYS = [
 
 type PreferenceQueryKey = (typeof PREFERENCE_QUERY_KEYS)[number];
 
-type FilterKey = 'status' | 'year' | 'program' | 'discipline';
+type FilterKey = 'status' | 'year' | 'program' | 'discipline' | 'industry';
 
 const FILTER_LABELS: Record<FilterKey, string> = {
   status: 'Status',
   year: 'Year',
   program: 'Program',
   discipline: 'Discipline',
+  industry: 'Industry',
 };
 
 export interface ProjectFilterBarProps {
@@ -55,6 +57,7 @@ export interface ProjectFilterBarProps {
   availableYears: string[];
   availablePrograms: string[];
   availableDisciplines: string[];
+  availableIndustries: string[];
 }
 
 function navigationHref(pathname: string, params: URLSearchParams): string {
@@ -77,6 +80,7 @@ function hasValidExplicitValue(
       return value !== null && /^\d{4}$/.test(value.trim());
     case 'program':
     case 'discipline':
+    case 'industry':
       return value !== null && Boolean(value.trim());
     case 'pageSize':
       return isPageSize(value);
@@ -92,6 +96,7 @@ export function ProjectFilterBar({
   availableYears,
   availablePrograms,
   availableDisciplines,
+  availableIndustries,
 }: ProjectFilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -117,7 +122,7 @@ export function ProjectFilterBar({
     const preferenceRepairs: Partial<typeof preferences> = {};
 
     const storedFilterIsAvailable = (
-      key: 'year' | 'program' | 'discipline',
+      key: 'year' | 'program' | 'discipline' | 'industry',
       value: string,
     ) => {
       if (!value) return true;
@@ -125,7 +130,9 @@ export function ProjectFilterBar({
         ? availableYears
         : key === 'program'
           ? availablePrograms
-          : availableDisciplines;
+          : key === 'discipline'
+            ? availableDisciplines
+            : availableIndustries;
       return options.includes(value);
     };
 
@@ -139,7 +146,7 @@ export function ProjectFilterBar({
         if (!hasValidExplicitValue(key, explicitValue)) {
           // Canonicalize malformed explicit values to a safe explicit value.
           // This ensures an old stored value never takes authority on the next render.
-          params.set(key, key === 'status' || key === 'year' || key === 'program' || key === 'discipline'
+          params.set(key, key === 'status' || key === 'year' || key === 'program' || key === 'discipline' || key === 'industry'
             ? ''
             : String(defaultValue));
         }
@@ -147,7 +154,7 @@ export function ProjectFilterBar({
       }
 
       if (
-        (key === 'year' || key === 'program' || key === 'discipline') &&
+        (key === 'year' || key === 'program' || key === 'discipline' || key === 'industry') &&
         !storedFilterIsAvailable(key, String(storedValue))
       ) {
         preferenceRepairs[key] = '';
@@ -165,6 +172,7 @@ export function ProjectFilterBar({
     applyStoredOrExplicit('year', preferences.year, '');
     applyStoredOrExplicit('program', preferences.program, '');
     applyStoredOrExplicit('discipline', preferences.discipline, '');
+    applyStoredOrExplicit('industry', preferences.industry, '');
     applyStoredOrExplicit('pageSize', preferences.pageSize, 10);
     applyStoredOrExplicit('sort', preferences.sort, 'created_at');
     applyStoredOrExplicit('direction', preferences.direction, 'desc');
@@ -178,6 +186,7 @@ export function ProjectFilterBar({
     }
   }, [
     availableDisciplines,
+    availableIndustries,
     availablePrograms,
     availableYears,
     isLoaded,
@@ -212,6 +221,8 @@ export function ProjectFilterBar({
       updatePreferences({ program: value });
     } else if (key === 'discipline') {
       updatePreferences({ discipline: value });
+    } else if (key === 'industry') {
+      updatePreferences({ industry: value });
     } else if (key === 'pageSize' && isPageSize(value)) {
       updatePreferences({ pageSize: Number(value) as PageSizeOption });
     } else {
@@ -252,6 +263,9 @@ export function ProjectFilterBar({
   }
   if (query.discipline) {
     activeFilters.push({ key: 'discipline', value: query.discipline, display: query.discipline });
+  }
+  if (query.industry) {
+    activeFilters.push({ key: 'industry', value: query.industry, display: query.industry });
   }
 
   const hasActiveFilters = Boolean(query.search) || activeFilters.length > 0;
@@ -325,7 +339,7 @@ export function ProjectFilterBar({
           <div
             id="project-filter-controls"
             className={cn(
-              'grid gap-3 sm:grid-cols-2 lg:grid-cols-4',
+              'grid gap-3 sm:grid-cols-2 lg:grid-cols-5',
               !filtersExpanded && 'hidden md:grid'
             )}
           >
@@ -377,6 +391,18 @@ export function ProjectFilterBar({
               <option value="">All disciplines</option>
               {availableDisciplines.map((discipline) => (
                 <option key={discipline} value={discipline}>{discipline}</option>
+              ))}
+            </FilterSelect>
+            <FilterSelect
+              id="filter-industry"
+              label="Industry"
+              value={query.industry || ''}
+              onChange={(value) => handleFilterChange('industry', value)}
+              disabled={bulkReviewBusy}
+            >
+              <option value="">All industries</option>
+              {availableIndustries.map((industry) => (
+                <option key={industry} value={industry}>{industry}</option>
               ))}
             </FilterSelect>
           </div>

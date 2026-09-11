@@ -63,7 +63,7 @@ export interface ProjectRepository {
   getProjectDashboardMetrics(): Promise<ProjectDashboardMetrics>;
 
   /**
-   * Retrieves lightweight, distinct filter options (years, programs, disciplines) across non-deleted records.
+   * Retrieves lightweight, distinct filter options (years, programs, disciplines, industries) across non-deleted records.
    */
   getProjectFilterOptions(): Promise<ProjectFilterOptions>;
 

@@ -97,7 +97,7 @@ describe('Local Scaling Benchmark Statistics & Utilities', () => {
         baselineStorageObjects: 0,
         baselineDashboard: { totalProjects: 4, publicEligible: 2, inReview: 1, archived: 0 },
         postSeedDashboard: { totalProjects: 104, publicEligible: 27, inReview: 14, archived: 12 },
-        baselineFilterOptions: { years: ['2025'], programs: ['Baseline'], disciplines: ['Baseline'] },
+        baselineFilterOptions: { years: ['2025'], programs: ['Baseline'], disciplines: ['Baseline'], industries: ['Baseline'] },
       },
       seeding: {
         projectCount: 100,
@@ -412,11 +412,12 @@ describe('Local scaling correctness gates', () => {
   });
 
   it('requires every baseline and synthetic filter option after seeding', () => {
-    const baseline = { years: ['2021'], programs: ['Baseline Program'], disciplines: ['Baseline Discipline'] };
+    const baseline = { years: ['2021'], programs: ['Baseline Program'], disciplines: ['Baseline Discipline'], industries: ['Baseline Industry'] };
     const postSeed = {
       years: [...baseline.years, ...new Set(projects.map((project) => project.year))],
       programs: [...baseline.programs, ...new Set(projects.map((project) => project.program))],
       disciplines: [...baseline.disciplines, ...new Set(projects.map((project) => project.discipline))],
+      industries: [...baseline.industries, ...new Set(projects.map((project) => project.industry))],
     };
     expect(() => assertFilterOptions(baseline, postSeed, projects)).not.toThrow();
     expect(() => assertFilterOptions(baseline, { ...postSeed, years: postSeed.years.filter((year) => year !== '2026') }, projects)).toThrow();

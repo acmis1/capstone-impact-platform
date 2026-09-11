@@ -39,6 +39,7 @@ export const DEFAULT_DASHBOARD_PREFERENCES: DashboardPreferences = {
   program: '',
   discipline: '',
   year: '',
+  industry: '',
 };
 
 export interface DashboardPreferences {
@@ -50,6 +51,7 @@ export interface DashboardPreferences {
   program: string;
   discipline: string;
   year: string;
+  industry: string;
 }
 
 const ALLOWED_PAGE_SIZES: PageSizeOption[] = [10, 25, 50];
@@ -181,6 +183,11 @@ export function validateDashboardPreferences(
       typeof raw.year === 'string' && /^\d{4}$/.test(raw.year)
         ? raw.year
         : DEFAULT_DASHBOARD_PREFERENCES.year,
+
+    industry:
+      typeof raw.industry === 'string'
+        ? raw.industry.slice(0, 100)
+        : DEFAULT_DASHBOARD_PREFERENCES.industry,
   };
 }
 

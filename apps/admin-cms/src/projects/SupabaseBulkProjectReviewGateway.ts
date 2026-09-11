@@ -34,7 +34,7 @@ const BULK_PROJECT_SELECT = `
   project_disciplines(discipline_id), project_industry_categories(industry_category_id)
 `;
 
-interface BulkProjectRow extends Omit<DatabaseProjectRow, 'import_batch_id' | 'media_assets'> {
+interface BulkProjectRow extends Omit<DatabaseProjectRow, 'import_batch_id' | 'media_assets' | 'project_industry_categories'> {
   program_id?: string | null;
   project_disciplines?: Array<{ discipline_id?: string; disciplines?: { name?: string } }>;
   project_industry_categories?: Array<{ industry_category_id: string }>;

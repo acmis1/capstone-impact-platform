@@ -264,6 +264,7 @@ export function assertFilterOptions(
     ['years', syntheticProjects.map((project) => project.year)],
     ['programs', syntheticProjects.map((project) => project.program)],
     ['disciplines', syntheticProjects.map((project) => project.discipline)],
+    ['industries', syntheticProjects.map((project) => project.industry)],
   ];
   for (const [key, expectedSyntheticValues] of checks) {
     const postValues = new Set(postSeed[key]);
@@ -388,7 +389,7 @@ export async function runLocalScalingVerification(
     inReview: 0,
     archived: 0,
   };
-  const emptyOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [] };
+  const emptyOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [], industries: [] };
   let baselineDashboard = emptyMetrics;
   let postSeedDashboard = emptyMetrics;
   let baselineFilterOptions = emptyOptions;

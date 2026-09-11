@@ -32,6 +32,7 @@ describe('dashboardPreferences', () => {
       program: 'Computer Science',
       discipline: 'Software Engineering',
       year: '2026',
+      industry: 'Technology',
       visibleColumns: ['title', 'status', 'year', 'actions'] as DashboardColumnId[],
     };
 
@@ -85,6 +86,17 @@ describe('dashboardPreferences', () => {
     expect(loadDashboardPreferences()).toEqual(
       DEFAULT_DASHBOARD_PREFERENCES,
     );
+  });
+
+  it('keeps version 1 preferences compatible when the industry filter was not stored', () => {
+    const legacyPreferences = { ...DEFAULT_DASHBOARD_PREFERENCES } as Partial<typeof DEFAULT_DASHBOARD_PREFERENCES>;
+    delete legacyPreferences.industry;
+    localStorage.setItem(
+      DASHBOARD_PREFERENCES_KEY,
+      JSON.stringify({ version: 1, preferences: legacyPreferences }),
+    );
+
+    expect(loadDashboardPreferences().industry).toBe('');
   });
 
   it('repairs invalid stored preference values', () => {

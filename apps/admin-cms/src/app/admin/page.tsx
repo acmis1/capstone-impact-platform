@@ -45,7 +45,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
   let result: ProjectListResult | null = null;
   let metrics: ProjectDashboardMetrics | null = null;
-  let filterOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [] };
+  let filterOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [], industries: [] };
   let loadError: boolean = false;
 
   // Authorization is the first gate, and it is authoritative for this page. The admin layout
@@ -119,7 +119,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     : null;
 
   const hasActiveFilters = Boolean(
-    query.search || query.status || query.year || query.program || query.discipline
+    query.search || query.status || query.year || query.program || query.discipline || query.industry
   );
 
   const resultContext = clientResult
@@ -179,6 +179,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 availableYears={filterOptions.years}
                 availablePrograms={filterOptions.programs}
                 availableDisciplines={filterOptions.disciplines}
+                availableIndustries={filterOptions.industries}
               />
 
               {clientResult.total === 0 ? (

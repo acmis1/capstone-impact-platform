@@ -85,7 +85,7 @@ describe('Admin projects page authorization boundary', () => {
       inReview: 0,
       archived: 0,
     });
-    mocks.getProjectFilterOptions.mockResolvedValue({ years: [], programs: [], disciplines: [] });
+    mocks.getProjectFilterOptions.mockResolvedValue({ years: [], programs: [], disciplines: [], industries: [] });
     mocks.getServerEnv.mockReturnValue({ supabaseUrl: 'http://127.0.0.1:54321' });
     mocks.resolvePublicationExecutionTarget.mockReturnValue('local');
     mocks.isStagingRuntimeEnvironment.mockReturnValue(false);

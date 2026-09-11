@@ -21,6 +21,22 @@ import {
 const PROJECT_WITH_RELATIONS_SELECT =
   '*, project_disciplines(disciplines(name)), media_assets(asset_type,gallery_position,public_url,alt_text_public,is_public_approved)';
 
+const DISCIPLINE_FILTER_SELECT =
+  'discipline_filter:project_disciplines!inner(disciplines!inner(name))';
+const INDUSTRY_FILTER_SELECT =
+  'industry_filter:project_industry_categories!inner(industry_categories!inner(name))';
+
+function projectSelectForQuery(query: ProjectListQuery): string {
+  const filterRelations = [
+    query.discipline ? DISCIPLINE_FILTER_SELECT : null,
+    query.industry ? INDUSTRY_FILTER_SELECT : null,
+  ].filter((value): value is string => value !== null);
+
+  return filterRelations.length > 0
+    ? `${PROJECT_WITH_RELATIONS_SELECT}, ${filterRelations.join(', ')}`
+    : PROJECT_WITH_RELATIONS_SELECT;
+}
+
 /** Maximum number of lightweight filter-option rows fetched per database round-trip. */
 const PROJECT_FILTER_OPTION_CHUNK_SIZE = 500;
 /** Safety limit to prevent an infinite pagination loop for filter options. */
@@ -71,6 +87,11 @@ export interface DatabaseProjectRow {
   updated_at?: string;
   project_disciplines?: Array<{
     disciplines?: {
+      name?: string;
+    };
+  }>;
+  project_industry_categories?: Array<{
+    industry_categories?: {
       name?: string;
     };
   }>;
@@ -298,7 +319,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
   private buildFilteredQuery(query: ProjectListQuery, selectOpts?: { count?: 'exact' }) {
     let dbQuery = this.supabase
       .from('projects')
-      .select(PROJECT_WITH_RELATIONS_SELECT, selectOpts)
+      .select(projectSelectForQuery(query), selectOpts)
       .is('deleted_at', null);
 
     // Apply search
@@ -331,7 +352,12 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
 
     // Apply discipline filter
     if (query.discipline) {
-      dbQuery = dbQuery.eq('discipline', query.discipline);
+      dbQuery = dbQuery.eq('discipline_filter.disciplines.name', query.discipline);
+    }
+
+    // Apply industry filter through the authoritative many-to-many mapping.
+    if (query.industry) {
+      dbQuery = dbQuery.eq('industry_filter.industry_categories.name', query.industry);
     }
 
     // Apply sort with deterministic public_id tie-breaker
@@ -381,7 +407,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
         throw new Error(`Failed to query clamped page from Supabase: ${clampedError.message}`);
       }
 
-      const clampedProjects = (clampedData || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
+      const clampedProjects = (clampedData || []).map((row) => this.mapDbToDomain(row as unknown as DatabaseProjectRow));
       return {
         projects: clampedProjects,
         total,
@@ -391,7 +417,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       };
     }
 
-    const projects = (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
+    const projects = (data || []).map((row) => this.mapDbToDomain(row as unknown as DatabaseProjectRow));
 
     return {
       projects,
@@ -451,6 +477,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     const yearsSet = new Set<string>();
     const programsSet = new Set<string>();
     const disciplinesSet = new Set<string>();
+    const industriesSet = new Set<string>();
 
     let iteration = 0;
     let offset = 0;
@@ -462,7 +489,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
 
       const { data, error } = await this.supabase
         .from('projects')
-        .select('year, program_name, discipline')
+        .select('year, program_name, project_disciplines(disciplines(name)), project_industry_categories(industry_categories(name))')
         .is('deleted_at', null)
         .order('id', { ascending: true })
         .range(from, to);
@@ -471,12 +498,24 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
         throw new Error('Failed to fetch project filter options');
       }
 
-      const rows = data || [];
+      const rows = (data || []) as unknown as Array<{
+        year?: number;
+        program_name?: string;
+        project_disciplines?: Array<{ disciplines?: { name?: string } }>;
+        project_industry_categories?: Array<{ industry_categories?: { name?: string } }>;
+      }>;
 
       for (const row of rows) {
         if (row.year) yearsSet.add(row.year.toString());
         if (row.program_name && row.program_name.trim()) programsSet.add(row.program_name.trim());
-        if (row.discipline && row.discipline.trim()) disciplinesSet.add(row.discipline.trim());
+        for (const mapping of row.project_disciplines || []) {
+          const name = mapping.disciplines?.name?.trim();
+          if (name) disciplinesSet.add(name);
+        }
+        for (const mapping of row.project_industry_categories || []) {
+          const name = mapping.industry_categories?.name?.trim();
+          if (name) industriesSet.add(name);
+        }
       }
 
       if (rows.length < PROJECT_FILTER_OPTION_CHUNK_SIZE) {
@@ -493,11 +532,13 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     const years = Array.from(yearsSet).sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
     const programs = Array.from(programsSet).sort((a, b) => a.localeCompare(b));
     const disciplines = Array.from(disciplinesSet).sort((a, b) => a.localeCompare(b));
+    const industries = Array.from(industriesSet).sort((a, b) => a.localeCompare(b));
 
     return {
       years,
       programs,
       disciplines,
+      industries,
     };
   }
 
