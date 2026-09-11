@@ -28,6 +28,14 @@ export const ACCESSIBLE_CONTENT_LIMITS = {
    * than a transcription and shares the same ceiling.
    */
   snapshotAltText: 2_000,
+  /**
+   * Full textual equivalent of one text-bearing snapshot image (a screenshot, slide, diagram,
+   * chart or infographic). A gallery image is screen-sized rather than poster-sized, so it
+   * transcribes well under this ceiling; ten of them must also fit, together with the poster text,
+   * inside the bounded participant-correction metadata document. Never a content-quality rule.
+   * Mirrored by the `media_assets` check constraint in Migration 0057.
+   */
+  snapshotFullText: 5_000,
 } as const;
 
 export type AccessibleContentField = keyof typeof ACCESSIBLE_CONTENT_LIMITS;
@@ -37,6 +45,7 @@ export const ACCESSIBLE_CONTENT_LABELS: Record<AccessibleContentField, string> =
   posterText: 'Poster full text',
   accessibilityText: 'Accessibility text',
   snapshotAltText: 'Snapshot image alt text',
+  snapshotFullText: 'Snapshot image full text',
 };
 
 /**

@@ -399,6 +399,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         // Taken from the server-reparsed package, never from the multipart request. The browser has
         // no field through which it could supply or override this value.
         snapshotAltText: expected.snapshotAltText,
+        snapshotContentKind: expected.snapshotContentKind,
+        snapshotFullText: expected.snapshotFullText,
         content: buf,
       });
     }

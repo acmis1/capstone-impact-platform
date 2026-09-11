@@ -154,11 +154,11 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
 
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(56);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(57);
 
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
-      // Migrations 0053-0056 are the only migrations added on this branch. Every historical
+      // Migrations 0053-0057 are the only migrations added on this branch. Every historical
       // migration must stay byte-identical to the verified origin/main base.
       const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
         (migration) => ![
@@ -166,6 +166,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
           '20260910120000_public_feed_rollback_capability.sql',
           '20260910120100_participant_preview_access_observations.sql',
           '20260910120200_assistive_worker_production_identity.sql',
+          '20260911120000_gallery_full_text_equivalents.sql',
         ].includes(migration),
       );
 

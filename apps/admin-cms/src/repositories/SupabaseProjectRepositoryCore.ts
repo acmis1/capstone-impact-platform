@@ -1,6 +1,11 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Project } from '../domain/project';
 import {
+  isSnapshotImageContentKind,
+  toPublicSnapshotTextEquivalent,
+  type PublicSnapshotTextEquivalent,
+} from '../domain/galleryTextEquivalent';
+import {
   ProjectListQuery,
   ProjectListResult,
   ProjectDashboardMetrics,
@@ -19,7 +24,7 @@ import {
  * bucket or draft path is ever read into a project the feed is compiled from.
  */
 const PROJECT_WITH_RELATIONS_SELECT =
-  '*, project_disciplines(disciplines(name)), media_assets(asset_type,gallery_position,public_url,alt_text_public,is_public_approved)';
+  '*, project_disciplines(disciplines(name)), media_assets(asset_type,gallery_position,public_url,alt_text_public,image_content_kind,full_text_public,is_public_approved)';
 
 const DISCIPLINE_FILTER_SELECT =
   'discipline_filter:project_disciplines!inner(disciplines!inner(name))';
@@ -105,6 +110,8 @@ export interface DatabaseProjectRow {
     gallery_position: number | null;
     public_url?: string | null;
     alt_text_public?: string | null;
+    image_content_kind?: string | null;
+    full_text_public?: string | null;
     is_public_approved?: boolean | null;
   }>;
 }
@@ -117,6 +124,13 @@ export interface DatabaseProjectRow {
  * with no matching media row, or a matching row with no alt text, is deliberately left out rather
  * than emitted with a fabricated description — the feed validator then reports that snapshot as
  * published without a text alternative instead of the record passing silently.
+ *
+ * The declared text-equivalent contract (`contentKind` / `fullText`) is carried when the row is
+ * classified. A row published before Migration 0057 carries neither key: that legacy shape stays
+ * readable so an already-deployed feed can still be recompiled for an unrelated removal or
+ * reconciliation, while the publication planner and the database readiness gates refuse to
+ * publish such media anew. A contradictory row (text-bearing with no full text) is left out
+ * exactly like a missing alt text, so the validator reports it rather than the feed passing.
  */
 function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
   const snapshots = row.snapshots || [];
@@ -130,6 +144,7 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
     {
       altText: string;
       galleryPosition: number;
+      textEquivalent: PublicSnapshotTextEquivalent | null;
     }
   >();
 
@@ -159,6 +174,11 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
         : '';
 
     const galleryPosition = asset.gallery_position;
+    const declared = asset.image_content_kind !== null && asset.image_content_kind !== undefined;
+    const textEquivalent = toPublicSnapshotTextEquivalent({
+      contentKind: isSnapshotImageContentKind(asset.image_content_kind) ? asset.image_content_kind : null,
+      fullText: asset.full_text_public ?? null,
+    });
 
     if (
       url === '' ||
@@ -167,7 +187,8 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
       typeof galleryPosition !== 'number' ||
       !Number.isInteger(galleryPosition) ||
       galleryPosition < 1 ||
-      galleryPosition > 10
+      galleryPosition > 10 ||
+      (declared && textEquivalent === null)
     ) {
       continue;
     }
@@ -175,6 +196,7 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
     mediaByUrl.set(url, {
       altText,
       galleryPosition,
+      textEquivalent,
     });
   }
 
@@ -187,6 +209,7 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
         url,
         altText: media.altText,
         galleryPosition: media.galleryPosition,
+        ...(media.textEquivalent ?? {}),
       };
     });
 }

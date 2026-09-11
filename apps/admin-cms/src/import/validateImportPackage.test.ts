@@ -161,6 +161,62 @@ describe('validateImportPackage', () => {
     ).toBe(false);
   });
 
+  it.each([
+    ['ordinary', { contentKind: 'ordinary' as const, fullText: null }],
+    ['text-bearing', { contentKind: 'text_bearing' as const, fullText: 'Synthetic chart: 12 accepted, 3 pending.' }],
+  ])('accepts a complete %s gallery declaration', (_label, declaration) => {
+    const altText = 'Synthetic gallery image description.';
+    const result = validateImportPackage(createMockParsedPackage({}, {
+      snapshotAltText: altText,
+      galleryAltTexts: [{ position: 1, altText, ...declaration }],
+    }), { metadataSource: 'xlsx' });
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it.each([
+    ['missing classification', { contentKind: null, fullText: null }, 'METADATA_MISSING_GALLERY_CONTENT_TYPE'],
+    ['missing text-bearing full text', { contentKind: 'text_bearing' as const, fullText: null }, 'METADATA_MISSING_GALLERY_FULL_TEXT'],
+    ['blank text-bearing full text', { contentKind: 'text_bearing' as const, fullText: '   ' }, 'METADATA_MISSING_GALLERY_FULL_TEXT'],
+    ['ordinary image with full text', { contentKind: 'ordinary' as const, fullText: 'Contradictory text.' }, 'METADATA_UNEXPECTED_GALLERY_FULL_TEXT'],
+    ['oversized full text', { contentKind: 'text_bearing' as const, fullText: 'x'.repeat(5001) }, 'METADATA_GALLERY_FULL_TEXT_TOO_LONG'],
+  ])('rejects a snapshot with %s', (_label, declaration, ruleCode) => {
+    const altText = 'Synthetic gallery image description.';
+    const result = validateImportPackage(createMockParsedPackage({}, {
+      snapshotAltText: altText,
+      galleryAltTexts: [{ position: 1, altText, ...declaration }],
+    }), { metadataSource: 'xlsx' });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual(expect.objectContaining({ ruleCode }));
+  });
+
+  it('does not require fake gallery accessibility content when no snapshot exists', () => {
+    const result = validateImportPackage(createMockParsedPackage({ galleryImages: [] }, {
+      snapshotAltText: '',
+      galleryAltTexts: [],
+    }), { metadataSource: 'xlsx' });
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('rejects a declaration at a position with no matching snapshot', () => {
+    const result = validateImportPackage(createMockParsedPackage({ galleryImages: [] }, {
+      galleryAltTexts: [{
+        position: 4,
+        altText: 'Unmatched declaration.',
+        contentKind: 'ordinary',
+        fullText: null,
+      }],
+    }), { metadataSource: 'xlsx' });
+
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      ruleCode: 'METADATA_UNMATCHED_GALLERY_ALT_TEXT',
+    }));
+  });
+
   it('rejects duplicate gallery positions', () => {
     const first = galleryFile(1);
     const duplicate = {
@@ -248,9 +304,14 @@ describe('validateImportPackage', () => {
       },
       {
         galleryAltTexts: [
-          { position: 1, altText: 'Overview of the project interface.' },
-          { position: 2, altText: 'Dashboard showing project results.' },
-          { position: 3, altText: 'Mobile view of the participant workflow.' },
+          { position: 1, altText: 'Overview of the project interface.', contentKind: 'ordinary', fullText: null },
+          {
+            position: 2,
+            altText: 'Dashboard showing project results.',
+            contentKind: 'text_bearing',
+            fullText: 'Results dashboard. Accuracy 94.2%. Latency 120 ms. Coverage: 3 of 3 pilot sites.',
+          },
+          { position: 3, altText: 'Mobile view of the participant workflow.', contentKind: 'ordinary', fullText: null },
         ],
       },
     );
@@ -368,7 +429,7 @@ describe('validateImportPackage', () => {
     expect(
       result.errors.some(
         (error) =>
-          error.ruleCode === 'METADATA_EMPTY_GALLERY_ALT_TEXT',
+          error.ruleCode === 'METADATA_MISSING_GALLERY_ALT_TEXT',
       ),
     ).toBe(true);
   });

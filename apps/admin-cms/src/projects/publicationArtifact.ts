@@ -7,6 +7,11 @@ import { serializePublicFeedArtifact } from '../feed/serializePublicFeedArtifact
 import { validatePublicFeed } from '../feed/validatePublicFeed';
 import { validateMediaAsset } from '../storage/mediaValidationCore';
 import { getAccessibleContentProblem } from '../domain/accessibleContent';
+import {
+  getSnapshotTextEquivalentProblem,
+  toPublicSnapshotTextEquivalent,
+  type SnapshotImageContentKind,
+} from '../domain/galleryTextEquivalent';
 
 export type PublicationMediaAssetType = 'poster_image' | 'poster_pdf' | 'snapshot_image';
 
@@ -26,6 +31,12 @@ export interface PublicationMediaSource {
   isPublicApproved: boolean;
   /** Authoritative staff-authored text alternative; null for assets that carry none. */
   altTextPublic: string | null;
+  /**
+   * Declared text-equivalent contract for a snapshot image. Null classification means the
+   * project team has not declared one, which the planner refuses to publish.
+   */
+  imageContentKind: SnapshotImageContentKind | null;
+  fullTextPublic: string | null;
 }
 
 export interface PublicationMediaPromotion {
@@ -45,6 +56,9 @@ export interface PublicationMediaPromotion {
    * produced, sorted and consumed as one unit and cannot drift apart.
    */
   altTextPublic: string | null;
+  /** Carried on the same object as the URL and alt text, for the same reason. */
+  imageContentKind: SnapshotImageContentKind | null;
+  fullTextPublic: string | null;
 }
 
 /**
@@ -192,6 +206,15 @@ export function planPublicationArtifact(params: {
     if (assetType === 'snapshot_image') {
       const problem = getAccessibleContentProblem(asset.altTextPublic, 'snapshotAltText');
       if (problem) throw new Error('Publication snapshot media is missing usable alt text.');
+      // The same applies to the text-equivalent contract. This is the TS-side counterpart of the
+      // database readiness gate: an unclassified (legacy) snapshot, or a text-bearing snapshot
+      // with no full text, gets no artifact rather than a public record that the brief's
+      // "full text version of all image content" requirement cannot be satisfied by.
+      const textProblem = getSnapshotTextEquivalentProblem({
+        contentKind: asset.imageContentKind,
+        fullText: asset.fullTextPublic,
+      });
+      if (textProblem) throw new Error('Publication snapshot media is missing its declared text equivalent.');
     }
     const publicPath = buildDeterministicPublicMediaPath(targetPublicId, assetType, asset.fileName);
     const publicUrl = getPublicUrl(publicBucket, publicPath);
@@ -220,6 +243,8 @@ export function planPublicationArtifact(params: {
       publicPath,
       publicUrl,
       altTextPublic: asset.altTextPublic,
+      imageContentKind: asset.imageContentKind,
+      fullTextPublic: asset.fullTextPublic,
     });
   }
 
@@ -267,6 +292,10 @@ export function planPublicationArtifact(params: {
         url: item.publicUrl,
         altText: item.altTextPublic ?? '',
         galleryPosition: item.galleryPosition!,
+        ...(toPublicSnapshotTextEquivalent({
+          contentKind: item.imageContentKind,
+          fullText: item.fullTextPublic,
+        }) ?? {}),
       })),
     };
   } else {

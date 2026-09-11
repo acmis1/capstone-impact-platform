@@ -22,7 +22,14 @@ export async function verifyPrePreviewPackageReplacementRuntime(client: Supabase
   };
   const rpc = (name: string, args: Record<string, unknown>) => data(client.rpc(name, args));
   const auth: AuthenticatedAdminContext = { adminUserId: adminId, authUserId: adminId, email: 'synthetic@example.invalid', fullName: 'Synthetic staff', roles: ['admin'], permissions: ['projects.edit', 'projects.review'] };
-  const workbookBytes = await correctionWorkbook({ title: 'Initial project-team title', discipline: `Software Engineering, ${obsoleteDiscipline}`, industry, snapshot2AltText: 'Original second supporting image.' });
+  const workbookBytes = await correctionWorkbook({
+    title: 'Initial project-team title',
+    discipline: `Software Engineering, ${obsoleteDiscipline}`,
+    industry,
+    snapshot2AltText: 'Original second supporting image.',
+    snapshot2ContentKind: 'Ordinary image',
+    snapshot2FullText: '',
+  });
   const files = [
     { name: 'project-details.xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', content: workbookBytes },
     { name: 'poster.png', mime: 'image/png', content: ORIGINAL_PNG },
@@ -48,7 +55,8 @@ export async function verifyPrePreviewPackageReplacementRuntime(client: Supabase
   const mediaStage = await stageBrowserImportMedia({ authContext: auth, batchId: staged.batchId, metadataIntentHash: intent.intent_hash,
     files: files.slice(1).map((f, i) => ({ packagePath: publicId, projectPublicId: publicId, assetType: i === 0 ? 'poster_image' : i === 1 ? 'poster_pdf' : 'snapshot_image',
       fileName: f.name, fileSizeBytes: f.content.length, canonicalMimeType: f.mime, galleryPosition: i < 2 ? null : i - 1,
-      snapshotAltText: i < 2 ? null : i === 2 ? 'Prototype on a bench.' : 'Original second supporting image.', content: f.content })),
+      snapshotAltText: i < 2 ? null : i === 2 ? 'Prototype on a bench.' : 'Original second supporting image.',
+      snapshotContentKind: i < 2 ? null : 'ordinary', snapshotFullText: null, content: f.content })),
   });
   assert.equal(mediaStage.success, true, 'Initial complete media import succeeds');
   const project = () => data(client.from('projects').select('*').eq('public_id', publicId).single());
@@ -68,8 +76,8 @@ export async function verifyPrePreviewPackageReplacementRuntime(client: Supabase
     p_package_hash: dismissalPackage.hash, p_metadata: dismissalPackage.metadata,
     p_validation_checks: dismissalPackage.validationChecks, p_warnings: dismissalPackage.warnings,
     p_bucket: 'participant-corrections-private',
-    p_files: dismissalPackage.files.map(({ role, position, fileName, mimeType, bytes, sha256, altText }) => ({
-      role, position, fileName, mimeType, bytes, sha256, altText,
+    p_files: dismissalPackage.files.map(({ role, position, fileName, mimeType, bytes, sha256, altText, contentKind, fullText }) => ({
+      role, position, fileName, mimeType, bytes, sha256, altText, contentKind, fullText,
       storageName: `${role}${position === null ? '' : `-${position}`}.${fileName.split('.').pop()!.toLowerCase()}`,
     })),
   });
@@ -177,7 +185,10 @@ export async function verifyPrePreviewPackageReplacementRuntime(client: Supabase
   for (const m of await media()) {
     const replacement = candidate.files.find((f) => f.role === m.asset_type && f.position === m.gallery_position)!;
     const bytes = await data(client.storage.from('project-drafts-private').download(m.storage_path));
-    assert.equal(correctionDigest(Buffer.from(await bytes.arrayBuffer())), replacement.sha256); assert.equal(m.alt_text_public, replacement.altText);
+    assert.equal(correctionDigest(Buffer.from(await bytes.arrayBuffer())), replacement.sha256);
+    assert.equal(m.alt_text_public, replacement.altText);
+    assert.equal(m.image_content_kind, replacement.contentKind);
+    assert.equal(m.full_text_public, replacement.fullText);
   }
   for (const m of oldMedia) assert.equal((await data(client.storage.from(m.storage_bucket).download(m.storage_path))).size, m.file_size_bytes);
   assert.equal((await data(client.from('project_disciplines').select('*').eq('project_id', initial.id))).length, 1);

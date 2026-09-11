@@ -317,6 +317,8 @@ function harnessDriver() {
       check(JSON.stringify(visibleCardTitles()) === JSON.stringify(['Zero Trust Learning Lab']), 'composed search matches canonically equivalent decomposed public text');
       setSearch('Group Alpha');
       check(JSON.stringify(visibleCardTitles()) === JSON.stringify(['Accessible Flood Response Dashboard']), 'group name search selects the expected project');
+      setSearch('moderate risk, 8 response units');
+      check(JSON.stringify(visibleCardTitles()) === JSON.stringify(['Accessible Flood Response Dashboard']), 'approved gallery full text participates in public search');
       setSearch('deterministic-no-match');
       check(document.querySelectorAll('.capstone-card').length === 0, 'no-match search renders no project cards');
       check(document.getElementById('capstone-project-grid')?.textContent.includes('No projects match the current search or filters.'), 'no-match search renders truthful empty copy');
@@ -373,6 +375,12 @@ function harnessDriver() {
       verifyPosterText(project);
       verifyRendererHeadingHierarchy();
       verifyRenderedSnapshotAlts(2);
+      const fullTextDisclosure = document.querySelector('.snapshot-text-disclosure[data-gallery-position="1"]');
+      const fullTextBody = fullTextDisclosure?.querySelector('.snapshot-text-content');
+      check(fullTextDisclosure?.tagName === 'DETAILS', 'text-bearing gallery full text uses a keyboard-operable native disclosure');
+      check(fullTextBody?.textContent === project.snapshotMedia[0].fullText, 'gallery full text is rendered as exact selectable HTML text');
+      check(fullTextBody?.getAttribute('aria-hidden') === null, 'gallery full text is not hidden from assistive technology');
+      check(!document.querySelector('alpha'), 'gallery full text angle brackets are escaped rather than parsed as markup');
       const opener = document.querySelector('.exhibition-strip button');
       opener.focus();
       opener.click();
@@ -391,8 +399,10 @@ function harnessDriver() {
       check(document.activeElement === closeButton, 'Tab wraps from the last to the first lightbox control');
       check(lightbox?.contains(document.activeElement), 'keyboard focus remains contained inside the open lightbox');
       check(document.getElementById('capstone-lightbox-img')?.alt === project.snapshotMedia[0].altText, 'lightbox uses the first governed alt text');
+      check(document.getElementById('capstone-lightbox-text')?.textContent === project.snapshotMedia[0].fullText, 'lightbox presents the first text-bearing full equivalent as text');
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
       check(document.getElementById('capstone-lightbox-img')?.alt === project.snapshotMedia[1].altText, 'lightbox navigation updates to the second governed alt text');
+      check(document.getElementById('capstone-lightbox-text')?.style.display === 'none', 'lightbox removes full text for the ordinary second image');
       check(document.querySelector('.capstone-lightbox-prev')?.getAttribute('aria-label') === 'Previous snapshot', 'lightbox previous control has an accessible name');
       check(document.querySelector('.capstone-lightbox-next')?.getAttribute('aria-label') === 'Next snapshot', 'lightbox next control has an accessible name');
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));

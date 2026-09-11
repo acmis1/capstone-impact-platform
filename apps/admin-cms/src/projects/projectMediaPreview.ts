@@ -14,6 +14,12 @@ import {
   describeAccessibleContentProblem,
   getSnapshotAltTextProblem,
 } from '../domain/accessibleContent';
+import {
+  describeSnapshotTextEquivalentProblem,
+  getSnapshotTextEquivalentProblem,
+  isSnapshotImageContentKind,
+  type SnapshotImageContentKind,
+} from '../domain/galleryTextEquivalent';
 
 export interface ProjectMediaAssetPreviewRow {
   id: string;
@@ -29,6 +35,8 @@ export interface ProjectMediaAssetPreviewRow {
   file_size_bytes: number | string | null;
   is_public_approved: boolean | null;
   alt_text_public: string | null;
+  image_content_kind?: string | null;
+  full_text_public?: string | null;
 }
 
 export interface ProjectMediaReviewData {
@@ -158,6 +166,8 @@ export function deriveApprovalMediaInput(
         assetType: 'snapshot_image',
       }),
       altText: row.alt_text_public,
+      imageContentKind: storedContentKind(row),
+      fullTextPublic: row.full_text_public ?? null,
     }))
     .sort(
       (a, b) =>
@@ -207,7 +217,21 @@ export function validateSubmissionSnapshotGallery(
     const message = describeAccessibleContentProblem(problem, 'snapshotAltText');
     if (!reasons.includes(message)) reasons.push(message);
   }
+  for (const snapshot of snapshots) {
+    const problem = getSnapshotTextEquivalentProblem({
+      contentKind: storedContentKind(snapshot),
+      fullText: snapshot.full_text_public ?? null,
+    });
+    if (!problem) continue;
+    const message = describeSnapshotTextEquivalentProblem(problem, snapshot.gallery_position);
+    if (!reasons.includes(message)) reasons.push(message);
+  }
   return reasons;
+}
+
+/** The stored classification, or null for anything that is not one of the two declared kinds. */
+function storedContentKind(row: Pick<ProjectMediaAssetPreviewRow, 'image_content_kind'>): SnapshotImageContentKind | null {
+  return isSnapshotImageContentKind(row.image_content_kind) ? row.image_content_kind : null;
 }
 
 /**
@@ -249,6 +273,12 @@ export async function toProjectMediaPreviewItem(
     mimeType: row.mime_type || 'application/octet-stream',
     fileSize: fileSizeBytes(row.file_size_bytes),
     altText: authoritativeAltText(row, params.accessibilityText),
+    ...(row.asset_type === 'snapshot_image'
+      ? {
+          contentKind: storedContentKind(row) ?? undefined,
+          fullText: row.full_text_public?.trim() || undefined,
+        }
+      : {}),
     previewSource: 'unavailable',
   };
 
@@ -302,7 +332,7 @@ export async function loadProjectMediaReviewData(params: {
   const privateBucket = params.privateBucket ?? getStagingBuckets().DRAFT_PRIVATE;
   const { data, error } = await params.supabase
     .from('media_assets')
-    .select('id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+    .select('id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public,image_content_kind,full_text_public')
     .eq('project_id', params.projectId)
     .order('id', { ascending: true });
 

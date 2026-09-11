@@ -189,7 +189,7 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
     const createFixture = async (
       suffix: string,
       status: string = 'in_review',
-      media: { posterImage?: boolean; posterPdf?: boolean; snapshotAltText?: string | null } = {},
+      media: { posterImage?: boolean; posterPdf?: boolean; snapshotAltText?: string | null; snapshotContentKind?: string | null; snapshotFullText?: string | null } = {},
     ) => {
       const publicId = `${testProjectPrefix}-${suffix}`;
       const { data, error } = await adminClient
@@ -241,6 +241,8 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
           public_url: null, public_storage_bucket: null, public_storage_path: null,
           mime_type: 'image/png', file_size_bytes: SYNTHETIC_PNG.length, is_public_approved: false,
           alt_text_public: media.snapshotAltText,
+          image_content_kind: media.snapshotContentKind === undefined ? 'ordinary' : media.snapshotContentKind,
+          full_text_public: media.snapshotFullText ?? null,
         });
       }
       if (mediaRows.length > 0) {
@@ -565,7 +567,7 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
     const t8Proj = await createFixture('t8', 'submitted', { snapshotAltText: 'Synthetic accessible snapshot.' });
     const { data: t8MediaBefore } = await adminClient
       .from('media_assets')
-      .select('id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+      .select('id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public,image_content_kind,full_text_public')
       .eq('project_id', t8Proj.id)
       .order('asset_type');
     const t8Rows = t8MediaBefore ?? [];
@@ -627,6 +629,8 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
               row.public_storage_bucket === null &&
               row.public_storage_path === null,
             altText: row.alt_text_public,
+            imageContentKind: row.image_content_kind ?? null,
+            fullTextPublic: row.full_text_public ?? null,
           }))
           .sort(
             (a, b) =>
@@ -683,7 +687,7 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
       const { data: t8After } = await adminClient.from('projects').select('status,poster_url,poster_pdf_url').eq('id', t8Proj.id).single();
       const { data: t8MediaAfter } = await adminClient
         .from('media_assets')
-        .select('id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+        .select('id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public,image_content_kind,full_text_public')
         .eq('project_id', t8Proj.id)
         .order('asset_type');
       const { data: t8Audits } = await adminClient.from('approval_records').select('id,action_taken').eq('project_id', t8Proj.id);

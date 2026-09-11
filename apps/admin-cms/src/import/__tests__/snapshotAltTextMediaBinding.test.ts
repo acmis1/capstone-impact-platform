@@ -66,9 +66,19 @@ function resolve(manifest: Partial<ImportPackageManifest> | null) {
 
 describe('server-authoritative snapshot alt derivation', () => {
   it('takes the alt text from the reparsed package manifest', () => {
-    const snapshot = resolve({ snapshotAltText: VALID_ALT }).find((f) => f.assetType === 'snapshot_image');
+    const snapshot = resolve({
+      snapshotAltText: VALID_ALT,
+      galleryAltTexts: [{
+        position: 1,
+        altText: VALID_ALT,
+        contentKind: 'text_bearing',
+        fullText: 'Three active sensor feeds; all systems nominal.',
+      }],
+    }).find((f) => f.assetType === 'snapshot_image');
     expect(snapshot?.snapshotAltText).toBe(VALID_ALT);
     expect(snapshot?.galleryPosition).toBe(1);
+    expect(snapshot?.snapshotContentKind).toBe('text_bearing');
+    expect(snapshot?.snapshotFullText).toBe('Three active sensor feeds; all systems nominal.');
   });
 
   it('trims the derived value so what is staged is what gets persisted', () => {
@@ -82,6 +92,8 @@ describe('server-authoritative snapshot alt derivation', () => {
       expect(snapshot?.snapshotAltText).toBeNull();
       // Specifically not the filename, which is file information rather than a description.
       expect(snapshot?.snapshotAltText).not.toBe('snapshot-1.png');
+      expect(snapshot?.snapshotContentKind).toBeNull();
+      expect(snapshot?.snapshotFullText).toBeNull();
     }
   });
 
@@ -105,7 +117,11 @@ describe('canonical media intent binding', () => {
     batchId: '11111111-1111-4111-8111-111111111111',
     metadataIntentHash: 'a'.repeat(64),
   };
-  const files = (snapshotAltText: string | null) => [
+  const files = (
+    snapshotAltText: string | null,
+    snapshotContentKind: 'ordinary' | 'text_bearing' | null = 'ordinary',
+    snapshotFullText: string | null = null,
+  ) => [
     {
       packagePath: PACKAGE_PATH,
       projectPublicId: '2026-synthetic',
@@ -123,6 +139,8 @@ describe('canonical media intent binding', () => {
       fileSizeBytes: 2048,
       galleryPosition: 1,
       snapshotAltText,
+      snapshotContentKind,
+      snapshotFullText,
     },
   ];
 
@@ -141,6 +159,25 @@ describe('canonical media intent binding', () => {
   it('distinguishes an absent alt from a present one', () => {
     expect(computeCanonicalMediaIntentHash({ ...base, files: files(null) }))
       .not.toBe(computeCanonicalMediaIntentHash({ ...base, files: files(VALID_ALT) }));
+  });
+
+  it('changes when the declared kind or full text changes', () => {
+    const ordinary = computeCanonicalMediaIntentHash({ ...base, files: files(VALID_ALT) });
+    const textBearing = computeCanonicalMediaIntentHash({
+      ...base,
+      files: files(VALID_ALT, 'text_bearing', 'Three active feeds.'),
+    });
+    const changedText = computeCanonicalMediaIntentHash({
+      ...base,
+      files: files(VALID_ALT, 'text_bearing', 'Two active feeds and one warning.'),
+    });
+
+    expect(textBearing).not.toBe(ordinary);
+    expect(changedText).not.toBe(textBearing);
+    expect(computeCanonicalMediaIntentHash({
+      ...base,
+      files: files(VALID_ALT, 'text_bearing', 'Three active feeds.'),
+    })).toBe(textBearing);
   });
 
   it('stays order-independent across the expected file set', () => {

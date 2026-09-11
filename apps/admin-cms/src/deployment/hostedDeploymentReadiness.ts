@@ -5,7 +5,7 @@
  * deployment readiness separately executes one immutable, read-only capability sentinel.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 56;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 57;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -64,10 +64,11 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260910120000_public_feed_rollback_capability.sql',
   '20260910120100_participant_preview_access_observations.sql',
   '20260910120200_assistive_worker_production_identity.sql',
+  '20260911120000_gallery_full_text_equivalents.sql',
 ] as const;
 
 export const RELEASE_CAPABILITY_SENTINEL =
-  '20260910120200_assistive_worker_production_identity|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1';
+  '20260911120000_gallery_full_text_equivalents|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1';
 
 export const REQUIRED_CORE_TABLES = [
   'programs',

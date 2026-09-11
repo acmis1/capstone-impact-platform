@@ -221,6 +221,46 @@
   white-space: pre-wrap;
 }
 
+/* Full text versions of text-bearing gallery images: selectable HTML beside the images. */
+#project-detail .snapshot-full-texts {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  max-width: 75ch;
+}
+
+#project-detail .snapshot-text-disclosure {
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+}
+
+#project-detail .snapshot-text-disclosure summary {
+  width: fit-content;
+  cursor: pointer;
+  color: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+#project-detail .snapshot-text-disclosure summary:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 4px;
+}
+
+#project-detail .snapshot-text-context {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
+#project-detail .snapshot-text-content {
+  margin-top: 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 #project-detail .poster-header .section-text,
 #project-detail .poster-body .section-text {
   color: #ded6cc;

@@ -153,6 +153,9 @@ async function renderPreviewResponse(token: string, correctionError?: Correction
       fileName: asset.fileName,
       mimeType: asset.mimeType,
       altText: asset.altText,
+      // The declared text equivalent is immutable preview evidence exactly like the alt text; it
+      // is carried through verbatim and never re-read from current media state.
+      ...('contentKind' in asset ? { contentKind: asset.contentKind, fullText: asset.fullText ?? null } : {}),
       signedUrl: await createSignedDraftMediaUrl({
         storageBucket: asset.storageBucket,
         storagePath: asset.storagePath,

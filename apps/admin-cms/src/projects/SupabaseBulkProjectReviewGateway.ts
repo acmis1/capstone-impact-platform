@@ -116,6 +116,8 @@ function mediaRows(rows: BulkMediaRow[]): ProjectMediaAssetPreviewRow[] {
     file_size_bytes: asset.file_size_bytes ?? null,
     is_public_approved: asset.is_public_approved ?? null,
     alt_text_public: asset.alt_text_public ?? null,
+    image_content_kind: asset.image_content_kind ?? null,
+    full_text_public: asset.full_text_public ?? null,
   }));
 }
 
@@ -159,7 +161,7 @@ export class SupabaseBulkProjectReviewGateway implements BulkProjectReviewGatewa
         this.supabase.rpc('get_bulk_project_review_evidence', { p_project_ids: projectIds }),
         this.supabase
           .from('media_assets')
-          .select('project_id,id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+          .select('project_id,id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public,image_content_kind,full_text_public')
           .in('project_id', projectIds)
           .in('asset_type', ['poster_image', 'poster_pdf', 'snapshot_image']),
       ]);
@@ -183,9 +185,12 @@ export class SupabaseBulkProjectReviewGateway implements BulkProjectReviewGatewa
           : [],
         media_assets: (mediaByProject.get(row.id) || []).map((asset) => ({
           asset_type: asset.asset_type || '',
+          gallery_position: asset.gallery_position ?? null,
           is_public_approved: asset.is_public_approved ?? null,
           public_url: asset.public_url ?? null,
           alt_text_public: asset.alt_text_public ?? null,
+          image_content_kind: asset.image_content_kind ?? null,
+          full_text_public: asset.full_text_public ?? null,
         })),
       } as unknown as ImportBatchReviewProjectRow;
       const readiness = computeReadinessForImportBatchRow(reviewData);

@@ -1,3 +1,4 @@
+import type { PublicSnapshotTextEquivalent } from './galleryTextEquivalent';
 import { WorkflowStatus } from './workflowStatus';
 
 export interface ExternalLink {
@@ -27,7 +28,7 @@ export interface ValidationFlagRecord {
  * public-safe by construction: the URL is the promoted public object and the alt text is the
  * staff-authored description carried through from the media asset.
  */
-export interface PublicSnapshotMedia {
+export interface PublicSnapshotMedia extends Partial<PublicSnapshotTextEquivalent> {
   url: string;
   altText: string;
 
@@ -36,6 +37,15 @@ export interface PublicSnapshotMedia {
    * Must be a unique integer from 1 through 10.
    */
   galleryPosition: number;
+
+  /*
+   * `contentKind` and `fullText` (inherited above) are the project-team-declared text-equivalent
+   * contract for this image: both keys are present once the image has been classified, and
+   * `fullText` is the searchable/selectable full textual equivalent for a `text_bearing` image
+   * (null for `ordinary`). Both keys are absent only on a legacy record published before
+   * Migration 0057; new publication readiness fails closed on such media, so the absence is a
+   * transitional wire-compatibility state rather than a valid new shape.
+   */
 }
 
 export interface Project {

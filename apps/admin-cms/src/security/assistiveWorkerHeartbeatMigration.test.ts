@@ -21,13 +21,16 @@ describe('assistive worker heartbeat migration and deployment boundary', () => {
   it('preserves the exact migration 1-55 byte manifest before additive migration 56', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(56);
+    expect(files).toHaveLength(57);
     expect(files).toContain(filename);
+    // Migrations 1-55 are exactly the files that precede this migration's forward file.
+    const historical = files.slice(0, files.indexOf(forwardFilename));
+    expect(historical).toHaveLength(55);
     const historicalObjects = readGitMigrationObjects(
       root,
-      files.slice(0, -1).map((file) => `HEAD:infra/supabase/migrations/${file}`),
+      historical.map((file) => `HEAD:infra/supabase/migrations/${file}`),
     );
-    const historicalManifest = files.slice(0, -1).map((file, index) => {
+    const historicalManifest = historical.map((file, index) => {
       const digest = createHash('sha256').update(historicalObjects[index]).digest('hex');
       return `${file}:${digest}`;
     }).join('\n');

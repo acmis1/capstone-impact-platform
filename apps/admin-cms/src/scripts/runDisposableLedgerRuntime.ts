@@ -38,6 +38,7 @@ const RUNTIME_SCRIPTS: Record<string, RuntimeScript> = {
   'annual-publication': { file: 'verifyAnnualPublicationEvidenceRuntime.ts' },
   removal: { file: 'verifyControlledPublicRemovalRuntime.ts' },
   'preview-access': { file: 'verifyParticipantPreviewAccessRuntime.ts' },
+  'browser-media': { file: 'verifyBrowserImportMediaStageRuntime.ts' },
   'worker-heartbeat': { file: 'verifyAssistiveWorkerHeartbeatRuntime.ts' },
 };
 const DEFAULT_RUNTIME_NAMES = ['ledger', 'publication', 'removal'];
@@ -55,10 +56,11 @@ const CORRECTION_MIGRATIONS = [
   '20260910120000_public_feed_rollback_capability.sql',
   '20260910120100_participant_preview_access_observations.sql',
   '20260910120200_assistive_worker_production_identity.sql',
+  '20260911120000_gallery_full_text_equivalents.sql',
 ];
 
 const PRE_CORRECTION_MIGRATION_COUNT = 51;
-const CURRENT_MAIN_MIGRATION_COUNT = 56;
+const CURRENT_MAIN_MIGRATION_COUNT = 57;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -372,6 +374,10 @@ function verifyCorrectionUpgrade(workdir: string): void {
     psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260910120200';"),
     '1',
   );
+  assert.equal(
+    psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260911120000';"),
+    '1',
+  );
   assert.equal(psql('SELECT public.get_release_capability_sentinel();'), RELEASE_CAPABILITY_SENTINEL);
   const completionDefinition = routineDefinition('complete_public_feed_operation');
   assert.ok(completionDefinition.includes("v_project.status <> 'archived'"));
@@ -490,6 +496,14 @@ async function main(): Promise<void> {
     for (const name of scriptModes) {
       const script = RUNTIME_SCRIPTS[name];
       if (!script) throw new Error(`Unknown disposable runtime "${name}".`);
+      if (name === 'browser-media') {
+        psql(`INSERT INTO public.admin_users (id, email, full_name)
+          VALUES ('57b00000-0000-4000-8000-000000000001', 'browser-media-runtime@example.invalid', 'Browser Media Runtime')
+          ON CONFLICT (id) DO NOTHING;
+          INSERT INTO public.user_roles (user_id, role)
+          VALUES ('57b00000-0000-4000-8000-000000000001', 'admin')
+          ON CONFLICT DO NOTHING;`);
+      }
       const runtime = spawnSync(process.execPath, [
         path.join(repositoryRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
         path.join(__dirname, script.file),

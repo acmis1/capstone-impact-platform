@@ -134,6 +134,8 @@ export function adaptSyntheticProjectForDb(
       is_public_approved: isPublished,
       public_url: snapshotUrl || null,
       alt_text_public: snapshotAlt,
+      image_content_kind: 'ordinary',
+      full_text_public: null,
     });
   }
 

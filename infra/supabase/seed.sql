@@ -273,7 +273,7 @@ ON CONFLICT (id) DO NOTHING;
 -- The published project's projects.snapshots array already advertised a public snapshot URL with no
 -- backing media_assets row, which is not a state controlled publication can produce: it writes the
 -- projects.snapshots array and the corresponding media_assets public columns in one transaction.
--- This row makes the seed represent that real shape, and carries the staff-authored text
+-- This row makes the seed represent that real shape, and carries the project-team-authored text
 -- alternative the public feed now pairs with the URL.
 --
 -- Poster rows deliberately keep a NULL alt_text_public: the poster's text alternative is the
@@ -284,21 +284,48 @@ ON CONFLICT (id) DO NOTHING;
 -- integer position 1..10. Without it the row is skipped and the published project advertises a
 -- snapshot URL with no text alternative, which the feed contract rejects. This project has a
 -- single snapshot, so its authoritative position is 1.
-INSERT INTO public.media_assets (id, project_id, asset_type, file_name, storage_bucket, storage_path, public_url, mime_type, file_size_bytes, is_public_approved, alt_text_public, gallery_position) VALUES
-  (
-    'f0000000-0000-0000-0000-000000000003',
-    'e0000000-0000-0000-0000-000000000001',
-    'snapshot_image',
-    'snapshot1.png',
-    'project-public-assets',
-    '2026/traffic-engine/snapshot1.png',
-    'http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/traffic-engine/snapshot1.png',
-    'image/png',
-    524288,
-    true,
-    'Synthetic simulation dashboard comparing queue lengths at a four-way intersection before and after adaptive signal timing.',
-    1
-  )
-ON CONFLICT (id) DO NOTHING;
+--
+-- The image is a dashboard, i.e. a text-bearing image under Migration 0057: the project team
+-- declares it text_bearing and supplies the searchable full text the public feed publishes with
+-- it. An ordinary photograph would be declared ordinary with a NULL full text instead. The
+-- conditional update keeps this seed compatible with the disposable pre-0057 upgrade baseline;
+-- a row that existed before 0057 deliberately remains undeclared when that migration is applied.
+DO $seed_gallery$
+DECLARE
+  v_inserted integer;
+BEGIN
+  INSERT INTO public.media_assets (id, project_id, asset_type, file_name, storage_bucket, storage_path, public_url, mime_type, file_size_bytes, is_public_approved, alt_text_public, gallery_position) VALUES
+    (
+      'f0000000-0000-0000-0000-000000000003',
+      'e0000000-0000-0000-0000-000000000001',
+      'snapshot_image',
+      'snapshot1.png',
+      'project-public-assets',
+      '2026/traffic-engine/snapshot1.png',
+      'http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/traffic-engine/snapshot1.png',
+      'image/png',
+      524288,
+      true,
+      'Synthetic simulation dashboard comparing queue lengths at a four-way intersection before and after adaptive signal timing.',
+      1
+    )
+  ON CONFLICT (id) DO NOTHING;
+  GET DIAGNOSTICS v_inserted = ROW_COUNT;
+
+  IF v_inserted = 1 AND EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute
+    WHERE attrelid = 'public.media_assets'::pg_catalog.regclass
+      AND attname = 'image_content_kind'
+      AND NOT attisdropped
+  ) THEN
+    EXECUTE 'UPDATE public.media_assets SET image_content_kind = $1, full_text_public = $2 WHERE id = $3'
+      USING
+        'text_bearing',
+        'Adaptive signal timing — synthetic simulation dashboard. Intersection: Synthetic Avenue / Sample Street. Before: average queue 18 vehicles, average wait 74 s. After: average queue 7 vehicles, average wait 29 s. Peak-hour throughput +23%. Data: 30 synthetic simulation runs.',
+        'f0000000-0000-0000-0000-000000000003'::uuid;
+  END IF;
+END
+$seed_gallery$;
 
 COMMIT;

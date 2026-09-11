@@ -209,8 +209,20 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
     );
     expect(columnList.slice(0, columnList.indexOf('VALUES'))).toContain('gallery_position');
 
-    // Sole snapshot => authoritative position 1.
-    expect(insertTuple.replace(/\s+/g, ' ')).toMatch(/',\s*1\s*\)/);
+    // The insert must remain compatible with the pre-0057 rehearsal baseline. On a current
+    // schema, the guarded update gives the newly inserted dashboard its exact declaration.
+    expect(columnList.slice(0, columnList.indexOf('VALUES'))).not.toContain('image_content_kind');
+    const declarationUpdate = content.slice(
+      content.indexOf('IF v_inserted = 1', content.indexOf("'snapshot_image'")),
+      content.indexOf('$seed_gallery$;'),
+    );
+    expect(declarationUpdate).toContain("attname = 'image_content_kind'");
+    expect(declarationUpdate).toContain(
+      'SET image_content_kind = $1, full_text_public = $2 WHERE id = $3',
+    );
+    expect(declarationUpdate.replace(/\s+/g, ' ')).toMatch(
+      /'text_bearing',\s*'[^']{20,}',\s*'f0000000-0000-0000-0000-000000000003'::uuid/,
+    );
   });
 
   it('8. The published seed compiles to a valid feed with paired structured snapshot media', async () => {

@@ -70,6 +70,7 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260910120000_public_feed_rollback_capability.sql',
   '20260910120100_participant_preview_access_observations.sql',
   '20260910120200_assistive_worker_production_identity.sql',
+  '20260911120000_gallery_full_text_equivalents.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {

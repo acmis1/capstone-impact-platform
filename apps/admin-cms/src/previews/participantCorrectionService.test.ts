@@ -15,7 +15,7 @@ const candidate = {
     industry: '', industryPartner: '', academicSupervisor: '', groupName: 'Synthetic team', participantContactEmail: '',
     teamMembers: ['Participant One'], layoutConfig: {},
   }, hash: 'a'.repeat(64), warnings: [], validationChecks: [], totalBytes: CONTENT.length,
-  files: [{ role: 'poster_image', position: null, fileName: 'poster.png', mimeType: 'image/png', bytes: CONTENT.length, sha256: correctionDigest(CONTENT), altText: null, content: CONTENT }],
+  files: [{ role: 'poster_image', position: null, fileName: 'poster.png', mimeType: 'image/png', bytes: CONTENT.length, sha256: correctionDigest(CONTENT), altText: null, contentKind: null, fullText: null, content: CONTENT }],
 } as CorrectionPackage;
 
 function backend() {

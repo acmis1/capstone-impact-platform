@@ -30,7 +30,7 @@ function readinessInput(
       { assetType: 'poster_image', isPublicApproved: false, publicUrl: null, altText: null },
       { assetType: 'poster_pdf', isPublicApproved: false, publicUrl: null, altText: null },
       ...(snapshotAsset
-        ? [{ assetType: 'snapshot_image', isPublicApproved: false, publicUrl: null, altText: snapshotAsset.altText }]
+        ? [{ assetType: 'snapshot_image', isPublicApproved: false, publicUrl: null, altText: snapshotAsset.altText, galleryPosition: 1, imageContentKind: 'ordinary', fullTextPublic: null }]
         : []),
     ],
   };
@@ -73,6 +73,31 @@ describe('review readiness snapshot alt gate', () => {
     expect(readiness.ready).toBe(true);
   });
 
+  it('is ready when a text-bearing snapshot carries its complete full text', () => {
+    const input = readinessInput({ altText: VALID_ALT });
+    Object.assign(input.mediaAssets[2], {
+      imageContentKind: 'text_bearing',
+      fullTextPublic: 'Synthetic dashboard: throughput 42 units; error rate 0.5%.',
+    });
+
+    expect(computeProjectReviewReadiness(input)).toMatchObject({ ready: true, blockingReasons: [] });
+  });
+
+  it.each([
+    ['missing classification', { imageContentKind: null, fullTextPublic: null }, 'content type is missing'],
+    ['missing text-bearing full text', { imageContentKind: 'text_bearing', fullTextPublic: null }, 'full text is missing'],
+    ['oversized full text', { imageContentKind: 'text_bearing', fullTextPublic: 'x'.repeat(5001) }, 'full text exceeds'],
+    ['ordinary image with full text', { imageContentKind: 'ordinary', fullTextPublic: 'Contradictory.' }, 'carries a full text'],
+  ])('blocks a snapshot with %s and identifies its gallery position', (_label, fields, message) => {
+    const input = readinessInput({ altText: VALID_ALT });
+    Object.assign(input.mediaAssets[2], fields);
+
+    const readiness = computeProjectReviewReadiness(input);
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockingReasons.join(' ')).toContain('Snapshot image 1');
+    expect(readiness.blockingReasons.join(' ')).toContain(message);
+  });
+
   it('leaves the inherited poster requirements untouched', () => {
     const readiness = computeProjectReviewReadiness({
       ...readinessInput({ altText: VALID_ALT }),
@@ -107,18 +132,24 @@ describe('review readiness snapshot alt gate', () => {
           isPublicApproved: false,
           publicUrl: null,
           altText: 'Description for snapshot one.',
+          imageContentKind: 'ordinary',
+          fullTextPublic: null,
         },
         {
           assetType: 'snapshot_image',
           isPublicApproved: false,
           publicUrl: null,
           altText: 'Description for snapshot two.',
+          imageContentKind: 'ordinary',
+          fullTextPublic: null,
         },
         {
           assetType: 'snapshot_image',
           isPublicApproved: false,
           publicUrl: null,
           altText: 'Description for snapshot three.',
+          imageContentKind: 'ordinary',
+          fullTextPublic: null,
         },
       ],
     });
@@ -153,18 +184,24 @@ describe('review readiness snapshot alt gate', () => {
           isPublicApproved: false,
           publicUrl: null,
           altText: 'Description for snapshot one.',
+          imageContentKind: 'ordinary',
+          fullTextPublic: null,
         },
         {
           assetType: 'snapshot_image',
           isPublicApproved: false,
           publicUrl: null,
           altText: null,
+          imageContentKind: 'ordinary',
+          fullTextPublic: null,
         },
         {
           assetType: 'snapshot_image',
           isPublicApproved: false,
           publicUrl: null,
           altText: 'Description for snapshot three.',
+          imageContentKind: 'ordinary',
+          fullTextPublic: null,
         },
       ],
     });
@@ -200,18 +237,24 @@ describe('review readiness snapshot alt gate', () => {
           isPublicApproved: false,
           publicUrl: null,
           altText: VALID_ALT,
+          imageContentKind: 'ordinary',
+          fullTextPublic: null,
         },
         {
           assetType: 'snapshot_image',
           isPublicApproved: false,
           publicUrl: null,
           altText: 'a'.repeat(MAX + 1),
+          imageContentKind: 'ordinary',
+          fullTextPublic: null,
         },
         {
           assetType: 'snapshot_image',
           isPublicApproved: false,
           publicUrl: null,
           altText: 'Description for snapshot three.',
+          imageContentKind: 'ordinary',
+          fullTextPublic: null,
         },
       ],
     });
@@ -240,9 +283,39 @@ describe('approval validation snapshot alt gate', () => {
             galleryPosition: 1,
             validPrivate: true,
             altText: VALID_ALT,
+            imageContentKind: 'ordinary',
+            fullTextPublic: null,
           },
         ]
     }).valid).toBe(true);
+  });
+
+  it('permits approval for a complete text-bearing snapshot declaration', () => {
+    expect(validateProjectForApproval(approvable, {
+      ...media,
+      snapshotMedia: [{
+        galleryPosition: 4,
+        validPrivate: true,
+        altText: 'Synthetic results dashboard.',
+        imageContentKind: 'text_bearing',
+        fullTextPublic: 'Results: 42 accepted, 3 pending, 0 rejected.',
+      }],
+    }).valid).toBe(true);
+  });
+
+  it.each([
+    ['missing classification', { imageContentKind: null, fullTextPublic: null }, 'content type is missing'],
+    ['missing full text', { imageContentKind: 'text_bearing' as const, fullTextPublic: null }, 'full text is missing'],
+    ['ordinary contradiction', { imageContentKind: 'ordinary' as const, fullTextPublic: 'Unexpected.' }, 'carries a full text'],
+  ])('blocks approval for %s and identifies the image', (_label, fields, message) => {
+    const result = validateProjectForApproval(approvable, {
+      ...media,
+      snapshotMedia: [{ galleryPosition: 6, validPrivate: true, altText: VALID_ALT, ...fields }],
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('Snapshot image 6');
+    expect(result.errors.join(' ')).toContain(message);
   });
 
   it('blocks approval when the snapshot media has no alt text', () => {
@@ -253,6 +326,8 @@ describe('approval validation snapshot alt gate', () => {
           galleryPosition: 1,
           validPrivate: true,
           altText: null,
+          imageContentKind: 'ordinary',
+          fullTextPublic: null,
         },
       ],
     });
@@ -268,6 +343,8 @@ describe('approval validation snapshot alt gate', () => {
             galleryPosition: 1,
             validPrivate: true,
             altText: 'a'.repeat(MAX + 1),
+            imageContentKind: 'ordinary',
+            fullTextPublic: null,
           },
         ]
     });
@@ -283,6 +360,8 @@ describe('approval validation snapshot alt gate', () => {
           galleryPosition: 1,
           validPrivate: true,
           altText: VALID_ALT,
+          imageContentKind: 'ordinary',
+          fullTextPublic: null,
         },
       ]
     });
@@ -294,9 +373,9 @@ describe('approval validation snapshot alt gate', () => {
     const result = validateProjectForApproval(approvable, {
       ...media,
       snapshotMedia: [
-        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot one.' },
-        { galleryPosition: 2, validPrivate: true, altText: 'Snapshot two.' },
-        { galleryPosition: 3, validPrivate: true, altText: 'Snapshot three.' },
+        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot one.', imageContentKind: 'ordinary', fullTextPublic: null },
+        { galleryPosition: 2, validPrivate: true, altText: 'Snapshot two.', imageContentKind: 'ordinary', fullTextPublic: null },
+        { galleryPosition: 3, validPrivate: true, altText: 'Snapshot three.', imageContentKind: 'ordinary', fullTextPublic: null },
       ],
     });
 
@@ -307,9 +386,9 @@ describe('approval validation snapshot alt gate', () => {
     const result = validateProjectForApproval(approvable, {
       ...media,
       snapshotMedia: [
-        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot one.' },
-        { galleryPosition: 2, validPrivate: true, altText: null },
-        { galleryPosition: 3, validPrivate: true, altText: 'Snapshot three.' },
+        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot one.', imageContentKind: 'ordinary', fullTextPublic: null },
+        { galleryPosition: 2, validPrivate: true, altText: null, imageContentKind: 'ordinary', fullTextPublic: null },
+        { galleryPosition: 3, validPrivate: true, altText: 'Snapshot three.', imageContentKind: 'ordinary', fullTextPublic: null },
       ],
     });
 
@@ -321,8 +400,8 @@ describe('approval validation snapshot alt gate', () => {
     const result = validateProjectForApproval(approvable, {
       ...media,
       snapshotMedia: [
-        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot one.' },
-        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot two.' },
+        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot one.', imageContentKind: 'ordinary', fullTextPublic: null },
+        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot two.', imageContentKind: 'ordinary', fullTextPublic: null },
       ],
     });
 
@@ -562,6 +641,8 @@ describe('publication artifact snapshot alt pairing', () => {
     fileSizeBytes: 100,
     isPublicApproved: false,
     altTextPublic,
+    imageContentKind: assetType === 'snapshot_image' ? 'ordinary' : null,
+    fullTextPublic: null,
   });
 
   const plan = (snapshotAlt: string | null) => planPublicationArtifact({
@@ -589,6 +670,8 @@ describe('publication artifact snapshot alt pairing', () => {
         url: promotion?.publicUrl,
         altText: VALID_ALT,
         galleryPosition: 1,
+        contentKind: 'ordinary',
+        fullText: null,
       },
     ]);
   });

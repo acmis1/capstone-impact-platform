@@ -47,7 +47,7 @@ async function main(): Promise<void> {
     'approval_history',(SELECT pg_catalog.count(*) FROM public.approval_records a JOIN public.participant_previews pp ON pp.project_id=a.project_id WHERE pp.id='${id}'::uuid)
   )::text;`);
 
-  assert.equal(harness.psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '56');
+  assert.equal(harness.psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '57');
   assert.equal(harness.psql("SELECT has_table_privilege('service_role','public.participant_preview_access_observations','SELECT')::text || '|' || has_table_privilege('service_role','public.participant_preview_access_observations','INSERT')::text || '|' || has_table_privilege('anon','public.participant_preview_access_observations','SELECT')::text || '|' || has_table_privilege('authenticated','public.participant_preview_access_observations','SELECT')::text;"), 'true|false|false|false');
   assert.equal(harness.psql("SELECT (NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc AS proc CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(proc.proacl, pg_catalog.acldefault('f', proc.proowner))) AS acl WHERE proc.oid = 'public.record_participant_preview_response_prepared(uuid,text)'::regprocedure AND acl.grantee = 0 AND acl.privilege_type = 'EXECUTE'))::text || '|' || has_function_privilege('anon','public.record_participant_preview_response_prepared(uuid,text)','EXECUTE')::text || '|' || has_function_privilege('authenticated','public.record_participant_preview_response_prepared(uuid,text)','EXECUTE')::text || '|' || has_function_privilege('service_role','public.record_participant_preview_response_prepared(uuid,text)','EXECUTE')::text;"), 'true|false|false|true');
 

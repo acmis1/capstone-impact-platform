@@ -389,6 +389,7 @@ async function createReadyPublicationProject(
       mime_type: 'image/png', file_size_bytes: PNG_BYTES.length, is_public_approved: false,
       gallery_position: position,
       alt_text_public: `Synthetic gallery image ${position}.`,
+      image_content_kind: 'ordinary', full_text_public: null,
     });
     assert.equal(media.error, null, media.error?.message);
   }
@@ -755,7 +756,7 @@ async function main(): Promise<void> {
   const anon = createClient(local.API_URL!, local.ANON_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
   const ledger = new SupabasePublicFeedLedgerRepositoryCore(client);
 
-  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '56');
+  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '57');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('20260824180000','20260824183000','20260825030000');"), '3');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260826090000';"), '1');
   assert.equal(psql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('public_feed_operations','public_feed_versions','public_feed_version_members','public_feed_head','feed_rollback_preparations','public_feed_operation_events');"), '6');
@@ -866,14 +867,14 @@ async function main(): Promise<void> {
     INSERT INTO public.media_assets(
       id,project_id,asset_type,file_name,storage_bucket,storage_path,mime_type,file_size_bytes,
       public_storage_bucket,public_storage_path,public_url,is_public_approved,
-      gallery_position,alt_text_public
+      gallery_position,alt_text_public,image_content_kind,full_text_public
     ) VALUES (
       ${sqlLiteral(relevanceFlipFixture.mediaId)}::uuid,
       ${sqlLiteral(relevanceFlipFixture.projectId)}::uuid,'snapshot_image','snapshot-1.png',
       'project-drafts-private','drafts/203-relevance-flip/snapshot_image/snapshot-1.png',
       'image/png',12,'project-public-assets',
       'published/203-relevance-flip/snapshot_image/snapshot-1.png',
-      ${sqlLiteral(relevanceFlipFixture.snapshotUrl)},true,1,'Relevance flip snapshot.'
+      ${sqlLiteral(relevanceFlipFixture.snapshotUrl)},true,1,'Relevance flip snapshot.','ordinary',NULL
     );
     UPDATE public.projects SET created_at='2026-08-20T00:00:00Z'::timestamptz
       WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;
@@ -1828,6 +1829,7 @@ async function main(): Promise<void> {
     storage_bucket: privateBucket, storage_path: addedSnapshotPath, public_url: null,
     mime_type: 'image/png', file_size_bytes: PNG_BYTES.length, is_public_approved: false,
     gallery_position: 4, alt_text_public: 'Synthetic gallery image 4.',
+    image_content_kind: 'ordinary', full_text_public: null,
   }).select('id').single();
   assert.equal(addedSnapshot.error, null, addedSnapshot.error?.message);
   const addDrift = await new SupabaseParticipantPreviewRepositoryCore(client)
@@ -2063,7 +2065,7 @@ async function main(): Promise<void> {
   );
 
   // The reconciled record carries the exact multi-image representation, in deterministic gallery
-  // order, with each URL and its text alternative travelling as one unit.
+  // order, with each URL and its complete accessibility declaration travelling as one unit.
   const reconciledRecord = reconciledFeed.feed.find((record) => record.publicId === medical.publicId);
   assert.ok(reconciledRecord, 'Reconciled target missing from the deployed feed.');
   const expectedSnapshotUrls = [1, 2, 3].map((position) =>
@@ -2073,6 +2075,8 @@ async function main(): Promise<void> {
     url: expectedSnapshotUrls[position - 1],
     altText: `Synthetic gallery image ${position}.`,
     galleryPosition: position,
+    contentKind: 'ordinary',
+    fullText: null,
   })));
 
   // Reconciliation is deployment-only: no lifecycle transition and no fabricated publish audit.
@@ -2508,7 +2512,7 @@ async function main(): Promise<void> {
   const memberHash = psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id=${sqlLiteral(firstVersionId)}::uuid ORDER BY ordinal LIMIT 1;`);
   assert.equal(memberHash, trafficArtifact.members[0].recordHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
-  console.log('Public feed ledger runtime verification passed: fresh 56-migration schema, durable activation authority through pre-write recovery, real overlapping READ COMMITTED/REPEATABLE READ/SERIALIZABLE proof, unrelated-draft nonblocking proof, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, verified-staging exact-head rollback capability audit and denial fences, removal, no-change removal, rollback with recovery and response-loss idempotency, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, stale-owner fencing, grants, and immutable history.');
+  console.log('Public feed ledger runtime verification passed: fresh 57-migration schema, durable activation authority through pre-write recovery, real overlapping READ COMMITTED/REPEATABLE READ/SERIALIZABLE proof, unrelated-draft nonblocking proof, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, verified-staging exact-head rollback capability audit and denial fences, removal, no-change removal, rollback with recovery and response-loss idempotency, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, stale-owner fencing, grants, and immutable history.');
 }
 
 async function run(): Promise<void> {

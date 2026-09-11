@@ -17,15 +17,15 @@ import { collectLocalGate4Evidence } from './checkGate4SchemaEvidence';
 import { MIGRATION_MANAGED_BUCKETS } from '../local-development/localSupabaseFixtures';
 
 /**
- * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 -> 55 -> 56 migration transition on a stack this verifier
- * owns outright.
+ * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 -> 55 -> 56 -> 57 migration transition on a stack this
+ * verifier owns outright.
  *
  * The known hosted staging-v2 baseline is 48 migrations through
- * 20260831090000_postgres17_maintain_privilege_alignment. A clean 56-migration install proves the
+ * 20260831090000_postgres17_maintain_privilege_alignment. A clean 57-migration install proves the
  * end state but not the transition, and the existing deployment-ledger upgrade proves a different
  * single migration. This rehearsal provisions exactly the 48-migration baseline, seeds the minimum
  * representative synthetic evidence a real 48-state database would hold, applies 0049 through
- * 0056 one at a time in deterministic order, and asserts after each step that nothing existing was
+ * 0057 one at a time in deterministic order, and asserts after each step that nothing existing was
  * rewritten and that the new authority is exactly what the migration declares.
  *
  * Everything is disposable and loopback-only: its own project id, port block, Docker network,
@@ -42,6 +42,7 @@ const RELEASE_MIGRATIONS = [
   { ordinal: 54, version: '20260910120000', file: '20260910120000_public_feed_rollback_capability.sql' },
   { ordinal: 55, version: '20260910120100', file: '20260910120100_participant_preview_access_observations.sql' },
   { ordinal: 56, version: '20260910120200', file: '20260910120200_assistive_worker_production_identity.sql' },
+  { ordinal: 57, version: '20260911120000', file: '20260911120000_gallery_full_text_equivalents.sql' },
 ] as const;
 
 const BASELINE_MIGRATION_COUNT = 48;
@@ -409,6 +410,29 @@ export async function readStorageEvidence(
   return evidence;
 }
 
+/**
+ * The long-running rehearsal keeps the local Storage service alive while PostgreSQL applies and
+ * fingerprints each release migration. Retry only a transient read failure, for a bounded 3.5
+ * seconds; every successful result is still checked by exact key, byte length and SHA-256, and a
+ * missing or changed object therefore remains a hard failure.
+ */
+async function readStorageEvidenceAfterTransientFailure(
+  client: SupabaseClient,
+  objects: Array<{ bucket: string; key: string }>,
+): Promise<StorageObjectEvidence[]> {
+  for (const delayMs of [0, 500, 1_000, 2_000]) {
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    try {
+      return await readStorageEvidence(client, objects);
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'UPGRADE_STORAGE_DOWNLOAD_FAILED' || delayMs === 2_000) {
+        throw error;
+      }
+    }
+  }
+  throw new Error('UPGRADE_STORAGE_DOWNLOAD_FAILED');
+}
+
 function storageInventory(): Array<{ bucket: string; key: string }> {
   return JSON.parse(psql(
     "SELECT COALESCE(jsonb_agg(jsonb_build_object('bucket', bucket_id, 'key', name)"
@@ -438,7 +462,7 @@ async function seedStorageEvidence(client: SupabaseClient): Promise<StorageObjec
 
 async function assertStorageUnchanged(client: SupabaseClient, baseline: BaselineEvidence, stage: string): Promise<void> {
   assert.deepEqual(
-    await readStorageEvidence(client, storageInventory()), baseline.storageObjects,
+    await readStorageEvidenceAfterTransientFailure(client, storageInventory()), baseline.storageObjects,
     `${stage} changed the Storage object set or bytes.`,
   );
   assert.equal(tableFingerprint('storage.objects'), baseline.storageRows, `${stage} changed Storage metadata.`);
@@ -1261,6 +1285,124 @@ function assertAfter56(
   console.log('PASS: Migration 0056 preserved all current 0055 data and installed exact, service-only staging/production heartbeat identity');
 }
 
+/** Digest media rows on their pre-0057 columns only, so the two additive columns cannot mask drift. */
+function historicalMediaAssetFingerprint(): string {
+  return psql(
+    "SELECT pg_catalog.count(*)::text || ':' || pg_catalog.encode(pg_catalog.sha256("
+    + "pg_catalog.convert_to(COALESCE(pg_catalog.string_agg(row_text, chr(10) ORDER BY row_text), ''), 'UTF8')), 'hex')"
+    + " FROM (SELECT (pg_catalog.to_jsonb(m) - 'image_content_kind' - 'full_text_public')::text AS row_text"
+    + ' FROM public.media_assets AS m) AS s;',
+  );
+}
+
+/** Runs a mutation that must be refused by the gallery text-equivalent check constraint. */
+function assertGalleryCheckRefuses(mutation: string, label: string): void {
+  const diagnosticLabel = label.replaceAll("'", "''");
+  psql(`DO $$ BEGIN
+    BEGIN
+      ${mutation}
+      RAISE EXCEPTION 'GALLERY_CHECK_NOT_ENFORCED: ${diagnosticLabel}';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END $$;`);
+  assert.equal(psql("SELECT count(*) FROM public.media_assets WHERE file_name = 'upgrade-check.png';"), '0',
+    `Migration 0057 check constraint did not refuse: ${label}`);
+}
+
+function assertAfter57(
+  current56Tables: Record<string, string>,
+  mediaAssetsBefore57: string,
+  publicTableGrantsBefore57: string,
+  untrustedRoutineGrantsBefore57: string,
+): void {
+  assert.equal(Object.keys(current56Tables).length, 47, 'The current 0056 table inventory is incomplete.');
+  assertTablesUnchanged(current56Tables, 'Migration 0057');
+  assert.equal(historicalMediaAssetFingerprint(), mediaAssetsBefore57, 'Migration 0057 changed existing media rows.');
+  // Additive and unbackfilled: every pre-existing snapshot stays undeclared (NULL), never "ordinary".
+  assert.equal(
+    psql('SELECT count(*) FROM public.media_assets WHERE image_content_kind IS NOT NULL OR full_text_public IS NOT NULL;'),
+    '0',
+    'Migration 0057 backfilled a text-equivalent declaration.',
+  );
+  assert.equal(publicTableGrants(), publicTableGrantsBefore57, 'Migration 0057 changed direct table grants.');
+  assert.equal(
+    untrustedRoutineExecuteGrants(),
+    untrustedRoutineGrantsBefore57,
+    'Migration 0057 introduced an unsafe direct routine grant.',
+  );
+  assert.equal(
+    psql("SELECT string_agg(column_name || ':' || data_type || ':' || is_nullable, ',' ORDER BY column_name)"
+      + " FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'media_assets'"
+      + " AND column_name IN ('image_content_kind', 'full_text_public');"),
+    'full_text_public:text:YES,image_content_kind:text:YES',
+  );
+  const galleryConstraint = psql("SELECT pg_catalog.pg_get_constraintdef(oid)"
+    + " FROM pg_catalog.pg_constraint WHERE conrelid='public.media_assets'::regclass"
+    + " AND conname='check_media_asset_gallery_text_equivalent';");
+  for (const fragment of ["'ordinary'", "'text_bearing'", 'full_text_public IS NULL', '<= 5000', 'btrim(full_text_public)']) {
+    assert.ok(galleryConstraint.includes(fragment), `Migration 0057 constraint is missing ${fragment}.`);
+  }
+
+  // Every forward-redefined RPC carries the contract, stays SECURITY DEFINER with an empty
+  // search_path, and remains service-role-only.
+  for (const [signature, fragment] of [
+    ['public.finalize_browser_import_media_stage(uuid,text,text,uuid,jsonb)', "'snapshotContentKind'"],
+    ['public.submit_import_projects_for_review(uuid,text[],uuid,text)', "'MISSING_SNAPSHOT_CONTENT_TYPE'"],
+    ['public.perform_project_review_action(text,text,text,uuid)', 'v_undeclared_snapshot_count'],
+    ['public.generate_participant_preview(text,uuid,text,integer,text,boolean)', "'contentKind', ma.image_content_kind"],
+    ['public.get_project_publication_readiness(text,uuid,text)', "'Snapshot image %s content type is missing'"],
+    ['public.get_project_reconciliation_readiness(text,uuid,text)', "'Snapshot image %s content type is missing'"],
+    ['public.reserve_participant_correction(text,text,jsonb,jsonb,jsonb,text,jsonb,text,uuid)', "'contentKind','fullText'"],
+    ['public.review_participant_correction(text,uuid,uuid,text,text,text)', "image_content_kind=f->>'contentKind'"],
+  ] as const) {
+    assert.ok(
+      psql(`SELECT pg_catalog.pg_get_functiondef('${signature}'::regprocedure);`).includes(fragment),
+      `Migration 0057 did not redefine ${signature} (${fragment} missing).`,
+    );
+    assert.equal(
+      psql(`SELECT has_function_privilege('service_role', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('anon', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('authenticated', '${signature}', 'EXECUTE')::text;`),
+      'true|false|false',
+    );
+    assert.equal(
+      psql(`SELECT prosecdef::text || '|' || pg_catalog.array_to_string(proconfig, ',')`
+        + ` FROM pg_catalog.pg_proc WHERE oid = '${signature}'::regprocedure;`),
+      'true|search_path=""',
+    );
+  }
+
+  // Constraint behaviour on a synthetic snapshot row: coherent declarations persist, incoherent
+  // ones are refused, and nothing is inferred for an undeclared row.
+  const insertSnapshot = (kind: string, fullText: string) => `INSERT INTO public.media_assets (
+      project_id, asset_type, gallery_position, file_name, storage_bucket, storage_path, mime_type,
+      file_size_bytes, is_public_approved, alt_text_public, image_content_kind, full_text_public
+    ) SELECT projects.id, 'snapshot_image', 9, 'upgrade-check.png', 'project-drafts-private',
+      'drafts/' || projects.public_id || '/snapshot_image/upgrade-check.png', 'image/png', 1024, false,
+      'Synthetic upgrade check image.', ${kind}, ${fullText}
+    FROM public.projects AS projects WHERE projects.source_folder = 'upgrade-rehearsal' LIMIT 1;`;
+  assertGalleryCheckRefuses(insertSnapshot("'text_bearing'", 'NULL'), 'text-bearing without full text');
+  assertGalleryCheckRefuses(insertSnapshot("'ordinary'", "'Unexpected transcription.'"), 'ordinary with full text');
+  assertGalleryCheckRefuses(insertSnapshot('NULL', "'Undeclared transcription.'"), 'full text without declaration');
+  assertGalleryCheckRefuses(insertSnapshot("'photograph'", 'NULL'), 'unknown content kind');
+  assertGalleryCheckRefuses(insertSnapshot("'text_bearing'", `'${'x'.repeat(5001)}'`), 'oversized full text');
+  assertGalleryCheckRefuses(insertSnapshot("'text_bearing'", "'  padded  '"), 'untrimmed full text');
+  psql(insertSnapshot("'text_bearing'", "'Synthetic dashboard: queue length 12 vehicles; wait 41 s.'"));
+  psql("UPDATE public.media_assets SET image_content_kind = 'ordinary', full_text_public = NULL WHERE file_name = 'upgrade-check.png';");
+  assert.equal(
+    psql("SELECT image_content_kind || '|' || COALESCE(full_text_public, '<null>') FROM public.media_assets WHERE file_name = 'upgrade-check.png';"),
+    'ordinary|<null>',
+  );
+  psql("DELETE FROM public.media_assets WHERE file_name = 'upgrade-check.png';");
+  assert.equal(historicalMediaAssetFingerprint(), mediaAssetsBefore57, 'Migration 0057 rehearsal left synthetic media behind.');
+
+  assert.equal(
+    psql('SELECT public.get_release_capability_sentinel();'),
+    '20260911120000_gallery_full_text_equivalents|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1',
+  );
+  console.log('PASS: Migration 0057 preserved all current 0056 data, performed no backfill, and installed the gallery text-equivalent contract');
+}
+
 async function verifyUpgrade(workdir: string, networkId: string): Promise<void> {
   assertBaseline();
   seedBaselineEvidence();
@@ -1270,7 +1412,7 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   const baselineGate4Errors = gate4ContractErrors();
   assert.ok(
     baselineGate4Errors.length > 0,
-    'The current 56-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
+    'The current 57-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
   );
   console.log(
     `PASS: current Gate 4 contract refuses the 48-state source (${baselineGate4Errors.length} findings)`,
@@ -1329,6 +1471,14 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   applyRelease(workdir, networkId, 56);
   assertAfter56(current55Tables, publicTableGrantsBefore56, untrustedRoutineGrantsBefore56);
   await assertStorageUnchanged(storageClient, baseline, 'Migration 0056');
+  // media_assets gains two columns in 0057, so it is fingerprinted on its historical columns only.
+  const current56Tables = fingerprintTables(CURRENT_55_TABLES.filter((table) => table !== 'public.media_assets'));
+  const mediaAssetsBefore57 = historicalMediaAssetFingerprint();
+  const publicTableGrantsBefore57 = publicTableGrants();
+  const untrustedRoutineGrantsBefore57 = untrustedRoutineExecuteGrants();
+  applyRelease(workdir, networkId, 57);
+  assertAfter57(current56Tables, mediaAssetsBefore57, publicTableGrantsBefore57, untrustedRoutineGrantsBefore57);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0057');
 
   const applied = appliedMigrations();
   assert.equal(applied.length, RELEASE_MIGRATION_COUNT, 'The upgraded head is not the full release migration set.');
@@ -1375,7 +1525,7 @@ async function main(): Promise<void> {
     startAttempted = true;
     runSupabase('start', workdir, networkId);
     await verifyUpgrade(workdir, networkId);
-    console.log('PASS: staging migration 0048 -> 0056 upgrade rehearsal');
+    console.log('PASS: staging migration 0048 -> 0057 upgrade rehearsal');
     console.log('HOSTED_SYSTEMS_CONTACTED = NO');
     exitCode = 0;
   } catch (error) {

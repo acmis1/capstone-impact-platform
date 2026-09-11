@@ -10,6 +10,8 @@ const fileSchema = z.object({
   storageName: z.string().regex(/^(workbook|poster_image|poster_pdf|snapshot_image-[1-9][0-9]?)\.(xlsx|png|jpg|jpeg|webp|pdf)$/),
   mimeType: z.string(), bytes: z.number().int().positive().max(20 * 1024 * 1024), sha256: hash,
   altText: z.string().max(2000).nullable(),
+  contentKind: z.enum(['ordinary', 'text_bearing']).nullable(),
+  fullText: z.string().max(5000).nullable(),
 }).strict();
 const submissionSchema = z.object({
   id: z.uuid(), project_id: z.uuid(), correction_request_id: z.uuid().nullable(), participant_preview_id: z.uuid().nullable(),
@@ -42,8 +44,8 @@ export interface CorrectionReviewView {
   candidate: null | {
     id: string; hash: string; expectedVersion: string; state: Submission['state']; submittedAt: string;
     fields: Array<{ name: string; current: string; proposed: string; changed: boolean }>;
-    files: Array<{ role: string; position: number | null; fileName: string; bytes: number; hash: string; altText: string | null; url: string }>;
-    currentMedia: Array<{ role: string; position: number | null; fileName: string; hash: string; altText: string | null }>;
+    files: Array<{ role: string; position: number | null; fileName: string; bytes: number; hash: string; altText: string | null; contentKind: string | null; fullText: string | null; url: string }>;
+    currentMedia: Array<{ role: string; position: number | null; fileName: string; hash: string; altText: string | null; contentKind: string | null; fullText: string | null }>;
     warnings: string[];
     validationFlags: Array<{ message: string; resolved: boolean; willResolve: boolean }>;
   };
@@ -80,7 +82,7 @@ export async function loadCorrectionReviewView(client: SupabaseClient, publicId:
       await verifiedBytes(client, s.storage_bucket, candidatePath(s, file), file);
       const signed = await client.storage.from(s.storage_bucket).createSignedUrl(candidatePath(s, file), 300);
       if (signed.error || !signed.data?.signedUrl) return unavailable;
-      files.push({ role: file.role, position: file.position, fileName: file.fileName, bytes: file.bytes, hash: file.sha256, altText: file.altText, url: signed.data.signedUrl });
+      files.push({ role: file.role, position: file.position, fileName: file.fileName, bytes: file.bytes, hash: file.sha256, altText: file.altText, contentKind: file.contentKind, fullText: file.fullText, url: signed.data.signedUrl });
     }
     const media = await client.from('media_assets').select('*').eq('project_id', project.data.id);
     if (media.error || !media.data || media.data.length > 12) return unavailable;
@@ -89,7 +91,7 @@ export async function loadCorrectionReviewView(client: SupabaseClient, publicId:
       if (m.storage_bucket !== 'project-drafts-private' || m.is_public_approved !== false || m.public_url || m.public_storage_path || m.public_storage_bucket ||
           !Number.isSafeInteger(m.file_size_bytes) || m.file_size_bytes < 1 || m.file_size_bytes > 20 * 1024 * 1024) return unavailable;
       const bytes = await verifiedBytes(client, m.storage_bucket, m.storage_path, { bytes: m.file_size_bytes });
-      currentMedia.push({ role: m.asset_type, position: m.gallery_position, fileName: m.file_name, hash: correctionDigest(bytes), altText: m.alt_text_public });
+      currentMedia.push({ role: m.asset_type, position: m.gallery_position, fileName: m.file_name, hash: correctionDigest(bytes), altText: m.alt_text_public, contentKind: m.image_content_kind ?? null, fullText: m.full_text_public ?? null });
     }
     // Include complete taxonomy mappings rather than only the legacy first-value columns.
     const disciplines = await client.from('project_disciplines').select('disciplines(name)').eq('project_id', project.data.id);

@@ -87,12 +87,12 @@ async function main(): Promise<void> {
 
   let failure: unknown = null;
   try {
-    await scenario('fresh schema contains exactly 56 migrations and the production-identity capability', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '56');
+    await scenario('fresh schema contains exactly 57 migrations and the production-identity capability', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '57');
       assert.equal(psql("SELECT to_regclass('public.assistive_worker_heartbeats') IS NOT NULL;"), 't');
       assert.equal(
         psql('SELECT public.get_release_capability_sentinel();'),
-        '20260910120200_assistive_worker_production_identity|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1',
+        '20260911120000_gallery_full_text_equivalents|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1',
       );
     });
 

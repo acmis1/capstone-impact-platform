@@ -7,7 +7,7 @@ This directory contains the version-controlled database schema migrations, polic
 ## ⚠️ Current Environment & Staging Status
 
 > [!NOTE]
-> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. The current 56-file timestamped migration manifest through `20260910120200_assistive_worker_production_identity.sql` is the executable repository candidate and passes its automated manifest contract. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
+> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. The current 57-file timestamped migration manifest through `20260911120000_gallery_full_text_equivalents.sql` is the executable repository candidate and passes its automated manifest contract. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
 > * **Active Hosted Staging (`capstone-admin-cms-staging-v2-2026`):** Historical read-only observations recorded 46 rows through `20260828120000`, then 48/48 through `20260831090000_postgres17_maintain_privilege_alignment`. Current independent Gate 3 evidence records 52 rows through `20260906120000_public_removal_completion_reconciliation`; Gate 4 is a 52-migration structural `GATE4_MATCH`. This proves the collected schema/grant/RPC contract, not application data, Auth identities, Storage objects, recovery, monitoring, UAT, or production acceptance.
 > * **Historical/Paused Hosted Staging (`capstone-admin-cms-staging-2026`):** This is the environment associated with the old manually evolved migration baseline. Its history must not be confused with the active staging-v2 evidence.
 > * **Corrective Fix:** Migration `0006` corrected the initial administrator bootstrap runtime by replacing `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
@@ -73,7 +73,7 @@ npm run supabase:stop
 
 ---
 
-## Selected Migration Inventory (56 Migrations Total)
+## Selected Migration Inventory (57 Migrations Total)
 
 The executable files under `migrations/` and the exact manifest enforced by
 `apps/admin-cms/src/deployment/hostedDeploymentReadiness.ts` are authoritative. The entries below
@@ -118,3 +118,4 @@ highlight major milestones rather than replacing that complete manifest.
 * **[20260910120000_public_feed_rollback_capability.sql](./migrations/20260910120000_public_feed_rollback_capability.sql):** Adds service-role-only, exact-head rollback capability transitions for verified staging/disposable Local, active-admin and writer/recovery fences, immutable truthful transition audit, and immutable preparation-to-capability bindings for verified staging; migration apply changes no existing row and emits no event.
 * **[20260910120100_participant_preview_access_observations.sql](./migrations/20260910120100_participant_preview_access_observations.sql):** Adds one bounded first successful HTML-response preparation observation per exact participant preview; it records no token, participant identity, delivery, reading, confirmation, approval, or publication claim.
 * **[20260910120200_assistive_worker_production_identity.sql](./migrations/20260910120200_assistive_worker_production_identity.sql):** Extends heartbeat evidence with exact staging/production environment identity while preserving existing rows and preventing a worker instance ID from being relabelled across environments.
+* **[20260911120000_gallery_full_text_equivalents.sql](./migrations/20260911120000_gallery_full_text_equivalents.sql):** Adds the project-team-declared text-equivalent contract for every gallery image (`media_assets.image_content_kind` ordinary/text_bearing plus `full_text_public` for text-bearing images), forward-redefines media staging, review submission, approval, participant-preview issuance, publication/reconciliation readiness and participant-correction RPCs to require and carry it, and leaves every existing row undeclared and blocked rather than backfilled.

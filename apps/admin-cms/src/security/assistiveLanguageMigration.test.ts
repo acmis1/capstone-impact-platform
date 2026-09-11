@@ -16,7 +16,7 @@ describe('assistive language finding migration contract', () => {
   it('remains byte-identical to current main in the combined migration inventory', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(56);
+    expect(files).toHaveLength(57);
     expect(files).toContain(filename);
     expect(() => assertGitMigrationBaselineUnchanged(root)).not.toThrow();
   });

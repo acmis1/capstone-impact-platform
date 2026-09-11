@@ -4,6 +4,10 @@ import {
   parseGalleryFilePosition,
   sortGalleryByPosition,
 } from './galleryConvention';
+import {
+  isSnapshotImageContentKind,
+  type SnapshotImageContentKind,
+} from '../domain/galleryTextEquivalent';
 export type BrowserImportMediaAssetType = 'poster_image' | 'poster_pdf' | 'snapshot_image';
 
 export interface ExpectedBrowserImportMediaFile {
@@ -25,6 +29,14 @@ export interface ExpectedBrowserImportMediaFile {
    * onto the media asset.
    */
   snapshotAltText: string | null;
+  /**
+   * Project-team-declared classification and full textual equivalent for a `snapshot_image`,
+   * derived from the same server-reparsed manifest entry as the alt text and bound into the media
+   * intent hash alongside it. `null` for every other asset type and for a legacy manifest that
+   * carries no declaration — that row is registered unclassified and held by the workflow gates.
+   */
+  snapshotContentKind: SnapshotImageContentKind | null;
+  snapshotFullText: string | null;
 }
 
 const RECOGNIZED_MEDIA_FILENAMES: Record<string, BrowserImportMediaAssetType> = {
@@ -73,6 +85,28 @@ function resolveSnapshotAltText(
   }
 
   return null;
+}
+
+/**
+ * Reads the declared text-equivalent contract for one gallery position from the authoritative
+ * manifest entry. Nothing here infers a classification: an absent or unrecognised value stays
+ * null, and a full text is carried only as the project team supplied it (trimmed, never
+ * fabricated, never truncated).
+ */
+function resolveSnapshotTextEquivalent(
+  pkg: BrowserImportServerPackage,
+  position: number,
+): { contentKind: SnapshotImageContentKind | null; fullText: string | null } {
+  const galleryAltTexts = pkg.manifest?.galleryAltTexts;
+  const matched = Array.isArray(galleryAltTexts)
+    ? galleryAltTexts.find((item) => item.position === position)
+    : undefined;
+  const contentKind = isSnapshotImageContentKind(matched?.contentKind) ? matched.contentKind : null;
+  const fullText =
+    typeof matched?.fullText === 'string' && matched.fullText.trim() !== ''
+      ? matched.fullText.trim()
+      : null;
+  return { contentKind, fullText };
 }
 
 export type ResolveExpectedMediaResult =
@@ -143,6 +177,8 @@ export function resolveExpectedBrowserImportMedia(params: {
         canonicalMimeType: desc.canonicalMimeType,
         galleryPosition: null,
         snapshotAltText: null,
+        snapshotContentKind: null,
+        snapshotFullText: null,
       });
     }
 
@@ -173,6 +209,7 @@ export function resolveExpectedBrowserImportMedia(params: {
 
       for (const galleryItem of galleryDescriptors) {
         const { position, desc } = galleryItem;
+        const textEquivalent = resolveSnapshotTextEquivalent(pkg, position);
 
         files.push({
           uploadKey: desc.uploadKey,
@@ -184,6 +221,8 @@ export function resolveExpectedBrowserImportMedia(params: {
           canonicalMimeType: desc.canonicalMimeType,
           galleryPosition: position,
           snapshotAltText: resolveSnapshotAltText(pkg, position),
+          snapshotContentKind: textEquivalent.contentKind,
+          snapshotFullText: textEquivalent.fullText,
         });
       }
     }

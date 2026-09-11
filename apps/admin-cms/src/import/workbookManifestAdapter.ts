@@ -53,6 +53,8 @@ export function buildImportPackageManifestFromWorkbook(
         galleryAltTexts: metadata.galleryAltTexts.map((item) => ({
           position: item.position,
           altText: item.altText,
+          contentKind: item.contentKind,
+          fullText: item.fullText === '' ? null : item.fullText,
         })),
       }
     : {}),

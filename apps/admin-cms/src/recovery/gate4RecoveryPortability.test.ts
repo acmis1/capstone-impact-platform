@@ -57,7 +57,8 @@ function evidence(): Gate4SchemaEvidence {
       bypassRls: name === 'service_role', superuser: false,
     })), migrations, tables, functions,
     columns: [['projects', 'poster_text_public'], ['projects', 'accessibility_text_public'],
-      ['projects', 'participant_contact_email'], ['media_assets', 'alt_text_public'], ['admin_users', 'auth_user_id'],
+      ['projects', 'participant_contact_email'], ['media_assets', 'alt_text_public'],
+      ['media_assets', 'image_content_kind'], ['media_assets', 'full_text_public'], ['admin_users', 'auth_user_id'],
       ['admin_users', 'lifecycle_status'], ['admin_users', 'lifecycle_version'],
       ['admin_users', 'lifecycle_updated_at'], ['admin_users', 'deactivated_at']]
       .map(([table, name], index) => ({ schema: 'public', table, name, ordinal: index + 1,

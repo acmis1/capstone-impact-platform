@@ -5,6 +5,11 @@ import {
   getSnapshotAltTextProblem,
   isAccessibleContentPresent,
 } from '../domain/accessibleContent';
+import {
+  describeSnapshotTextEquivalentProblem,
+  getSnapshotTextEquivalentProblem,
+  type SnapshotImageContentKind,
+} from '../domain/galleryTextEquivalent';
 
 export interface ValidationOutput {
   valid: boolean;
@@ -79,6 +84,9 @@ export interface ApprovalSnapshotMediaInput {
   galleryPosition: number | null;
   validPrivate: boolean;
   altText: string | null;
+  /** Declared classification and full text; null means "not yet declared" and blocks approval. */
+  imageContentKind: SnapshotImageContentKind | null;
+  fullTextPublic: string | null;
 }
 
 export interface ApprovalMediaInput {
@@ -175,6 +183,17 @@ export function validateProjectForApproval(
         if (!errors.includes(message)) {
           errors.push(message);
         }
+      }
+
+      // Text-equivalent contract, mirroring the approve branch of perform_project_review_action.
+      // Unclassified legacy media blocks approval rather than passing as an ordinary photograph.
+      const textProblem = getSnapshotTextEquivalentProblem({
+        contentKind: snapshot.imageContentKind,
+        fullText: snapshot.fullTextPublic,
+      });
+      if (textProblem) {
+        const message = `${prefix} ${describeSnapshotTextEquivalentProblem(textProblem, position)} Approval blocked.`;
+        if (!errors.includes(message)) errors.push(message);
       }
     }
 
