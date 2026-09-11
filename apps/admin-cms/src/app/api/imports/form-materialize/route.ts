@@ -84,8 +84,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const parsed = formIntakeMetadataSchema.safeParse(rawJson);
   if (!parsed.success) {
+    const sanitizedIssues = parsed.error.issues.map((issue) => ({
+      code: issue.code,
+      path: issue.path,
+      message: issue.message,
+    }));
     return NextResponse.json(
-      { success: false, code: 'VALIDATION_ERROR', error: 'Invalid form intake metadata.', details: parsed.error.issues },
+      {
+        success: false,
+        code: 'VALIDATION_ERROR',
+        error: 'Invalid form intake metadata.',
+        details: sanitizedIssues,
+      },
       { status: 400, headers: { 'Cache-Control': 'no-store' } }
     );
   }

@@ -85,8 +85,60 @@ describe('formIntakeValidation', () => {
 
     const result = validateFormIntake(metadata, media);
     expect(result.valid).toBe(false);
-    expect(result.errors.posterImage).toBeDefined();
-    expect(result.errors.posterPdf).toBeDefined();
+    expect(result.errors.posterImage).toBe('Required poster image (PNG) is missing.');
+    expect(result.errors.posterPdf).toBe('Required poster PDF is missing.');
+  });
+
+  describe('Poster Image Canonical PNG Contract', () => {
+    it('passes when poster image is a valid PNG file', () => {
+      const metadata = createValidMetadata();
+      const media = createValidMediaState();
+      media.posterImage = new File(['fake-png-bytes'], 'poster.png', { type: 'image/png' });
+
+      const result = validateFormIntake(metadata, media);
+      expect(result.valid).toBe(true);
+      expect(result.errors.posterImage).toBeUndefined();
+    });
+
+    it('rejects JPEG poster image before materialization', () => {
+      const metadata = createValidMetadata();
+      const media = createValidMediaState();
+      media.posterImage = new File(['fake-jpeg-bytes'], 'poster.jpg', { type: 'image/jpeg' });
+
+      const result = validateFormIntake(metadata, media);
+      expect(result.valid).toBe(false);
+      expect(result.errors.posterImage).toBe('Poster image must be a PNG file (.png).');
+    });
+
+    it('rejects WEBP poster image before materialization', () => {
+      const metadata = createValidMetadata();
+      const media = createValidMediaState();
+      media.posterImage = new File(['fake-webp-bytes'], 'poster.webp', { type: 'image/webp' });
+
+      const result = validateFormIntake(metadata, media);
+      expect(result.valid).toBe(false);
+      expect(result.errors.posterImage).toBe('Poster image must be a PNG file (.png).');
+    });
+
+    it('rejects poster image with non-PNG extension even if MIME is image/png', () => {
+      const metadata = createValidMetadata();
+      const media = createValidMediaState();
+      media.posterImage = new File(['fake-bytes'], 'poster.jpeg', { type: 'image/png' });
+
+      const result = validateFormIntake(metadata, media);
+      expect(result.valid).toBe(false);
+      expect(result.errors.posterImage).toBe('Poster image must be a PNG file (.png).');
+    });
+
+    it('rejects missing poster image with PNG-specific message', () => {
+      const metadata = createValidMetadata();
+      const media = createValidMediaState();
+      media.posterImage = null;
+
+      const result = validateFormIntake(metadata, media);
+      expect(result.valid).toBe(false);
+      expect(result.errors.posterImage).toBe('Required poster image (PNG) is missing.');
+    });
   });
 
   it('validates URLs and participant email when supplied', () => {
@@ -116,6 +168,32 @@ describe('formIntakeValidation', () => {
       expect(result.errors[`galleryAlt_1`]).toBeUndefined();
       expect(result.errors[`galleryContentKind_1`]).toBeUndefined();
       expect(result.errors[`galleryFullText_1`]).toBeUndefined();
+    });
+
+    it('passes for a valid gallery image in JPEG format', () => {
+      const metadata = createValidMetadata();
+      const media = createValidMediaState();
+      media.galleryImages[0].file = new File(['fake-jpeg'], 'snapshot-1.jpg', { type: 'image/jpeg' });
+      media.galleryImages[0].altText = 'A team photo in the robotics lab';
+      media.galleryImages[0].contentKind = 'ordinary';
+      media.galleryImages[0].fullText = '';
+
+      const result = validateFormIntake(metadata, media);
+      expect(result.valid).toBe(true);
+      expect(result.errors[`galleryImage_1`]).toBeUndefined();
+    });
+
+    it('passes for a valid gallery image in WEBP format', () => {
+      const metadata = createValidMetadata();
+      const media = createValidMediaState();
+      media.galleryImages[0].file = new File(['fake-webp'], 'snapshot-1.webp', { type: 'image/webp' });
+      media.galleryImages[0].altText = 'A team photo in the robotics lab';
+      media.galleryImages[0].contentKind = 'ordinary';
+      media.galleryImages[0].fullText = '';
+
+      const result = validateFormIntake(metadata, media);
+      expect(result.valid).toBe(true);
+      expect(result.errors[`galleryImage_1`]).toBeUndefined();
     });
 
     it('rejects an ordinary gallery image that carries unexpected full text', () => {

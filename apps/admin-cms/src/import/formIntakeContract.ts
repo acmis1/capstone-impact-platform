@@ -215,4 +215,4 @@ export const formIntakeMetadataSchema = z.object({
   snapshot8FullText: z.string().max(ACCESSIBLE_CONTENT_LIMITS.snapshotFullText).optional().default(''),
   snapshot9FullText: z.string().max(ACCESSIBLE_CONTENT_LIMITS.snapshotFullText).optional().default(''),
   snapshot10FullText: z.string().max(ACCESSIBLE_CONTENT_LIMITS.snapshotFullText).optional().default(''),
-});
+}).strict();

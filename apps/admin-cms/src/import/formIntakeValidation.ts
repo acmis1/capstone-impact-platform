@@ -137,8 +137,7 @@ export function validateFormIntake(
 
   // 13. Required Poster Image
   if (!media.posterImage) {
-    errors.posterImage =
-      'Required poster image (PNG, JPEG, or WEBP) is missing.';
+    errors.posterImage = 'Required poster image (PNG) is missing.';
   } else {
     if (media.posterImage.size <= 0) {
       errors.posterImage = 'Poster image file is empty.';
@@ -147,10 +146,10 @@ export function validateFormIntake(
     ) {
       errors.posterImage = `Poster image size [${(media.posterImage.size / (1024 * 1024)).toFixed(2)} MB] exceeds 5 MB limit.`;
     } else if (
-      media.posterImage.type &&
-      !ALLOWED_IMAGE_TYPES.has(media.posterImage.type)
+      (media.posterImage.type && media.posterImage.type !== 'image/png') ||
+      (media.posterImage.name && !media.posterImage.name.toLowerCase().endsWith('.png'))
     ) {
-      errors.posterImage = 'Poster image must be a PNG, JPEG, or WEBP image.';
+      errors.posterImage = 'Poster image must be a PNG file (.png).';
     }
   }
 

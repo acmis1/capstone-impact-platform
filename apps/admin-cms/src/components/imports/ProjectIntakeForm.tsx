@@ -491,7 +491,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
                 value={metadata.groupName}
                 onChange={(e) => handleMetadataChange('groupName', e.target.value)}
                 disabled={isFieldDisabled}
-                placeholder="Official student group name"
+                placeholder="Official group name"
                 isInvalid={Boolean(errors.groupName)}
                 aria-describedby={errors.groupName ? 'err-groupName' : undefined}
                 aria-required="true"
@@ -513,7 +513,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
                 value={metadata.participantContactEmail}
                 onChange={(e) => handleMetadataChange('participantContactEmail', e.target.value)}
                 disabled={isFieldDisabled}
-                placeholder="group-lead@student.rmit.edu.au"
+                placeholder="participant@example.com"
                 isInvalid={Boolean(errors.participantContactEmail)}
                 aria-describedby={errors.participantContactEmail ? 'err-email' : undefined}
               />
@@ -534,7 +534,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
               value={metadata.teamMembers}
               onChange={(e) => handleMetadataChange('teamMembers', e.target.value)}
               disabled={isFieldDisabled}
-              placeholder="List student team members (one per line or separated by commas)"
+              placeholder="List team members (one per line or separated by commas)"
               isInvalid={Boolean(errors.teamMembers)}
               aria-describedby={errors.teamMembers ? 'err-teamMembers' : undefined}
               aria-required="true"
@@ -774,7 +774,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
             7. Required Poster Media
           </CardTitle>
           <CardDescription className="text-xs text-muted-foreground">
-            Mandatory poster image and PDF documents.
+            Mandatory poster image and PDF documents. Canonical poster image is poster.png (PNG only, max 5 MB).
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 sm:p-6 flex flex-col gap-4">
@@ -782,11 +782,14 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
             <Label htmlFor="posterImage" isRequired>
               Poster Image (poster.png)
             </Label>
+            <p className="text-xs text-muted-foreground">
+              Canonical poster image must be a PNG file (poster.png; maximum 5 MB).
+            </p>
             <input
               id="posterImage"
               ref={posterImageInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png"
               onChange={handlePosterImageChange}
               disabled={isFieldDisabled}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

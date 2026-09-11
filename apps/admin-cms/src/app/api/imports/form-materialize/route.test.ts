@@ -163,6 +163,42 @@ describe('POST /api/imports/form-materialize route', () => {
     expect(json.code).toBe('VALIDATION_ERROR');
   });
 
+  it('rejects payload with unrecognized top-level properties via strict schema validation', async () => {
+    vi.mocked(validateSameOrigin).mockReturnValue(true);
+    mockAdmin();
+
+    const dataWithUnknownKey = {
+      ...VALID_FORM_DATA,
+      unexpectedField: 'unexpected_value_should_be_rejected',
+    };
+
+    const bodyStr = JSON.stringify(dataWithUnknownKey);
+    const req = new NextRequest(URL, {
+      method: 'POST',
+      headers: {
+        origin: ORIGIN,
+        'content-length': String(Buffer.byteLength(bodyStr)),
+        'content-type': 'application/json',
+      },
+      body: bodyStr,
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.code).toBe('VALIDATION_ERROR');
+    expect(json.error).toBe('Invalid form intake metadata.');
+    expect(json.details).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'unrecognized_keys',
+        }),
+      ])
+    );
+    // Prove sanitized details do not contain raw values
+    expect(JSON.stringify(json)).not.toContain('unexpected_value_should_be_rejected');
+  });
+
   it('materializes canonical workbook and returns spreadsheet buffer on valid authorized request', async () => {
     vi.mocked(validateSameOrigin).mockReturnValue(true);
     mockAdmin();

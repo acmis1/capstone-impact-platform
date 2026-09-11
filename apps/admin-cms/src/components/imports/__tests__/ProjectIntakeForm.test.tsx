@@ -69,7 +69,7 @@ describe('ProjectIntakeForm Component', () => {
     expect(screen.getAllByText('At least one team member is required.').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Poster full text is required.').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Accessibility description is required.').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Required poster image (PNG, JPEG, or WEBP) is missing.').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Required poster image (PNG) is missing.').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Required poster PDF is missing.').length).toBeGreaterThanOrEqual(1);
   });
 
