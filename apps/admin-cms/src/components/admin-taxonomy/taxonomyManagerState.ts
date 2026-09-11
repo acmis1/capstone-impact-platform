@@ -10,10 +10,6 @@ export function addTaxonomyEntry(
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
-export function removeTaxonomyEntryFromState(entries: TaxonomyEntry[], id: string): TaxonomyEntry[] {
-  return entries.filter((entry) => entry.id !== id);
-}
-
 export function updateTaxonomyNotice(
   current: Record<TaxonomyKind, TaxonomyNotice>,
   kind: TaxonomyKind,

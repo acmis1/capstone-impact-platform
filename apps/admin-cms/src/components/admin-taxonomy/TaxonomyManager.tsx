@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Alert } from '../ui/alert';
 import { Button } from '../ui/button';
@@ -16,7 +15,6 @@ import {
 } from '../../taxonomy/taxonomy';
 import {
   addTaxonomyEntry,
-  removeTaxonomyEntryFromState,
   updateTaxonomyNotice,
   type TaxonomyNotice,
 } from './taxonomyManagerState';
@@ -94,31 +92,6 @@ export function TaxonomyManager({ initialCatalogues }: TaxonomyManagerProps) {
     }
   };
 
-  const remove = async (kind: TaxonomyKind, entry: TaxonomyEntry) => {
-    if (busy) return;
-    setBusy(`${kind}:${entry.id}`);
-    setNotice(kind, null);
-    try {
-      const response = await fetch(`/api/taxonomy/${kind}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: entry.id }),
-      });
-      const payload = await response.json().catch(() => null) as { success?: boolean } | null;
-      if (!response.ok || !payload?.success) {
-        setNotice(kind, { variant: 'error', message: actionError(payload) });
-        return;
-      }
-      setCatalogues((current) => ({ ...current, [kind]: removeTaxonomyEntryFromState(current[kind], entry.id) }));
-      setNotice(kind, { variant: 'success', message: `${entry.name} removed.` });
-      router.refresh();
-    } catch {
-      setNotice(kind, { variant: 'error', message: 'The catalogue change could not be completed. Try again.' });
-    } finally {
-      setBusy(null);
-    }
-  };
-
   return (
     <div className="grid gap-6 xl:grid-cols-3">
       {TAXONOMY_KINDS.map((kind) => {
@@ -154,29 +127,14 @@ export function TaxonomyManager({ initialCatalogues }: TaxonomyManagerProps) {
               </form>
               <ul aria-label={`${TAXONOMY_LABELS[kind]} catalogue`} className="divide-y divide-border/70 rounded-lg border border-border/70">
                 {entries.map((entry) => {
-                  const entryBusy = busy === `${kind}:${entry.id}`;
-                  const removable = entry.usageCount === 0;
                   return (
                     <li key={entry.id} className="flex min-w-0 items-center justify-between gap-3 px-3 py-3">
                       <div className="min-w-0">
                         <p className="break-words text-sm font-medium text-foreground">{entry.name}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          {entry.usageCount === 0 ? 'Unused — safe to remove' : `Used by ${entry.usageCount} ${entry.usageCount === 1 ? 'project' : 'projects'}`}
+                          {entry.usageCount === 0 ? 'Not currently used' : `Used by ${entry.usageCount} ${entry.usageCount === 1 ? 'project' : 'projects'}`}
                         </p>
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="min-h-11 min-w-11 shrink-0 text-destructive hover:text-destructive"
-                        disabled={!removable || busy !== null}
-                        aria-label={`Remove ${entry.name}`}
-                        title={removable ? `Remove ${entry.name}` : 'Used values cannot be removed'}
-                        onClick={() => remove(kind, entry)}
-                      >
-                        <Trash2 aria-hidden="true" />
-                        <span className="sr-only">{entryBusy ? 'Removing' : 'Remove'}</span>
-                      </Button>
                     </li>
                   );
                 })}

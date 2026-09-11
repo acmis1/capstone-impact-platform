@@ -43,7 +43,7 @@ export default async function TaxonomyPage() {
       <header className="max-w-3xl">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Project categories</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          Manage the catalogue values used by imports, project metadata, dashboard filters and public showcase records. Add official School values when supplied. Referenced values cannot be renamed or removed.
+          Add official School catalogue values here. Existing values are retained to protect projects that may already reference them.
         </p>
       </header>
       <TaxonomyManager initialCatalogues={catalogues} />

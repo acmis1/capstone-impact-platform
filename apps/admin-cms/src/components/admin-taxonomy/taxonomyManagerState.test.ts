@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addTaxonomyEntry, removeTaxonomyEntryFromState, updateTaxonomyNotice } from './taxonomyManagerState';
+import { addTaxonomyEntry, updateTaxonomyNotice } from './taxonomyManagerState';
 
 describe('taxonomy manager state', () => {
   it('inserts a newly-created option in display order with zero project references', () => {
@@ -7,13 +7,6 @@ describe('taxonomy manager state', () => {
       { id: 'a', name: 'Aviation', usageCount: 0 },
       { id: 'b', name: 'IT', usageCount: 2 },
     ]);
-  });
-
-  it('removes only the successfully deleted unused catalogue entry', () => {
-    expect(removeTaxonomyEntryFromState([
-      { id: 'a', name: 'Aviation', usageCount: 0 },
-      { id: 'b', name: 'Engineering', usageCount: 3 },
-    ], 'a')).toEqual([{ id: 'b', name: 'Engineering', usageCount: 3 }]);
   });
 
   it('keeps status feedback scoped to the taxonomy section that changed', () => {

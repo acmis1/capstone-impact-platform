@@ -10,7 +10,6 @@ import { SupabaseTaxonomyGateway } from '../../../../taxonomy/SupabaseTaxonomyGa
 import {
   createTaxonomyEntry,
   parseTaxonomyKind,
-  removeTaxonomyEntry,
   type TaxonomyActionResult,
 } from '../../../../taxonomy/taxonomy';
 
@@ -20,20 +19,58 @@ const MAX_REQUEST_BYTES = 2_048;
 type RouteContext = { params: Promise<{ kind: string }> };
 
 function statusFor(result: TaxonomyActionResult): number {
-  if (result.ok) return result.code === 'CREATED' ? 201 : 200;
+  if (result.ok) return 201;
   switch (result.code) {
     case 'INVALID_INPUT': return 400;
-    case 'DUPLICATE':
-    case 'IN_USE': return 409;
-    case 'NOT_FOUND': return 404;
+    case 'DUPLICATE': return 409;
     case 'PERSISTENCE_FAILED': return 500;
   }
   return 500;
 }
 
-function bodyTooLarge(request: NextRequest): boolean {
+function declaredBodyError(request: NextRequest): NextResponse | null {
   const length = request.headers.get('content-length');
-  return length !== null && /^\d+$/.test(length) && Number(length) > MAX_REQUEST_BYTES;
+  if (length === null) return null;
+  if (!/^(0|[1-9][0-9]*)$/.test(length) || !Number.isSafeInteger(Number(length))) {
+    return NextResponse.json({ success: false, code: 'INVALID_INPUT', error: 'Validation failed.' }, { status: 400, headers: NO_STORE_HEADERS });
+  }
+  if (Number(length) > MAX_REQUEST_BYTES) {
+    return NextResponse.json({ success: false, code: 'INVALID_INPUT', error: 'Request too large.' }, { status: 413, headers: NO_STORE_HEADERS });
+  }
+  return null;
+}
+
+async function readBoundedJson(request: NextRequest): Promise<{ body: unknown } | { response: NextResponse }> {
+  const reader = request.body?.getReader();
+  if (!reader) {
+    return { response: NextResponse.json({ success: false, code: 'INVALID_INPUT', error: 'Validation failed.' }, { status: 400, headers: NO_STORE_HEADERS }) };
+  }
+
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const part = await reader.read();
+    if (part.done) break;
+    if (!part.value || part.value.byteLength === 0) continue;
+    size += part.value.byteLength;
+    if (size > MAX_REQUEST_BYTES) {
+      await reader.cancel().catch(() => {});
+      return { response: NextResponse.json({ success: false, code: 'INVALID_INPUT', error: 'Request too large.' }, { status: 413, headers: NO_STORE_HEADERS }) };
+    }
+    chunks.push(part.value);
+  }
+
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return { body: JSON.parse(new TextDecoder().decode(bytes)) as unknown };
+  } catch {
+    return { response: NextResponse.json({ success: false, code: 'INVALID_INPUT', error: 'Validation failed.' }, { status: 400, headers: NO_STORE_HEADERS }) };
+  }
 }
 
 async function resolveAuthorizedKind(request: NextRequest, context: RouteContext) {
@@ -44,9 +81,8 @@ async function resolveAuthorizedKind(request: NextRequest, context: RouteContext
   if (!kind) {
     return { response: NextResponse.json({ success: false, code: 'NOT_FOUND', error: 'The requested catalogue was not found.' }, { status: 404, headers: NO_STORE_HEADERS }) };
   }
-  if (bodyTooLarge(request)) {
-    return { response: NextResponse.json({ success: false, code: 'INVALID_INPUT', error: 'Validation failed.' }, { status: 413, headers: NO_STORE_HEADERS }) };
-  }
+  const bodyError = declaredBodyError(request);
+  if (bodyError) return { response: bodyError };
 
   const adminContext = await requireAdmin();
   if (!canManageTaxonomy(adminContext.permissions)) {
@@ -60,33 +96,12 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
   try {
     const authorized = await resolveAuthorizedKind(request, context);
     if ('response' in authorized && authorized.response) return authorized.response;
-    const body = await request.json().catch(() => null);
+    const parsedBody = await readBoundedJson(request);
+    if ('response' in parsedBody) return parsedBody.response;
     const result = await createTaxonomyEntry(
       new SupabaseTaxonomyGateway(createSupabaseAdminClient()),
       authorized.kind,
-      body,
-    );
-    if (result.ok) revalidatePath('/admin/taxonomy');
-    return NextResponse.json({ success: result.ok, ...result }, { status: statusFor(result), headers: NO_STORE_HEADERS });
-  } catch (error) {
-    if (error instanceof AdminAuthError) {
-      return NextResponse.json({ success: false, code: error.type, error: getPublicAuthErrorMessage(error.type) }, { status: getAuthErrorHttpStatus(error.type), headers: NO_STORE_HEADERS });
-    }
-    console.error('[Taxonomy API]: INTERNAL_FAILURE');
-    return NextResponse.json({ success: false, code: 'PERSISTENCE_FAILED', error: 'The catalogue change could not be completed. Try again.' }, { status: 500, headers: NO_STORE_HEADERS });
-  }
-}
-
-/** Deletes only an unused catalogue row; referenced values fail closed before DELETE is issued. */
-export async function DELETE(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  try {
-    const authorized = await resolveAuthorizedKind(request, context);
-    if ('response' in authorized && authorized.response) return authorized.response;
-    const body = await request.json().catch(() => null);
-    const result = await removeTaxonomyEntry(
-      new SupabaseTaxonomyGateway(createSupabaseAdminClient()),
-      authorized.kind,
-      body,
+      parsedBody.body,
     );
     if (result.ok) revalidatePath('/admin/taxonomy');
     return NextResponse.json({ success: result.ok, ...result }, { status: statusFor(result), headers: NO_STORE_HEADERS });

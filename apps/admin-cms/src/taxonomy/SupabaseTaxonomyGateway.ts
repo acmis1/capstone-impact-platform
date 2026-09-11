@@ -64,25 +64,4 @@ export class SupabaseTaxonomyGateway implements TaxonomyGateway {
     }
     return data as { id: string; name: string };
   }
-
-  async isReferenced(kind: TaxonomyKind, id: string): Promise<boolean> {
-    const query = kind === 'program'
-      ? this.supabase.from('projects').select('id', { count: 'exact', head: true }).eq('program_id', id)
-      : kind === 'discipline'
-        ? this.supabase.from('project_disciplines').select('project_id', { count: 'exact', head: true }).eq('discipline_id', id)
-        : this.supabase.from('project_industry_categories').select('project_id', { count: 'exact', head: true }).eq('industry_category_id', id);
-    const { count, error } = await query;
-    if (error) throw new Error('Taxonomy reference check failed');
-    return (count ?? 0) > 0;
-  }
-
-  async remove(kind: TaxonomyKind, id: string): Promise<boolean> {
-    const { data, error } = await this.supabase
-      .from(TABLE_BY_KIND[kind])
-      .delete()
-      .eq('id', id)
-      .select('id');
-    if (error) throw new Error('Taxonomy remove failed');
-    return Array.isArray(data) && data.length === 1;
-  }
 }

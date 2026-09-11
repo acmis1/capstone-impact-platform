@@ -41,11 +41,12 @@ describe('TaxonomyManager', () => {
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps removal disabled for a referenced catalogue value and identifies why', () => {
+  it('exposes usage counts without any removal action', () => {
     render(<TaxonomyManager initialCatalogues={initialCatalogues} />);
 
-    const [button] = screen.getAllByRole('button', { name: 'Remove IT' });
-    expect(button).toHaveProperty('disabled', true);
     expect(screen.getByText('Used by 1 project')).toBeDefined();
+    expect(screen.getAllByText('Not currently used')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: /remove/i })).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
