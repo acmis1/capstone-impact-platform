@@ -15,6 +15,7 @@ import {
 import {
   adaptSyntheticProjectForDb,
   createDeterministicStoragePayload,
+  scopeSyntheticTaxonomyName,
 } from './localScalingFixtureAdapter';
 import { parseCliArgs } from '../scripts/benchmarkLocalScaling';
 import { generateSyntheticProjects } from '../fixtures/syntheticProjects';
@@ -148,16 +149,25 @@ describe('Local Scaling Benchmark Statistics & Utilities', () => {
       ],
       cleanup: {
         projectsCreated: 100,
+        taxonomyMappingsCreated: 200,
+        taxonomyRowsCreated: 7,
         mediaAssetsCreated: 300,
         storageObjectsCreated: 3,
         projectDeletionAttempted: true,
+        taxonomyMappingsDeletionAttempted: true,
+        taxonomyDeletionAttempted: true,
         mediaAssetDeletionAttempted: true,
         storageDeletionAttempted: true,
         projectsRemoved: 100,
+        taxonomyMappingsRemoved: 200,
+        taxonomyRowsRemoved: 7,
         mediaAssetsRemoved: 300,
         storageObjectsRemoved: 3,
         residualVerifierProjects: 0,
+        residualVerifierTaxonomyMappings: 0,
+        residualVerifierTaxonomyRows: 0,
         residualVerifierStorageObjects: 0,
+        catalogueBaselineUnchanged: true,
         errors: [],
         clean: true,
       },
@@ -189,6 +199,14 @@ describe('Local Scaling Fixture Adapter & Storage Payloads', () => {
     expect(adapted.projectRow.public_id).toBe(`${runPrefix}-${project.publicId}`);
     expect(adapted.projectRow.participant_contact_email).toBe(`${runPrefix}-${project.publicId}-contact@example.test`);
     expect(adapted.projectRow.title).toBe(project.title);
+    expect(adapted.taxonomyMappingIntents.disciplineNames).toEqual(
+      project.disciplines.map((name) => scopeSyntheticTaxonomyName(runPrefix, 'discipline', name)),
+    );
+    expect(adapted.taxonomyMappingIntents.industryCategoryNames).toEqual([
+      scopeSyntheticTaxonomyName(runPrefix, 'industry', project.industry),
+    ]);
+    expect(adapted.projectRow.discipline).toBe(adapted.taxonomyMappingIntents.disciplineNames[0]);
+    expect(adapted.projectRow.industry).toBe(adapted.taxonomyMappingIntents.industryCategoryNames[0]);
 
     // Media rows
     expect(adapted.mediaRows.length).toBeGreaterThanOrEqual(2);
@@ -320,6 +338,49 @@ describe('Local scaling cleanup evidence', () => {
       residualVerifierStorageObjects: 0,
       clean: true,
     });
+  });
+
+  it('cleans taxonomy mappings before owned catalogue rows and verifies the baseline', async () => {
+    const order: string[] = [];
+    const result = await cleanupVerifierArtifacts(cleanupDependencies({
+      deleteVerifierTaxonomyMappings: vi.fn().mockImplementation(async () => {
+        order.push('mappings');
+        return { data: 3 };
+      }),
+      countVerifierTaxonomyMappings: vi.fn().mockResolvedValue({ data: 0 }),
+      deleteVerifierTaxonomy: vi.fn().mockImplementation(async () => {
+        order.push('catalogue');
+        return { data: 2 };
+      }),
+      countVerifierTaxonomy: vi.fn().mockResolvedValue({ data: 0 }),
+      verifyCatalogueBaseline: vi.fn().mockResolvedValue({ data: true }),
+    }));
+
+    expect(order).toEqual(['mappings', 'catalogue']);
+    expect(result).toMatchObject({
+      taxonomyMappingsRemoved: 3,
+      taxonomyRowsRemoved: 2,
+      residualVerifierTaxonomyMappings: 0,
+      residualVerifierTaxonomyRows: 0,
+      catalogueBaselineUnchanged: true,
+      clean: true,
+    });
+  });
+
+  it('does not delete owned catalogue rows while a project deletion is unconfirmed', async () => {
+    const deleteVerifierTaxonomy = vi.fn().mockResolvedValue({ data: 2 });
+    const result = await cleanupVerifierArtifacts(cleanupDependencies({
+      deleteVerifierProjects: vi.fn().mockResolvedValue({ data: 0 }),
+      countVerifierProjects: vi.fn().mockResolvedValue({ data: 1 }),
+      countVerifierTaxonomyMappings: vi.fn().mockResolvedValue({ data: 2 }),
+      deleteVerifierTaxonomy,
+      countVerifierTaxonomy: vi.fn().mockResolvedValue({ data: 2 }),
+      verifyCatalogueBaseline: vi.fn().mockResolvedValue({ data: false }),
+    }));
+
+    expect(deleteVerifierTaxonomy).not.toHaveBeenCalled();
+    expect(result.clean).toBe(false);
+    expect(result.residualVerifierTaxonomyRows).toBe(2);
   });
 
   it('fails closed when finding verifier projects fails', async () => {
