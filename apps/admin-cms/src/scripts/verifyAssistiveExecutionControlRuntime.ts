@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
+import { EXPECTED_REPOSITORY_MIGRATION_COUNT, EXPECTED_REPOSITORY_MIGRATIONS } from '../deployment/hostedDeploymentReadiness';
 import { runLocalSupabaseCli } from '../local-development/safeSupabaseCli';
 import {
   LAUNCH_LIMIT_PER_ROLLING_WINDOW,
@@ -34,6 +35,7 @@ const WORKER_ID = 'runtime-worker-01';
 const JOB_WORKER_ID = '20000000-0000-4000-8000-000000000001';
 const LEASE_SECONDS = 900;
 const PREVIOUS_MIGRATION_VERSION = '20260828120000';
+const CURRENT_MIGRATION_VERSION = EXPECTED_REPOSITORY_MIGRATIONS[EXPECTED_REPOSITORY_MIGRATIONS.length - 1].split('_')[0];
 
 
 function hash(value: string): string {
@@ -181,7 +183,7 @@ async function main(): Promise<void> {
     assert.equal(
       migrationUp.ok,
       true,
-      `Migration 0046 to 0054 failed (${migrationUp.failureCategory ?? 'UNKNOWN'}).`,
+      `Migration 0046 to current repository head failed (${migrationUp.failureCategory ?? 'UNKNOWN'}).`,
     );
 
     const actor = await service.from('admin_users').insert({
@@ -212,12 +214,12 @@ async function main(): Promise<void> {
     // privilege checks below exercise the real authenticated connection path.
     psql(`ALTER ROLE ${DISPATCHER_ROLE} WITH PASSWORD '${dispatcherPassword}';`);
 
-    await scenario(1, 'Migration 0046 to 0054 preserves project data and installs the control schema', () => {
+    await scenario(1, 'Migration 0046 to current repository head preserves project data and installs the control schema', () => {
       assert.equal(
         psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'),
-        '54',
+        String(EXPECTED_REPOSITORY_MIGRATION_COUNT),
       );
-      assert.equal(psql('SELECT max(version) FROM supabase_migrations.schema_migrations;'), '20260910120000');
+      assert.equal(psql('SELECT max(version) FROM supabase_migrations.schema_migrations;'), CURRENT_MIGRATION_VERSION);
       assert.equal(
         psql(`SELECT to_jsonb(p)::text FROM public.projects AS p WHERE p.id = '${upgradeProjectId}'::uuid;`),
         upgradeProjectBefore,
