@@ -25,6 +25,195 @@ const [bodyEndHtml, listingHtml, listingCss, detailHtml, detailCss, fixtureText,
 const fixture = JSON.parse(fixtureText);
 const contractCases = JSON.parse(contractCasesText);
 
+const longRecords = [
+  {
+    id: 202691,
+    publicId: '2026-long-poster-showcase',
+    title: 'Comprehensive High-Resolution Climate Impact Early Detection Dashboard with Automated Multi-Agency Emergency Response Coordination',
+    summary: 'An extensive multi-jurisdictional automated intelligence platform providing mission-critical emergency telemetry, hydrological modeling, predictive simulation forecasts, and integrated real-time logistics mobilization for civil protection operations across continental jurisdictions.',
+    background: 'Disaster response coordination authorities across provincial boundaries require unified, unclipped, fault-tolerant telemetry during rapid crisis evolution.',
+    solution: 'The platform aggregates real-time Doppler rainfall radar feeds, IoT river gauge telemetry, satellite optical flood extents, and dynamic evacuation transit routing.',
+    year: '2026',
+    program: 'Bachelor of Applied Science (Aviation) / Bachelor of Business (Supply Chain Management and Logistics)',
+    studyProgram: 'Bachelor of Applied Science (Aviation) / Bachelor of Business (Supply Chain Management and Logistics)',
+    discipline: 'Computational Environmental Fluid Dynamics and Cloud Software Engineering',
+    disciplines: [
+      'Computational Environmental Fluid Dynamics and Cloud Software Engineering',
+      'Geospatial Information Systems and High-Performance Distributed Systems Architecture'
+    ],
+    industry: 'Civil Protection and Humanitarian Emergency Informatics',
+    industryPartner: 'International Consortium for Advanced Disaster Informatics and Meteorological Resilience Research',
+    academicSupervisor: 'Professor Emeritus Bartholomew Aloysius Cumberland-Throckmorton III, FTSE',
+    groupName: 'Autonomous Environmental Logistics Research Group Alpha',
+    teamMembers: [
+      'Principal Investigator Alexander Christian Sterling-Vanderbilt',
+      'Senior Systems Architect Genevieve Beatrice Montgomery-Clarence',
+      'Lead Validation Engineer Maximilian Theodore Kensington-Cross'
+    ],
+    poster: 'https://media.example.test/posters/flood-response.svg',
+    posterPdf: 'https://media.example.test/posters/flood-response.pdf',
+    posterText: 'Full comprehensive transcript of the climate impact detection and automated logistics mobilization poster. Contains exhaustive details regarding telemetry pipelines, hydrological models, radar synchronization, and real-time response distribution arrays.'.repeat(5),
+    accessibilityText: 'Comprehensive schematic poster illustrating meteorological sensor ingestion pipelines, distributed flood hazard contouring algorithms, and multi-agency response unit dispatches.',
+    snapshots: [
+      'https://media.example.test/snapshots/snap1-poster.svg',
+      'https://media.example.test/snapshots/snap2-poster.svg',
+      'https://media.example.test/snapshots/snap3-poster.svg'
+    ],
+    snapshotMedia: [
+      {
+        url: 'https://media.example.test/snapshots/snap1-poster.svg',
+        altText: 'Interactive geographical hydrological risk contour map displaying millimeter-accurate river crest probability surfaces across three regional watershed management zones.',
+        galleryPosition: 1,
+        contentKind: 'text_bearing',
+        fullText: 'Exhaustive data transcript: Region Alpha river gage crest height 8.42m, flow velocity 4.2m/s, crest probability 94.7%. Evacuation corridor B-4 designated primary egress route.'
+      },
+      {
+        url: 'https://media.example.test/snapshots/snap2-poster.svg',
+        altText: 'Temporal progression diagram demonstrating automated emergency response unit routing optimization across flooded metropolitan infrastructure sectors.',
+        galleryPosition: 2,
+        contentKind: 'ordinary',
+        fullText: null
+      },
+      {
+        url: 'https://media.example.test/snapshots/snap3-poster.svg',
+        altText: 'Real-time multi-agency dashboard telemetry display indicating active civil defense dispatch units, automated resource allocations, and shelter occupancy capacities.',
+        galleryPosition: 3,
+        contentKind: 'ordinary',
+        fullText: null
+      }
+    ],
+    videoUrl: 'https://media.example.test/videos/flood-response.mp4',
+    demoUrl: 'https://demo.example.test/climate-response-telemetry-coordination-portal',
+    repositoryUrl: 'https://github.com/example/climate-impact-emergency-response-system',
+    externalLinks: [
+      { label: 'Hydrological Simulation Methodology Whitepaper', url: 'https://research.example.test/hydrology-whitepaper-2026.pdf' },
+      { label: 'Civil Protection Agency Integration Specifications', url: 'https://agency.example.test/api-specifications' }
+    ],
+    layoutConfig: {
+      templateId: 'poster_showcase',
+      featuredMedia: 'video'
+    }
+  },
+  {
+    id: 202592,
+    publicId: '2025-long-technical-detail',
+    title: 'Cryptographically Verified Zero-Knowledge Distributed Telemetry and Automated Forensic Audit Infrastructure',
+    summary: 'A resilient, privacy-preserving zero-knowledge auditing architecture providing cryptographic attestation, tamper-evident distributed append-only ledger storage, and high-throughput transaction verification for regulated critical infrastructure deployments.',
+    background: 'Modern distributed operational telemetry infrastructure faces adversarial interception, state-sponsored tampering, and strict non-repudiation mandates that legacy centralized log collectors fail to satisfy under forensic analysis.',
+    solution: 'Our architecture employs recursive zero-knowledge SNARK proofs combined with a high-performance distributed consensus network to ensure mathematically verifiable audit logs while protecting confidential operational telemetry.',
+    year: '2025',
+    program: 'Master of Cyber Security / Master of Science in Cryptographic Engineering and Network Security',
+    studyProgram: 'Master of Cyber Security / Master of Science in Cryptographic Engineering and Network Security',
+    discipline: 'Applied Cryptography and Distributed Systems Security',
+    disciplines: [
+      'Applied Cryptography and Distributed Systems Security',
+      'Formal Verification and Secure Systems Architecture'
+    ],
+    industry: 'Financial Infrastructure and Critical Asset Defense',
+    industryPartner: 'National Cyber Security Operational Centre and Sovereign Cryptographic Assurance Directorate',
+    academicSupervisor: 'Associate Professor Victoria Anastasia Kensington-Smythe, FACS',
+    groupName: 'Verifiable Systems Security and Cryptographic Proofs Laboratory',
+    teamMembers: [
+      'Research Lead Harrison David Sterling-Forbes',
+      'Cryptographic Engineer Sebastian Arthur Pendelton-Clark',
+      'Formal Verification Specialist Beatrice Eleanor Montgomery-Hughes'
+    ],
+    poster: 'https://media.example.test/posters/flood-response.svg',
+    posterPdf: 'https://media.example.test/posters/flood-response.pdf',
+    posterText: 'Detailed mathematical formulations of zk-SNARK constraint systems, verification key structures, and benchmark latency measurements across heterogeneous deployment topologies.'.repeat(4),
+    accessibilityText: 'Comprehensive schematic illustrating zero-knowledge circuit synthesis, proof generation pipeline, and distributed verification ledger architecture.',
+    snapshots: [
+      'https://media.example.test/snapshots/snap1-tech.svg',
+      'https://media.example.test/snapshots/snap2-tech.svg'
+    ],
+    snapshotMedia: [
+      {
+        url: 'https://media.example.test/snapshots/snap1-tech.svg',
+        altText: 'Cryptographic proof generation pipeline flow chart demonstrating circuit arithmetization, polynomial commitment schemes, and zero-knowledge argument construction.',
+        galleryPosition: 1,
+        contentKind: 'text_bearing',
+        fullText: 'Circuit synthesis parameters: 2^20 R1CS constraints, proving key size 128MB, proof generation time 1.42 seconds on 16-core workstation. Verification time 3.2 milliseconds.'
+      },
+      {
+        url: 'https://media.example.test/snapshots/snap2-tech.svg',
+        altText: 'Comparative latency and memory overhead performance benchmarks across simulated adversarial network partitions and high-throughput transaction loads.',
+        galleryPosition: 2,
+        contentKind: 'ordinary',
+        fullText: null
+      }
+    ],
+    videoUrl: 'https://www.youtube.com/embed/AbCdEfGhI12',
+    demoUrl: 'https://demo.example.test/cryptographic-audit-verification-bench',
+    repositoryUrl: 'https://github.com/example/zk-telemetry-audit-engine',
+    externalLinks: [
+      { label: 'Formal Security Analysis and Mathematical Proofs Appendix', url: 'https://eprint.example.test/formal-proofs-2025.pdf' },
+      { label: 'Reference Circuit Implementation and Constraint Benchmarks', url: 'https://github.com/example/zk-circuits-reference' }
+    ],
+    layoutConfig: {
+      templateId: 'technical_detail'
+    }
+  },
+  {
+    id: 202493,
+    publicId: '2024-long-media-rich',
+    title: 'Immersive Photogrammetric Spatial Wayfinding and Assistive Navigation Systems for Complex Clinical Environments',
+    summary: 'A multimodal, universally accessible spatial wayfinding system designed to empower vision-impaired patients and emergency clinicians navigating complex hospital campuses through centimeter-accurate ultra-wideband positioning, haptic spatial feedback, and accessible audio guidance.',
+    background: 'Wayfinding disorientation in large metropolitan hospital complexes causes significant stress for vulnerable patients, missed oncology appointments, and critical response delays for clinical emergency teams.',
+    solution: 'We engineered an accessible navigation framework integrating spatial audio beacons, high-contrast floor projection models, and haptic feedback rings synchronized with a centralized clinical facility digital twin.',
+    year: '2024',
+    program: 'Master of Design (Innovation and Technology) / Master of Human-Computer Interaction',
+    studyProgram: 'Master of Design (Innovation and Technology) / Master of Human-Computer Interaction',
+    discipline: 'User Experience Design and Assistive Healthcare Technology',
+    disciplines: [
+      'User Experience Design and Assistive Healthcare Technology',
+      'Spatial Computing and Accessibility Engineering'
+    ],
+    industry: 'Healthcare Facilities Management and Patient Wellbeing',
+    industryPartner: 'Metropolitan Public Health Service and Assistive Technologies Research Consortium',
+    academicSupervisor: 'Professor Jonathan Emmanuel Sterling-Campbell, PhD',
+    groupName: 'Inclusive Healthcare Technology Research Collective',
+    teamMembers: [
+      'Design Lead Charlotte Olivia Kensington-Vale',
+      'Spatial Software Engineer Benjamin Thomas Montgomery-Pike',
+      'Clinical Accessibility Researcher Evelyn Grace Sterling-Ross'
+    ],
+    poster: 'https://media.example.test/posters/flood-response.svg',
+    posterPdf: 'https://media.example.test/posters/flood-response.pdf',
+    posterText: 'Exhaustive usability study findings, participatory design interview transcripts, accessibility guidelines, and system architectural diagrams.'.repeat(4),
+    accessibilityText: 'Tactile navigation path schematic showing hospital foyer wayfinding routes, accessible rest stations, and high-contrast signage locations.',
+    snapshots: [
+      'https://media.example.test/snapshots/snap1-media.svg',
+      'https://media.example.test/snapshots/snap2-media.svg'
+    ],
+    snapshotMedia: [
+      {
+        url: 'https://media.example.test/snapshots/snap1-media.svg',
+        altText: 'Interactive spatial map interface demonstrating real-time patient path routing with high-contrast accessibility color palettes and tactile hazard highlights.',
+        galleryPosition: 1,
+        contentKind: 'text_bearing',
+        fullText: 'Spatial navigation metrics: Main entrance to Ambulatory Oncology wing path distance 142 meters, 0 elevation steps, 3 accessible seating bays identified at 40m intervals.'
+      },
+      {
+        url: 'https://media.example.test/snapshots/snap2-media.svg',
+        altText: 'Clinical participant usability evaluation photograph depicting patient testing the wearable haptic wayfinding ring during simulated hospital transit.',
+        galleryPosition: 2,
+        contentKind: 'ordinary',
+        fullText: null
+      }
+    ],
+    videoUrl: 'https://player.vimeo.com/video/123456789',
+    demoUrl: 'https://demo.example.test/inclusive-hospital-wayfinding-simulation',
+    repositoryUrl: 'https://github.com/example/hospital-spatial-navigation-framework',
+    externalLinks: [
+      { label: 'Participatory Clinical Usability Study Comprehensive Findings', url: 'https://health.example.test/clinical-study-report-2024.pdf' },
+      { label: 'Accessible Spatial Navigation Open Standard Specifications', url: 'https://standards.example.test/assistive-spatial-spec-v1.pdf' }
+    ],
+    layoutConfig: {
+      templateId: 'media_rich'
+    }
+  }
+];
+
 /**
  * Browser scenarios that consume a paired server-validator contract case. The same JSON drives
  * `apps/admin-cms/src/feed/dudaCurrentFeedContract.test.ts`, so a record proven server-valid there
@@ -256,10 +445,56 @@ function harnessDriver() {
     .map(root => root.innerHTML)
     .join('\n');
   const verifyNoOverflow = () => {
+    const targetWidth = window.__CAPSTONE_HARNESS_VIEWPORT?.width || window.innerWidth;
     check(
       document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
-      `page has no horizontal overflow at ${window.innerWidth}px`,
+      `page has no horizontal overflow on documentElement at ${window.innerWidth}px`,
     );
+
+    const container = document.querySelector('.cip-module') || document.querySelector('#project-detail') || document.querySelector('#capstone-showcase-root');
+    if (container) {
+      check(
+        container.scrollWidth <= targetWidth + 1,
+        `module container has no horizontal scroll overflow at ${targetWidth}px (scrollWidth=${container.scrollWidth}, clientWidth=${container.clientWidth})`,
+      );
+
+      const containerRect = container.getBoundingClientRect();
+      const effectiveRight = Math.min(containerRect.right, containerRect.left + targetWidth);
+
+      const selectors = [
+        'h1', 'h2', 'h3',
+        '.section-title',
+        '.metadata-chips span',
+        '.participant-chip',
+        '.metadata-list dt',
+        '.metadata-list dd',
+        '.lead-summary',
+        '.section-text',
+        '.cip-links a',
+        '.btn-cta',
+        '.btn-get-poster',
+        '.poster-download',
+        '.technical-report-card',
+        '.report-row'
+      ];
+
+      const elements = Array.from(container.querySelectorAll(selectors.join(', ')));
+      elements.forEach(el => {
+        if (el.offsetParent === null) return;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+
+        const label = el.tagName.toLowerCase() + (el.className ? '.' + el.className.trim().split(/\s+/).join('.') : '');
+        check(
+          rect.left >= containerRect.left - 2,
+          `${label} left edge (${rect.left.toFixed(1)}) is contained within container left (${containerRect.left.toFixed(1)})`,
+        );
+        check(
+          rect.right <= effectiveRight + 2,
+          `${label} right edge (${rect.right.toFixed(1)}) is contained within boundary (${effectiveRight.toFixed(1)})`,
+        );
+      });
+    }
   };
   const finish = () => {
     verifyNoOverflow();
@@ -367,14 +602,15 @@ function harnessDriver() {
       return;
     }
 
-    if (scenario === 'detail-poster') {
-      const project = window.__CAPSTONE_HARNESS_FIXTURE[0];
+    if (scenario === 'detail-poster' || scenario === 'detail-poster-long') {
+      const isLong = scenario === 'detail-poster-long';
+      const project = window.__CAPSTONE_HARNESS_FIXTURE.find(p => p.id === (isLong ? 202691 : 202601));
       check(Boolean(document.querySelector('.layout-preset-poster_showcase')), 'poster_showcase preset renders');
       check(Boolean(document.querySelector('video[src$="/videos/flood-response.mp4"]')), 'MP4 renders in the native video player');
       check(Boolean(document.querySelector('a[href$="/posters/flood-response.pdf"]')), 'poster PDF link renders');
       verifyPosterText(project);
       verifyRendererHeadingHierarchy();
-      verifyRenderedSnapshotAlts(2);
+      verifyRenderedSnapshotAlts(isLong ? 3 : 2);
       const fullTextDisclosure = document.querySelector('.snapshot-text-disclosure[data-gallery-position="1"]');
       const fullTextBody = fullTextDisclosure?.querySelector('.snapshot-text-content');
       check(fullTextDisclosure?.tagName === 'DETAILS', 'text-bearing gallery full text uses a keyboard-operable native disclosure');
@@ -437,14 +673,16 @@ function harnessDriver() {
       return;
     }
 
-    if (scenario === 'detail-technical') {
+    if (scenario === 'detail-technical' || scenario === 'detail-technical-long') {
+      const isLong = scenario === 'detail-technical-long';
+      const project = window.__CAPSTONE_HARNESS_FIXTURE.find(p => p.id === (isLong ? 202592 : 202502));
       check(Boolean(document.querySelector('.layout-preset-technical_detail')), 'technical_detail preset renders');
       check(
         document.querySelector('iframe')?.src === 'https://www.youtube.com/embed/AbCdEfGhI12',
         'YouTube URL renders as the expected embed',
       );
-      check(Boolean(document.querySelector('a[href$="/posters/zero-trust.pdf"]')), 'technical detail exposes the poster PDF');
-      verifyPosterText(window.__CAPSTONE_HARNESS_FIXTURE[1]);
+      check(Boolean(document.querySelector('a[href$="/posters/zero-trust.pdf"]') || document.querySelector('a[href$="/posters/flood-response.pdf"]')), 'technical detail exposes the poster PDF');
+      verifyPosterText(project);
       verifyRendererHeadingHierarchy();
       verifyRenderedSnapshotAlts(2);
       verifyExternalLinkSecurity();
@@ -452,14 +690,16 @@ function harnessDriver() {
       return;
     }
 
-    if (scenario === 'detail-media') {
+    if (scenario === 'detail-media' || scenario === 'detail-media-long') {
+      const isLong = scenario === 'detail-media-long';
+      const project = window.__CAPSTONE_HARNESS_FIXTURE.find(p => p.id === (isLong ? 202493 : 202403));
       check(Boolean(document.querySelector('.layout-preset-media_rich')), 'media_rich preset renders');
       check(
         document.querySelector('iframe')?.src === 'https://player.vimeo.com/video/123456789',
         'Vimeo URL renders as the expected embed',
       );
-      check(Boolean(document.querySelector('img[src$="/posters/clinic-wayfinding.jpg"]')), 'media-rich detail renders its poster');
-      verifyPosterText(window.__CAPSTONE_HARNESS_FIXTURE[2]);
+      check(Boolean(document.querySelector('img[src$="/posters/clinic-wayfinding.jpg"]') || document.querySelector('img[src$="/posters/flood-response.svg"]')), 'media-rich detail renders its poster');
+      verifyPosterText(project);
       verifyRendererHeadingHierarchy();
       verifyRenderedSnapshotAlts(2);
       verifyExternalLinkSecurity();
@@ -792,15 +1032,17 @@ function harnessDriver() {
   });
 }
 
-function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases) {
+function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases, runtimeLongRecords) {
   const pathIsDetail = requestUrl.pathname.includes('project-detail');
   const requestedScenario = requestUrl.searchParams.get('scenario');
   const scenario = requestedScenario || (pathIsDetail && requestUrl.searchParams.get('id') === '202502' ? 'navigation' : 'listing');
-  const fixtureCopy = structuredClone(runtimeFixture);
+  const targetWidth = Number(requestUrl.searchParams.get('width')) || (scenario.includes('390') ? 390 : 1440);
+  const targetHeight = Number(requestUrl.searchParams.get('height')) || (targetWidth < 500 ? 844 : 1000);
+  const sourceRecords = scenario.endsWith('-long') ? runtimeLongRecords : runtimeFixture;
+  const fixtureCopy = structuredClone(sourceRecords);
   let payload = fixtureCopy;
   let harnessContractCase = null;
   let harnessMixedFeed = null;
-
   if (scenario === 'listing') {
     payload[0].industryPartner += ' Caf\u00e9';
     payload[1].industryPartner += ' Re\u0301sume\u0301';
@@ -928,6 +1170,7 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases) {
     window.CAPSTONE_FEED_URL = 'https://demofixture.supabase.co/storage/v1/object/public/public-feeds/capstones-latest.json';
     window.__CAPSTONE_HARNESS_SCENARIO = ${escapeInlineJson(scenario)};
     window.__CAPSTONE_HARNESS_FIXTURE = ${escapeInlineJson(fixtureCopy)};
+    window.__CAPSTONE_HARNESS_VIEWPORT = { width: ${targetWidth}, height: ${targetHeight} };
     window.__CAPSTONE_HARNESS_CONTRACT_CASE = ${escapeInlineJson(harnessContractCase)};
     window.__CAPSTONE_HARNESS_MIXED_FEED = ${escapeInlineJson(harnessMixedFeed)};
     window.__CAPSTONE_HARNESS_SECRET = ['DISTINCTIVE', 'SECRET', 'LIKE', 'MARKER', '91f2c7'].join('_');
@@ -956,13 +1199,31 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases) {
     };
   `;
 
+  const mobileStyles = targetWidth < 500 ? `
+    @media (min-width: 501px) {
+      html, body { width: 100%; }
+    }
+    .cip-module, #project-detail, #capstone-showcase-root {
+      max-width: ${targetWidth}px !important;
+      margin: 0 auto !important;
+      box-sizing: border-box !important;
+    }
+    ${targetWidth <= 360 ? `
+      .cip-module { padding: 1.5rem 0.85rem !important; }
+      #project-detail h1, .hero-right-col h1, .technical-header h1 { font-size: clamp(1.45rem, 6.5vw, 1.75rem) !important; }
+      .snapshot-grid { grid-template-columns: 1fr !important; }
+      .technical-report-card, .layout-preset-technical_detail > div:not(.cip-back) { padding: 1.25rem 0.75rem !important; }
+      .report-row { grid-template-columns: 1.75rem 1fr !important; gap: 0.5rem !important; }
+    ` : ''}
+  ` : '';
+
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Duda current-feed local harness</title>
-  <style>html, body { margin: 0; width: 100%; min-height: 100%; background: #0f172a; } ${listingCss}\n${detailCss}</style>
+  <style>html, body { margin: 0; width: 100%; min-height: 100%; background: #0f172a; } ${listingCss}\n${detailCss}\n${mobileStyles}</style>
   <script>${harnessSetup}</script>
 </head>
 <body>
@@ -979,6 +1240,7 @@ const server = http.createServer((request, response) => {
   const address = server.address();
   const localOrigin = `http://127.0.0.1:${address.port}`;
   const runtimeFixture = JSON.parse(JSON.stringify(fixture).replaceAll('https://media.example.test', localOrigin));
+  const runtimeLongRecords = JSON.parse(JSON.stringify(longRecords).replaceAll('https://media.example.test', localOrigin));
   const runtimeContractCases = JSON.parse(JSON.stringify(contractCases).replaceAll('https://media.example.test', localOrigin));
 
   if (requestUrl.pathname.startsWith('/posters/') || requestUrl.pathname.startsWith('/snapshots/')) {
@@ -993,7 +1255,7 @@ const server = http.createServer((request, response) => {
   }
 
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-  response.end(buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases));
+  response.end(buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases, runtimeLongRecords));
 });
 
 await new Promise((resolve, reject) => {
@@ -1007,14 +1269,31 @@ const contractDetailRoute = '/project-detail?id=203101';
 const scenarios = [
   ['listing', '/', 1440, 1000],
   ['listing', '/', 390, 844],
+  ['listing', '/', 375, 812],
+  ['listing', '/', 320, 568],
   ['navigation', '/', 1440, 1000],
   ['detail-poster', '/project-detail?id=202601', 1440, 1000],
   ['detail-poster', '/project-detail?id=202601', 390, 844],
+  ['detail-poster', '/project-detail?id=202601', 375, 812],
+  ['detail-poster', '/project-detail?id=202601', 320, 568],
+  ['detail-poster-long', '/project-detail?id=202691', 390, 844],
+  ['detail-poster-long', '/project-detail?id=202691', 375, 812],
+  ['detail-poster-long', '/project-detail?id=202691', 320, 568],
   ['lightbox-lifecycle', '/project-detail?id=202601', 1440, 1000],
   ['detail-technical', '/project-detail?id=202502', 1440, 1000],
   ['detail-technical', '/project-detail?id=202502', 390, 844],
+  ['detail-technical', '/project-detail?id=202502', 375, 812],
+  ['detail-technical', '/project-detail?id=202502', 320, 568],
+  ['detail-technical-long', '/project-detail?id=202592', 390, 844],
+  ['detail-technical-long', '/project-detail?id=202592', 375, 812],
+  ['detail-technical-long', '/project-detail?id=202592', 320, 568],
   ['detail-media', '/project-detail?id=202403', 1440, 1000],
   ['detail-media', '/project-detail?id=202403', 390, 844],
+  ['detail-media', '/project-detail?id=202403', 375, 812],
+  ['detail-media', '/project-detail?id=202403', 320, 568],
+  ['detail-media-long', '/project-detail?id=202493', 390, 844],
+  ['detail-media-long', '/project-detail?id=202493', 375, 812],
+  ['detail-media-long', '/project-detail?id=202493', 320, 568],
   ['detail-featured-gallery', '/project-detail?id=202403', 1440, 1000],
   ['detail-generic-video', '/project-detail?id=202601', 1440, 1000],
   ['empty-feed', '/', 390, 844],
@@ -1054,7 +1333,7 @@ try {
     const profileDirectory = await mkdtemp(path.join(os.tmpdir(), 'capstone-duda-browser-'));
     try {
       const separator = route.includes('?') ? '&' : '?';
-      const url = `http://127.0.0.1:${port}${route}${separator}scenario=${scenario}`;
+      const url = `http://127.0.0.1:${port}${route}${separator}scenario=${scenario}&width=${width}&height=${height}`;
       const { stdout } = await execFileAsync(
         browserPath,
         [

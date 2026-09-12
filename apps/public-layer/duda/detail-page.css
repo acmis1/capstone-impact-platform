@@ -99,6 +99,7 @@
   line-height: 1.1;
   letter-spacing: 0;
   font-weight: 800;
+  overflow-wrap: break-word;
 }
 
 #project-detail .poster-header h1 {
@@ -195,6 +196,7 @@
   max-width: 75ch;
   font-size: 1.08rem;
   line-height: 1.8;
+  overflow-wrap: break-word;
 }
 
 #project-detail .poster-text-disclosure {
@@ -284,6 +286,7 @@
   max-width: 85ch;
   border-left: 4px solid #2563eb;
   border-radius: 0 6px 6px 0;
+  overflow-wrap: break-word;
 }
 
 #project-detail .poster-header .lead-summary {
@@ -312,6 +315,9 @@
   font-weight: 750;
   font-size: 0.85rem;
   border: 1px solid transparent;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  white-space: normal;
 }
 
 #project-detail .poster-header .metadata-chips span {
@@ -350,6 +356,8 @@
   margin: 0;
   line-height: 1.45;
   font-weight: 650;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 #project-detail .metadata-dark dt {
@@ -482,6 +490,9 @@
   font-weight: 850;
   cursor: pointer;
   border-radius: 10px;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  white-space: normal;
 }
 
 #project-detail .cip-links-large .btn-cta,
@@ -628,6 +639,7 @@
   line-height: 1.05;
   margin: 0.9rem 0 1rem;
   letter-spacing: 0;
+  overflow-wrap: break-word;
 }
 
 #project-detail .hero-right-col .metadata-chips {
@@ -644,6 +656,9 @@
   border-radius: 999px;
   text-decoration: none;
   font-weight: 850;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  white-space: normal;
 }
 
 #project-detail .media-hero-shell {
@@ -1062,10 +1077,11 @@
   }
 
   #project-detail .detail-header h1,
+  #project-detail .technical-header h1,
   #project-detail .media-header h1,
   #project-detail .poster-header h1,
   #project-detail .hero-right-col h1 {
-    font-size: 2.25rem;
+    font-size: clamp(1.75rem, 6vw, 2.25rem);
   }
 
   #project-detail .detail-meta {
@@ -1073,7 +1089,7 @@
   }
 
   #project-detail .snapshot-grid {
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
   }
 
   #project-detail .snapshot-hero-grid {
@@ -1082,5 +1098,46 @@
 
   #project-detail .media-poster-thumb {
     max-width: 350px;
+  }
+
+  #project-detail .cip-links {
+    grid-template-columns: 1fr;
+  }
+
+  #project-detail .report-row {
+    grid-template-columns: 2.25rem 1fr;
+    gap: 0.75rem;
+  }
+
+  #project-detail .technical-report-card,
+  #project-detail .layout-preset-technical_detail > div:not(.cip-back) {
+    padding: 1.5rem 1rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  #project-detail .report-row {
+    grid-template-columns: 1.75rem 1fr;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 360px) {
+  #project-detail .cip-module {
+    padding: 1.5rem 0.85rem;
+    border-radius: 14px;
+  }
+
+  #project-detail .detail-header h1,
+  #project-detail .technical-header h1,
+  #project-detail .media-header h1,
+  #project-detail .poster-header h1,
+  #project-detail .hero-right-col h1 {
+    font-size: clamp(1.45rem, 6.5vw, 1.75rem);
+  }
+
+  #project-detail .technical-report-card,
+  #project-detail .layout-preset-technical_detail > div:not(.cip-back) {
+    padding: 1.25rem 0.75rem !important;
   }
 }
