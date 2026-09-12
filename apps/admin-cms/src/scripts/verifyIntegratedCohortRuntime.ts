@@ -459,7 +459,9 @@ async function main(): Promise<void> {
   checkpoints.push(checkpoint(expectedIds, publishedRows.data.map((row) => String(row.public_id)), 'PUBLISHED_PROJECTS'));
 
   const browser = spawnSync(process.execPath, [path.join(REPOSITORY_ROOT, 'apps/public-layer/scripts/test-duda-annual-scale-browser.js')], {
-    cwd: REPOSITORY_ROOT, stdio: 'inherit', timeout: 180_000, killSignal: 'SIGTERM',
+    // Six isolated true-browser scenarios each retain their own 45-second timeout. The parent
+    // envelope covers their serial worst case plus bounded process/profile setup and teardown.
+    cwd: REPOSITORY_ROOT, stdio: 'inherit', timeout: 360_000, killSignal: 'SIGTERM',
     env: {
       ...process.env, CAPSTONE_LV01_FEED_PATH: feedPath,
       CAPSTONE_LV01_MANIFEST_HASH: fixture.manifest.digest,
