@@ -59,7 +59,7 @@ describe('StaffInvitationForm rendered boundary', () => {
     const descriptions = {
       Administrator: 'Full project authority, including publication, archiving and staff management.',
       Reviewer: 'Can read projects and complete review decisions.',
-      Editor: 'Can import and submit projects and manage supported correction packages.',
+      Editor: 'Can import projects and submit eligible projects for review.',
     };
 
     for (const [role, description] of Object.entries(descriptions)) {
