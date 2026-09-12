@@ -506,11 +506,10 @@ async function main(): Promise<void> {
           VALUES ('57b00000-0000-4000-8000-000000000001', 'admin')
           ON CONFLICT DO NOTHING;`);
       }
-      const runtime = spawnSync(process.execPath, [
-        ...(name === 'integrated-cohort' ? ['--conditions=react-server'] : []),
-        path.join(repositoryRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
-        path.join(__dirname, script.file),
-      ], {
+      const runtimeArguments = name === 'integrated-cohort'
+        ? ['--conditions=react-server', '--import', 'tsx', path.join(__dirname, script.file)]
+        : [path.join(repositoryRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'), path.join(__dirname, script.file)];
+      const runtime = spawnSync(process.execPath, runtimeArguments, {
         cwd: path.join(repositoryRoot, 'apps', 'admin-cms'), stdio: 'inherit',
         timeout: script.timeoutMs ?? RUNTIME_TIMEOUT_MS,
         killSignal: 'SIGTERM',
