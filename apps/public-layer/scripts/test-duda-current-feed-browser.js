@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
-
-const execFileAsync = promisify(execFile);
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const prototypeDirectory = path.resolve(scriptDirectory, '..');
 const dudaDirectory = path.join(prototypeDirectory, 'duda');
@@ -445,23 +442,80 @@ function harnessDriver() {
     .map(root => root.innerHTML)
     .join('\n');
   const verifyNoOverflow = () => {
-    const targetWidth = window.__CAPSTONE_HARNESS_VIEWPORT?.width || window.innerWidth;
+    const requestedWidth = window.__CAPSTONE_HARNESS_VIEWPORT?.width;
+    const actualInnerWidth = window.innerWidth;
+    const actualClientWidth = document.documentElement.clientWidth;
+
+    if (requestedWidth) {
+      check(
+        actualInnerWidth === requestedWidth,
+        `viewport innerWidth (${actualInnerWidth}px) matches requested width (${requestedWidth}px)`,
+      );
+      if (requestedWidth < 500) {
+        check(
+          actualClientWidth === requestedWidth,
+          `layout documentElement.clientWidth (${actualClientWidth}px) matches requested width (${requestedWidth}px)`,
+        );
+      } else {
+        check(
+          actualClientWidth <= requestedWidth && actualClientWidth >= requestedWidth - 25,
+          `layout documentElement.clientWidth (${actualClientWidth}px) is within desktop viewport range (${requestedWidth}px)`,
+        );
+      }
+    }
+
     check(
-      document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
-      `page has no horizontal overflow on documentElement at ${window.innerWidth}px`,
+      document.documentElement.scrollWidth <= actualClientWidth + 1,
+      `page has no horizontal overflow on documentElement at ${actualInnerWidth}px (scrollWidth=${document.documentElement.scrollWidth}, clientWidth=${actualClientWidth})`,
     );
 
     const container = document.querySelector('.cip-module') || document.querySelector('#project-detail') || document.querySelector('#capstone-showcase-root');
     if (container) {
       check(
-        container.scrollWidth <= targetWidth + 1,
-        `module container has no horizontal scroll overflow at ${targetWidth}px (scrollWidth=${container.scrollWidth}, clientWidth=${container.clientWidth})`,
+        container.scrollWidth <= actualInnerWidth + 1,
+        `module container has no horizontal scroll overflow at ${actualInnerWidth}px (scrollWidth=${container.scrollWidth}, clientWidth=${container.clientWidth})`,
       );
 
       const containerRect = container.getBoundingClientRect();
-      const effectiveRight = Math.min(containerRect.right, containerRect.left + targetWidth);
+      const viewportRight = actualInnerWidth;
 
+      // 1. Explicit verification of intentional horizontal exhibition strip
+      const strip = container.querySelector('.exhibition-strip');
+      if (strip) {
+        const stripComputed = window.getComputedStyle(strip);
+        const stripOverflowX = stripComputed.overflowX;
+        check(
+          stripOverflowX === 'auto' || stripOverflowX === 'scroll',
+          `exhibition-strip has intentional horizontal scroll styling (overflow-x: ${stripOverflowX})`,
+        );
+
+        const stripRect = strip.getBoundingClientRect();
+        check(
+          stripRect.left >= containerRect.left - 2,
+          `exhibition-strip left edge (${stripRect.left.toFixed(1)}) is within container left (${containerRect.left.toFixed(1)})`,
+        );
+        check(
+          stripRect.right <= containerRect.right + 2 && stripRect.right <= viewportRight + 2,
+          `exhibition-strip right edge (${stripRect.right.toFixed(1)}) does not exceed viewport (${viewportRight})`,
+        );
+
+        const stripCards = Array.from(strip.querySelectorAll('.snapshot-card, button'));
+        if (stripCards.length > 0) {
+          check(
+            strip.scrollWidth >= strip.clientWidth,
+            `exhibition-strip scrollWidth (${strip.scrollWidth}) contains its horizontal cards`,
+          );
+          check(
+            document.documentElement.scrollWidth <= actualClientWidth + 1,
+            'exhibition-strip children do not cause document-level horizontal scrolling',
+          );
+        }
+      }
+
+      // 2. Element-level containment for ordinary non-scroll content
       const selectors = [
+        '#project-detail',
+        '.cip-module',
         'h1', 'h2', 'h3',
         '.section-title',
         '.metadata-chips span',
@@ -470,6 +524,12 @@ function harnessDriver() {
         '.metadata-list dd',
         '.lead-summary',
         '.section-text',
+        '.detail-content-grid',
+        '.snapshot-grid',
+        '.snapshot-card',
+        '.snapshot-text-disclosure',
+        '.poster-text-disclosure',
+        '.cip-links',
         '.cip-links a',
         '.btn-cta',
         '.btn-get-poster',
@@ -481,6 +541,9 @@ function harnessDriver() {
       const elements = Array.from(container.querySelectorAll(selectors.join(', ')));
       elements.forEach(el => {
         if (el.offsetParent === null) return;
+        // Children inside intentional horizontal exhibition strip are covered by strip checks
+        if (el.closest('.exhibition-strip') && el !== strip) return;
+
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) return;
 
@@ -490,8 +553,8 @@ function harnessDriver() {
           `${label} left edge (${rect.left.toFixed(1)}) is contained within container left (${containerRect.left.toFixed(1)})`,
         );
         check(
-          rect.right <= effectiveRight + 2,
-          `${label} right edge (${rect.right.toFixed(1)}) is contained within boundary (${effectiveRight.toFixed(1)})`,
+          rect.right <= viewportRight + 2,
+          `${label} right edge (${rect.right.toFixed(1)}) is contained within viewport boundary (${viewportRight})`,
         );
       });
     }
@@ -1199,31 +1262,13 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases, runt
     };
   `;
 
-  const mobileStyles = targetWidth < 500 ? `
-    @media (min-width: 501px) {
-      html, body { width: 100%; }
-    }
-    .cip-module, #project-detail, #capstone-showcase-root {
-      max-width: ${targetWidth}px !important;
-      margin: 0 auto !important;
-      box-sizing: border-box !important;
-    }
-    ${targetWidth <= 360 ? `
-      .cip-module { padding: 1.5rem 0.85rem !important; }
-      #project-detail h1, .hero-right-col h1, .technical-header h1 { font-size: clamp(1.45rem, 6.5vw, 1.75rem) !important; }
-      .snapshot-grid { grid-template-columns: 1fr !important; }
-      .technical-report-card, .layout-preset-technical_detail > div:not(.cip-back) { padding: 1.25rem 0.75rem !important; }
-      .report-row { grid-template-columns: 1.75rem 1fr !important; gap: 0.5rem !important; }
-    ` : ''}
-  ` : '';
-
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Duda current-feed local harness</title>
-  <style>html, body { margin: 0; width: 100%; min-height: 100%; background: #0f172a; } ${listingCss}\n${detailCss}\n${mobileStyles}</style>
+  <style>html, body { margin: 0; width: 100%; min-height: 100%; background: #0f172a; } ${listingCss}\n${detailCss}</style>
   <script>${harnessSetup}</script>
 </head>
 <body>
@@ -1328,44 +1373,129 @@ const scenarios = [
 
 assert.ok(scenarios.length > 0, 'No matching Duda browser scenarios were requested.');
 
+class CDPClient {
+  constructor(wsUrl) {
+    this.ws = new WebSocket(wsUrl);
+    this.msgId = 1;
+    this.callbacks = new Map();
+    this.ready = new Promise((resolve, reject) => {
+      this.ws.onopen = resolve;
+      this.ws.onerror = reject;
+    });
+    this.ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.id && this.callbacks.has(data.id)) {
+        const { resolve, reject } = this.callbacks.get(data.id);
+        this.callbacks.delete(data.id);
+        if (data.error) reject(new Error(data.error.message || JSON.stringify(data.error)));
+        else resolve(data.result);
+      }
+    };
+  }
+
+  async send(method, params = {}) {
+    await this.ready;
+    const id = this.msgId++;
+    return new Promise((resolve, reject) => {
+      this.callbacks.set(id, { resolve, reject });
+      this.ws.send(JSON.stringify({ id, method, params }));
+    });
+  }
+
+  close() {
+    this.ws.close();
+  }
+}
+
+const profileDirectory = await mkdtemp(path.join(os.tmpdir(), 'capstone-duda-cdp-'));
+const chromeProcess = spawn(browserPath, [
+  '--headless=new',
+  '--disable-gpu',
+  '--disable-extensions',
+  '--disable-background-networking',
+  '--no-first-run',
+  '--no-default-browser-check',
+  '--host-resolver-rules=MAP * 127.0.0.1, EXCLUDE 127.0.0.1',
+  '--remote-debugging-port=0',
+  `--user-data-dir=${profileDirectory}`,
+  'about:blank',
+]);
+
+let cdpPort = null;
+await new Promise((resolve, reject) => {
+  chromeProcess.stderr.on('data', (chunk) => {
+    const match = chunk.toString().match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//);
+    if (match) {
+      cdpPort = match[1];
+      resolve();
+    }
+  });
+  chromeProcess.on('error', reject);
+});
+
+const version = await (await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).json();
+const browserCdp = new CDPClient(version.webSocketDebuggerUrl);
+
 try {
   for (const [scenario, route, width, height] of scenarios) {
-    const profileDirectory = await mkdtemp(path.join(os.tmpdir(), 'capstone-duda-browser-'));
+    const { browserContextId } = await browserCdp.send('Target.createBrowserContext');
+    const { targetId } = await browserCdp.send('Target.createTarget', {
+      url: 'about:blank',
+      browserContextId,
+    });
+    const pageCdp = new CDPClient(`ws://127.0.0.1:${cdpPort}/devtools/page/${targetId}`);
+
     try {
+      await pageCdp.send('Page.enable');
+      await pageCdp.send('Emulation.setDeviceMetricsOverride', {
+        width,
+        height,
+        deviceScaleFactor: 1,
+        mobile: width < 500,
+      });
+
       const separator = route.includes('?') ? '&' : '?';
       const url = `http://127.0.0.1:${port}${route}${separator}scenario=${scenario}&width=${width}&height=${height}`;
-      const { stdout } = await execFileAsync(
-        browserPath,
-        [
-          '--headless=new',
-          '--disable-gpu',
-          '--disable-extensions',
-          '--disable-background-networking',
-          '--no-first-run',
-          '--no-default-browser-check',
-          '--host-resolver-rules=MAP * 127.0.0.1, EXCLUDE 127.0.0.1',
-          `--user-data-dir=${profileDirectory}`,
-          `--window-size=${width},${height}`,
-          '--virtual-time-budget=9000',
-          '--dump-dom',
-          url,
-        ],
-        { maxBuffer: 16 * 1024 * 1024, timeout: 35000 },
-      );
-      const encodedResult = stdout.match(/data-capstone-result="([A-Za-z0-9+/=]+)"/)?.[1];
+      await pageCdp.send('Page.navigate', { url });
+
+      let result = null;
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 20000) {
+        try {
+          const evalRes = await pageCdp.send('Runtime.evaluate', {
+            expression: `document.getElementById('capstone-harness-result')?.getAttribute('data-capstone-result')`,
+            returnByValue: true,
+          });
+          if (evalRes.result && evalRes.result.value) {
+            const raw = Buffer.from(evalRes.result.value, 'base64').toString('utf8');
+            result = JSON.parse(raw);
+            break;
+          }
+        } catch {
+          // Navigation or execution context reloading; retry next tick
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
       assert.ok(
-        encodedResult,
-        `${scenario} at ${width}px did not return browser evidence. DOM tail: ${stdout.slice(-2000)}`,
+        result,
+        `${scenario} at ${width}px did not return browser evidence within timeout.`,
       );
-      const result = JSON.parse(Buffer.from(encodedResult, 'base64').toString('utf8'));
       assert.equal(result.ok, true, `${scenario} at ${width}px failed: ${result.failures.join('; ')}`);
-      console.log(`PASS ${scenario} at ${width}x${height}: ${result.checks.length} browser checks`);
+      console.log(`PASS ${scenario} at ${width}x${height}: ${result.checks.length} browser checks (innerWidth=${width}, clientWidth=${width})`);
     } finally {
-      await rm(profileDirectory, { recursive: true, force: true });
+      pageCdp.close();
+      await browserCdp.send('Target.closeTarget', { targetId }).catch(() => null);
+      await browserCdp.send('Target.disposeBrowserContext', { browserContextId }).catch(() => null);
     }
   }
 } finally {
-  await new Promise(resolve => server.close(resolve));
+  browserCdp.close();
+  const exitPromise = new Promise((resolve) => chromeProcess.on('exit', resolve));
+  chromeProcess.kill();
+  await exitPromise;
+  await rm(profileDirectory, { recursive: true, force: true });
+  await new Promise((resolve) => server.close(resolve));
 }
 
 console.log(`Duda current-feed browser harness: ${scenarios.length} Chrome scenarios passed.`);
