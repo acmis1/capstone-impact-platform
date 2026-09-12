@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +14,7 @@ const dudaDirectory = path.resolve(scriptDirectory, '..', 'duda');
 const annualRecordCount = 120;
 const localFeedHost = 'annualfixture.supabase.co';
 const localFeedUrl = `https://${localFeedHost}/storage/v1/object/public/public-feeds/capstones-latest.json`;
+const exactFeedPath = process.env.CAPSTONE_LV01_FEED_PATH?.trim();
 
 const [bodyEndHtml, listingHtml, listingCss, detailHtml, detailCss, fixtureText] = await Promise.all([
   readFile(path.join(dudaDirectory, 'bodyend.html'), 'utf8'),
@@ -24,15 +26,15 @@ const [bodyEndHtml, listingHtml, listingCss, detailHtml, detailCss, fixtureText]
 ]);
 
 const seedRecords = JSON.parse(fixtureText);
-const years = ['2026', '2025', '2024', '2023', '2022', '2021'];
-const programs = [
+let years = ['2026', '2025', '2024', '2023', '2022', '2021'];
+let programs = [
   'Bachelor of Software Engineering',
   'Master of Cyber Security',
   'Bachelor of Information Technology',
   'Bachelor of Design',
 ];
-const disciplines = ['Software Engineering', 'Cyber Security', 'User Experience Design', 'Data Analytics'];
-const industries = ['Emergency Services', 'Financial Services', 'Healthcare', 'Education'];
+let disciplines = ['Software Engineering', 'Cyber Security', 'User Experience Design', 'Data Analytics'];
+let industries = ['Emergency Services', 'Financial Services', 'Healthcare', 'Education'];
 const templates = ['poster_showcase', 'technical_detail', 'media_rich'];
 
 function escapeInlineJson(value) {
@@ -101,7 +103,14 @@ function makeAnnualRecord(index) {
   };
 }
 
-const fixture = Array.from({ length: annualRecordCount }, (_, index) => makeAnnualRecord(index));
+const exactFeedText = exactFeedPath ? await readFile(path.resolve(exactFeedPath), 'utf8') : null;
+const fixture = exactFeedText ? JSON.parse(exactFeedText) : Array.from({ length: annualRecordCount }, (_, index) => makeAnnualRecord(index));
+if (exactFeedText) {
+  years = [...new Set(fixture.map((record) => record.year))].sort().reverse();
+  programs = [...new Set(fixture.map((record) => record.program))].sort();
+  disciplines = [...new Set(fixture.flatMap((record) => record.disciplines))].sort();
+  industries = [...new Set(fixture.map((record) => record.industry))].sort();
+}
 
 function assertGeneratedFixture(records) {
   assert.equal(records.length, annualRecordCount, 'annual fixture has exactly 120 records');
@@ -115,8 +124,8 @@ function assertGeneratedFixture(records) {
     assert.equal(record.disciplines[0], record.discipline, 'discipline fields agree');
     assert.ok(industries.includes(record.industry), 'industry is supported');
     assert.ok(record.industryPartner && record.groupName, 'partner and team fields are present');
-    assert.ok(record.poster.startsWith('https://media.example.test/'));
-    assert.ok(record.posterPdf.startsWith('https://media.example.test/'));
+    assert.ok(/^https?:\/\//.test(record.poster));
+    assert.ok(/^https?:\/\//.test(record.posterPdf));
     assert.ok(record.posterText && record.accessibilityText, 'poster alternatives are present');
     assert.equal(record.snapshots.length, 2, 'each record has two snapshots');
     assert.deepEqual(record.snapshots, record.snapshotMedia.map((media) => media.url), 'snapshot pairs preserve display order');
@@ -129,7 +138,8 @@ assertGeneratedFixture(fixture);
 
 function recordMatches(record, filters) {
   const search = filters.search.trim().toLowerCase();
-  if (search && ![record.title, record.publicId, record.industryPartner, record.groupName]
+  if (search && ![record.title, record.publicId, record.industryPartner, record.groupName,
+    ...record.snapshotMedia.map((media) => media.contentKind === 'text_bearing' ? media.fullText : '')]
     .some((field) => field.toLowerCase().includes(search))) return false;
   if (filters.year !== 'All' && record.year !== filters.year) return false;
   if (filters.program !== 'All' && record.program !== filters.program) return false;
@@ -148,7 +158,8 @@ const facetExpectations = [
   ['discipline', disciplines[2], countFixture({ search: '', year: 'All', program: 'All', discipline: disciplines[2], industry: 'All' })],
   ['industry', industries[3], countFixture({ search: '', year: 'All', program: 'All', discipline: 'All', industry: industries[3] })],
 ];
-const representativeIndexes = [0, 59, 119];
+const representativeIndexes = templates.map((template) => fixture.findIndex((record) => record.layoutConfig.templateId === template));
+assert.ok(representativeIndexes.every((index) => index >= 0), 'all three layout presets have a representative');
 
 async function findBrowser() {
   const candidates = process.platform === 'win32'
@@ -192,7 +203,8 @@ function harnessDriver() {
   const expectedById = new Map(records.map((record) => [record.id, record]));
   const recordMatches = (record, filters) => {
     const search = filters.search.trim().toLowerCase();
-    if (search && ![record.title, record.publicId, record.industryPartner, record.groupName]
+    if (search && ![record.title, record.publicId, record.industryPartner, record.groupName,
+      ...record.snapshotMedia.map((media) => media.contentKind === 'text_bearing' ? media.fullText : '')]
       .some((field) => field.toLowerCase().includes(search))) return false;
     if (filters.year !== 'All' && record.year !== filters.year) return false;
     if (filters.program !== 'All' && record.program !== filters.program) return false;
@@ -281,6 +293,7 @@ function harnessDriver() {
     check(new Set(secondActionIds).size === records.length, 'listing learn-more actions have 120 unique targets');
     check(JSON.stringify([...firstActionIds].sort((a, b) => a - b)) === JSON.stringify([...secondActionIds].sort((a, b) => a - b)), 'the two listing actions agree per project');
     check(new Set(firstActionIds).size === records.length && firstActionIds.every((id) => expectedById.has(id)), 'all generated detail target IDs belong to exactly one fixture record');
+    result.detailPublicIds = firstActionIds.map((id) => expectedById.get(id).publicId);
     check(new Set(visibleTitles()).size === records.length, 'listing has no duplicate card titles');
     check(visibleTitles().every((title) => records.some((record) => record.title === title)), 'listing has no unrelated cards');
     check(visibleCards().every((card) => card.querySelector('.capstone-poster-link')?.getAttribute('aria-label') === `View ${card.querySelector('.capstone-card-image')?.alt} project detail`), 'poster actions have project-specific accessible names');
@@ -292,6 +305,7 @@ function harnessDriver() {
       ['publicId', records[119].publicId, 119],
       ['industryPartner', records[2].industryPartner, 2],
       ['groupName', records[77].groupName, 77],
+      ['approved gallery full text', records[0].snapshotMedia.find((media) => media.contentKind === 'text_bearing')?.fullText || records[0].title, 0],
     ];
     for (const [kind, value, index] of searchCases) {
       setSearch(value);
@@ -361,6 +375,12 @@ function harnessDriver() {
     check(snapshotImages.every((image) => expectedAlts.get(new URL(image.src).pathname) === image.alt), 'governed snapshot alt text is exact for every rendered image');
     check(snapshotImages.every((image) => !/^Snapshot \d+$/i.test(image.alt)), 'snapshot alternatives are not generic numbered text');
     check(Array.from(document.querySelectorAll('.snapshot-card')).every((control) => control.tagName === 'BUTTON' && control.getAttribute('aria-label')), 'snapshot controls have native semantics and accessible names');
+    if (window.__CAPSTONE_LV01_EXACT_FEED) {
+      const ordinary = expected.snapshotMedia.filter((media) => media.contentKind === 'ordinary');
+      const textBearing = expected.snapshotMedia.filter((media) => media.contentKind === 'text_bearing');
+      check(ordinary.length > 0 && ordinary.every((media) => media.fullText === null), 'ordinary gallery fullText remains absent');
+      check(textBearing.length > 0 && textBearing.every((media) => document.body.textContent.includes(media.fullText)), 'text-bearing gallery full text is selectable and exact');
+    }
     assertNoUnsafePublicMarkup();
     result.representativeDetails += 1;
   };
@@ -384,6 +404,7 @@ function buildHarnessPage(requestUrl, runtimeFixture) {
   const setup = `
     window.CAPSTONE_FEED_URL = ${escapeInlineJson(localFeedUrl)};
     window.__CAPSTONE_ANNUAL_SCENARIO = ${escapeInlineJson(isDetail ? 'detail' : 'listing')};
+    window.__CAPSTONE_LV01_EXACT_FEED = ${exactFeedText ? 'true' : 'false'};
     window.__CAPSTONE_ANNUAL_FIXTURE = ${escapeInlineJson(runtimeFixture)};
     window.__CAPSTONE_ANNUAL_FACET_EXPECTATIONS = ${escapeInlineJson(facetExpectations)};
     window.__CAPSTONE_ANNUAL_PROGRAMS = ${escapeInlineJson(programs)};
@@ -455,6 +476,7 @@ const { port } = server.address();
 const scenarios = [
   ['listing', '/', 1440, 1000],
   ['listing', '/', 390, 844],
+  ['listing', '/', 320, 720],
   ...representativeIndexes.map((index) => ['detail', `/project-detail?id=${fixture[index].id}`, 1440, 1000]),
 ];
 const evidence = [];
@@ -507,7 +529,7 @@ console.log('DUDA_ANNUAL_SCALE_CLASSIFICATION = LOCAL_120_RECORD_RENDERING_VERIF
 console.log(`RECORDS = ${annualRecordCount}`);
 console.log(`LISTING_CARDS = ${annualRecordCount}`);
 console.log(`DETAIL_TARGETS_VALID = ${annualRecordCount}/${annualRecordCount}`);
-console.log(`SEARCH_CASES = ${searchCaseCount + 2} (five representative searches, no-match, clear)`);
+console.log(`SEARCH_CASES = ${searchCaseCount + 2} (representative searches, no-match, clear)`);
 console.log(`FACET_CASES = ${facetCaseCount + 2} (four facets, two intersections)`);
 console.log(`REPRESENTATIVE_DETAILS = ${detailCount}/${representativeIndexes.length}`);
 console.log('DESKTOP_OVERFLOW = NO');
@@ -517,3 +539,17 @@ console.log(`WINDOW_ERRORS = ${windowErrors}`);
 console.log(`UNHANDLED_REJECTIONS = ${unhandledRejections}`);
 console.log(`EXTERNAL_CONTACT = ${externalContacts === 0 ? 'NO' : 'YES'}`);
 console.log('DUDA_SITE_MUTATION = NO');
+
+const rendererEvidencePath = process.env.CAPSTONE_LV01_RENDERER_EVIDENCE_PATH?.trim();
+if (rendererEvidencePath) {
+  const listingTargets = listingEvidence[0]?.result.detailPublicIds || [];
+  await writeFile(path.resolve(rendererEvidencePath), `${JSON.stringify({
+    classification: 'LV01_EXACT_GOVERNED_FEED_RENDERED',
+    manifestHash: process.env.CAPSTONE_LV01_MANIFEST_HASH || null,
+    feedHash: createHash('sha256').update(exactFeedText || JSON.stringify(fixture)).digest('hex'),
+    recordCount: fixture.length,
+    detailPublicIds: listingTargets,
+    viewports: evidence.map(({ scenario, width, height }) => ({ scenario, width, height })),
+    consoleErrors, windowErrors, unhandledRejections, externalContacts,
+  }, null, 2)}\n`, 'utf8');
+}

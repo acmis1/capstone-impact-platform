@@ -26,6 +26,7 @@ import { cleanupDisposableLedgerRuntime } from './disposableLedgerCleanup';
 interface RuntimeScript {
   file: string;
   environment?: Record<string, string>;
+  timeoutMs?: number;
 }
 
 const RUNTIME_SCRIPTS: Record<string, RuntimeScript> = {
@@ -36,6 +37,7 @@ const RUNTIME_SCRIPTS: Record<string, RuntimeScript> = {
   },
   publication: { file: 'verifyControlledPublicationRuntime.ts' },
   'annual-publication': { file: 'verifyAnnualPublicationEvidenceRuntime.ts' },
+  'integrated-cohort': { file: 'verifyIntegratedCohortRuntime.ts', timeoutMs: 1_200_000 },
   removal: { file: 'verifyControlledPublicRemovalRuntime.ts' },
   'preview-access': { file: 'verifyParticipantPreviewAccessRuntime.ts' },
   'browser-media': { file: 'verifyBrowserImportMediaStageRuntime.ts' },
@@ -462,9 +464,9 @@ function runSupabase(command: 'start' | 'stop' | 'migrate', workdir: string, net
 async function main(): Promise<void> {
   const upgradeRequested = selected.includes(UPGRADE_MODE);
   const scriptModes = selected.filter((name) => name !== UPGRADE_MODE);
-  const annualPublicationRequested = scriptModes.includes('annual-publication');
-  if (annualPublicationRequested && scriptModes.length !== 1) {
-    console.error('The annual publication run needs its own empty disposable stack; run it as a separate invocation.');
+  const emptyPublicationUniverseRequested = scriptModes.includes('annual-publication') || scriptModes.includes('integrated-cohort');
+  if (emptyPublicationUniverseRequested && scriptModes.length !== 1) {
+    console.error('The annual/integrated publication run needs its own empty disposable stack; run it as a separate invocation.');
     process.exitCode = 1;
     return;
   }
@@ -478,7 +480,7 @@ async function main(): Promise<void> {
   // from a fresh full install. Provisioning one stack per invocation keeps both baselines exact.
   const workdir = createWorkdir(
     upgradeRequested ? CORRECTION_MIGRATIONS : [],
-    annualPublicationRequested,
+    emptyPublicationUniverseRequested,
   );
   let networkId = '';
   let networkCreateAttempted = false;
@@ -509,7 +511,7 @@ async function main(): Promise<void> {
         path.join(__dirname, script.file),
       ], {
         cwd: path.join(repositoryRoot, 'apps', 'admin-cms'), stdio: 'inherit',
-        timeout: RUNTIME_TIMEOUT_MS,
+        timeout: script.timeoutMs ?? RUNTIME_TIMEOUT_MS,
         killSignal: 'SIGTERM',
         env: {
           ...process.env,

@@ -73,6 +73,11 @@ export async function createPublicFeedRuntimeHarness(): Promise<PublicFeedRuntim
   const local = parseSupabaseCliEnv(raw);
   assert.ok(local.API_URL && local.SERVICE_ROLE_KEY, 'Disposable Supabase credentials unavailable.');
   assert.equal(isLoopbackUrl(local.API_URL!), true, 'The verifier refused a non-loopback Supabase endpoint.');
+  process.env.NEXT_PUBLIC_SUPABASE_URL = local.API_URL;
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = local.ANON_KEY || '';
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = local.ANON_KEY || '';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = local.SERVICE_ROLE_KEY;
+  process.env.SUPABASE_SECRET_KEY = local.SERVICE_ROLE_KEY;
 
   const db = createClient(local.API_URL!, local.SERVICE_ROLE_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
