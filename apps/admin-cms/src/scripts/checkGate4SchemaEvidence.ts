@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -103,7 +104,7 @@ export function collectLocalGate4Evidence(repoRoot: string, projectIdOverride?: 
   }
 }
 
-function unwrapEvidenceDocument(input: unknown): unknown {
+export function unwrapEvidenceDocument(input: unknown): unknown {
   if (Array.isArray(input)) {
     if (input.length !== 1) return input;
     return unwrapEvidenceDocument(input[0]);
@@ -117,12 +118,16 @@ function unwrapEvidenceDocument(input: unknown): unknown {
   return input;
 }
 
-function readHostedEvidence(file: string): unknown {
+function readHostedEvidence(file: string): { evidence: unknown; sha256: string } {
   const resolved = path.resolve(file);
   const stat = fs.statSync(resolved);
   if (!stat.isFile() || stat.size > MAX_EVIDENCE_FILE_BYTES) throw new Error('EVIDENCE_FILE_INVALID');
   try {
-    return unwrapEvidenceDocument(JSON.parse(fs.readFileSync(resolved, 'utf8')) as unknown);
+    const bytes = fs.readFileSync(resolved);
+    return {
+      evidence: unwrapEvidenceDocument(JSON.parse(bytes.toString('utf8')) as unknown),
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    };
   } catch {
     throw new Error('EVIDENCE_FILE_INVALID');
   }
@@ -161,10 +166,15 @@ function invalidResult(errors: readonly string[]): Gate4ComparisonResult {
   };
 }
 
-function machineResult(result: Gate4ComparisonResult, repositoryGitSha: string): Record<string, unknown> {
+function machineResult(
+  result: Gate4ComparisonResult,
+  repositoryGitSha: string,
+  actualEvidenceSha256: string | null,
+): Record<string, unknown> {
   return {
     classification: result.classification,
     repositoryGitSha,
+    actualEvidenceSha256,
     expected: result.expectedStats ?? null,
     actual: result.actualStats ?? null,
     categoryMatches: result.categoryMatches,
@@ -179,11 +189,11 @@ function exitCode(classification: Gate4ComparisonResult['classification']): numb
   return classification === 'GATE4_DRIFT' ? 2 : 3;
 }
 
-function main(): void {
+export function runGate4SchemaEvidenceCheck(args: readonly string[] = process.argv.slice(2)): void {
   const repoRoot = path.resolve(__dirname, '../../../..');
   let options: CliOptions;
   try {
-    options = parseArguments(process.argv.slice(2));
+    options = parseArguments(args);
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'ARGUMENTS_INVALID';
     console.error(`GATE4_CLASSIFICATION=EVIDENCE_INVALID\nINVALID=${reason}`);
@@ -196,22 +206,23 @@ function main(): void {
     const repositoryGitSha = currentGitSha(repoRoot);
     if (options.expectedGitSha && options.expectedGitSha !== repositoryGitSha) throw new Error('REPOSITORY_GIT_SHA_MISMATCH');
     const expected = collectLocalGate4Evidence(repoRoot);
+    const hosted = options.localSelfCheck ? undefined : readHostedEvidence(options.evidenceFile!);
     const expectedErrors = validateCurrentRepositoryGate4Contract(expected, repositoryMigrationVersions(repoRoot));
     const result = expectedErrors.length > 0
       ? invalidResult(expectedErrors.map((error) => `expected: ${error}`))
-      : compareGate4Evidence(expected, options.localSelfCheck ? expected : readHostedEvidence(options.evidenceFile!));
+      : compareGate4Evidence(expected, options.localSelfCheck ? expected : hosted?.evidence);
     console.log(options.machineReadable
-      ? JSON.stringify(machineResult(result, repositoryGitSha))
+      ? JSON.stringify(machineResult(result, repositoryGitSha, hosted?.sha256 ?? null))
       : formatGate4Comparison(result, repositoryGitSha));
     process.exitCode = exitCode(result.classification);
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'GATE4_CHECK_FAILED';
     const result = invalidResult([reason]);
     console.log(options.machineReadable
-      ? JSON.stringify(machineResult(result, 'UNKNOWN'))
+      ? JSON.stringify(machineResult(result, 'UNKNOWN', null))
       : formatGate4Comparison(result));
     process.exitCode = 3;
   }
 }
 
-if (require.main === module) main();
+if (require.main === module) runGate4SchemaEvidenceCheck();

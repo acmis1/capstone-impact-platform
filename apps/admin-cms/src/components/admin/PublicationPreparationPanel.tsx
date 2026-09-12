@@ -2,7 +2,7 @@
 
 import { useReducer, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, FileCheck2, FlaskConical } from 'lucide-react';
+import { CheckCircle2, FileCheck2, FlaskConical, Globe2 } from 'lucide-react';
 import {
   canExecutePublication,
   initialPublicationPreparationState,
@@ -19,13 +19,15 @@ interface PublicationPreparationPanelProps {
   publicId: string;
   ready: boolean;
   canPrepare: boolean;
-  executionTarget: PublicationExecutionTarget | null;
+  executionTarget: PublicationExecutionTarget | 'production-unavailable' | null;
 }
 
 export function PublicationPreparationPanel({ publicId, ready, canPrepare, executionTarget }: PublicationPreparationPanelProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(publicationPreparationReducer, initialPublicationPreparationState);
   const inFlightRef = useRef(false);
+  const executableTarget = executionTarget === 'production-unavailable' ? null : executionTarget;
+  const productionUnavailable = executionTarget === 'production-unavailable';
 
   if (!canPrepare || (!ready && state.success === null)) return null;
 
@@ -46,14 +48,19 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
   }
 
   async function execute() {
-    if (inFlightRef.current || !canExecutePublication(canPrepare, executionTarget, state) || executionTarget === null) return;
+    if (inFlightRef.current || !canExecutePublication(canPrepare, executableTarget, state) || executableTarget === null) return;
     inFlightRef.current = true;
     dispatch({ type: 'EXECUTION_STARTED' });
-    const isStaging = executionTarget === 'staging';
-    const endpoint = isStaging ? 'staging-publication' : 'local-publication';
-    const fallbackError = isStaging
-      ? 'Staging showcase publication could not be completed.'
-      : 'Local publication could not be completed.';
+    const endpoint = executableTarget === 'production'
+      ? 'production-publication'
+      : executableTarget === 'staging'
+        ? 'staging-publication'
+        : 'local-publication';
+    const fallbackError = executableTarget === 'production'
+      ? 'Live showcase publication could not be completed.'
+      : executableTarget === 'staging'
+        ? 'Staging showcase publication could not be completed.'
+        : 'Local publication could not be completed.';
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(publicId)}/${endpoint}`, { method: 'POST' });
       const data = await response.json().catch(() => ({ success: false }));
@@ -73,8 +80,10 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
   }
 
   const pending = state.operation !== 'idle';
-  const executionEnabled = canExecutePublication(canPrepare, executionTarget, state);
-  const isStaging = executionTarget === 'staging';
+  const executionEnabled = canExecutePublication(canPrepare, executableTarget, state);
+  const isStaging = executableTarget === 'staging';
+  const isProduction = executableTarget === 'production';
+  const ExecutionIcon = isProduction ? Globe2 : FlaskConical;
 
   return (
     <div className="mt-5 flex flex-col gap-4 border-t border-border pt-5 text-xs sm:text-sm">
@@ -90,6 +99,14 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
       </div>
 
       {state.error && <Alert variant="destructive" title="Review unavailable" description={state.error} />}
+
+      {productionUnavailable && (
+        <Alert
+          variant="warning"
+          title="Live publication unavailable"
+          description="Production publication is disabled or the verified production target identity is unavailable. No live publication control is available; code availability does not authorize a cutover."
+        />
+      )}
 
       {state.plan && (
         <Alert variant="success" icon={CheckCircle2} title="Ready to publish">
@@ -112,17 +129,21 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
         </Alert>
       )}
 
-      {shouldShowPublicationExecution(canPrepare, executionTarget, state) && (
+      {shouldShowPublicationExecution(canPrepare, executableTarget, state) && (
         <div className="flex flex-col gap-4 border-t border-border pt-5">
           <div>
             <div className="flex items-center gap-2">
-              <FlaskConical className="h-4 w-4 text-warning" aria-hidden="true" />
-              <h4 className="text-sm font-semibold text-foreground">{isStaging ? 'Publish to test showcase' : 'Publish to local test showcase'}</h4>
+              <ExecutionIcon className="h-4 w-4 text-warning" aria-hidden="true" />
+              <h4 className="text-sm font-semibold text-foreground">
+                {isProduction ? 'Publish to live showcase feed' : isStaging ? 'Publish to test showcase' : 'Publish to local test showcase'}
+              </h4>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              {isStaging
-                ? 'This publishes the project for the test showcase. The live public showcase is not changed.'
-                : 'This test action publishes only to the disposable Local Supabase environment. It does not affect the live showcase.'}
+              {isProduction
+                ? 'This writes the approved project to the production feed. The live Duda showcase may change immediately when it consumes that stable feed.'
+                : isStaging
+                  ? 'This publishes the project for the test showcase. The live public showcase is not changed.'
+                  : 'This test action publishes only to the disposable Local Supabase environment. It does not affect the live showcase.'}
             </p>
           </div>
           <label className="flex items-start gap-2 text-sm text-foreground">
@@ -134,16 +155,18 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
               className="mt-0.5 h-4 w-4 rounded border-input"
             />
             <span>
-              {isStaging
-                ? 'I understand this publishes the project for the test showcase and does not change the live public showcase.'
-                : 'I understand this publishes only to the disposable Local Supabase test environment.'}
+              {isProduction
+                ? 'I understand this updates the production feed and may change the live public showcase. I have institutional publication authority for this release.'
+                : isStaging
+                  ? 'I understand this publishes the project for the test showcase and does not change the live public showcase.'
+                  : 'I understand this publishes only to the disposable Local Supabase test environment.'}
             </span>
           </label>
           <div>
             <Button type="button" onClick={execute} disabled={!executionEnabled} isLoading={state.operation === 'executing'}>
               {state.operation === 'executing'
-                ? (isStaging ? 'Publishing to test showcase…' : 'Publishing to local showcase…')
-                : (isStaging ? 'Publish to test showcase' : 'Publish to local test showcase')}
+                ? (isProduction ? 'Publishing to live feed…' : isStaging ? 'Publishing to test showcase…' : 'Publishing to local showcase…')
+                : (isProduction ? 'Publish to live showcase feed' : isStaging ? 'Publish to test showcase' : 'Publish to local test showcase')}
             </Button>
           </div>
         </div>
@@ -153,13 +176,15 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
         <Alert
           variant="success"
           title={state.success.resultCode === 'ALREADY_COMPLETED'
-            ? (isStaging ? 'Already published for test showcase' : 'Already published locally')
-            : (isStaging ? 'Published for test showcase' : 'Published locally')}
+            ? (isProduction ? 'Already published to production feed' : isStaging ? 'Already published for test showcase' : 'Already published locally')
+            : (isProduction ? 'Published to production feed' : isStaging ? 'Published for test showcase' : 'Published locally')}
         >
           <p className="text-sm text-foreground">
-            {isStaging
-              ? 'Publishing completed successfully. Refresh the test showcase to confirm the project appears.'
-              : 'This project is now published in the local test environment.'}
+            {isProduction
+              ? 'The production feed write completed. Verify the exact feed evidence and the live Duda presentation; feed completion alone does not prove Duda visibility.'
+              : isStaging
+                ? 'Publishing completed successfully. Refresh the test showcase to confirm the project appears.'
+                : 'This project is now published in the local test environment.'}
           </p>
           <details className="mt-3 text-xs text-muted-foreground">
             <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>

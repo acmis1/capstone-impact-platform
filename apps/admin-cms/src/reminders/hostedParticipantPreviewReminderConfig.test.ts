@@ -21,6 +21,17 @@ const VALID: HostedParticipantPreviewReminderEnvironment = {
   SUPABASE_SECRET_KEY: 'sb_secret_runner-test',
 };
 
+const PRODUCTION: HostedParticipantPreviewReminderEnvironment = {
+  ...VALID,
+  CAPSTONE_RUNTIME_ENV: 'production',
+  CAPSTONE_PRODUCTION_REMINDERS_ENABLED: 'true',
+  CAPSTONE_EXPECTED_SUPABASE_HOST: 'zyxwvutsrqponmlkjihg.supabase.co',
+  CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF: 'zyxwvutsrqponmlkjihg',
+  CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT: 'production-preview-reminders-approved',
+  CAPSTONE_STAGING_MUTATION_CONFIRMATION: undefined,
+  PARTICIPANT_PREVIEW_REMINDERS_SUPABASE_URL: 'https://zyxwvutsrqponmlkjihg.supabase.co',
+};
+
 describe('hosted participant preview reminder configuration', () => {
   it('accepts the complete exact staging target and bounded defaults', () => {
     expect(resolveHostedParticipantPreviewReminderConfig(VALID)).toMatchObject({
@@ -29,6 +40,40 @@ describe('hosted participant preview reminder configuration', () => {
       smtp: expect.objectContaining({ secure: true, requireTLS: true }),
       pollIntervalMs: 60_000,
       batchLimit: 20,
+    });
+  });
+
+  it('accepts the complete explicitly enabled verified production target', () => {
+    expect(resolveHostedParticipantPreviewReminderConfig(PRODUCTION)).toMatchObject({
+      state: 'READY',
+      supabaseUrl: PRODUCTION.PARTICIPANT_PREVIEW_REMINDERS_SUPABASE_URL,
+      smtp: expect.objectContaining({ requireTLS: true }),
+      pollIntervalMs: 60_000,
+      batchLimit: 20,
+    });
+  });
+
+  it.each([undefined, 'false', 'TRUE', ' true '])(
+    'rejects production when its capability flag is %s',
+    (flag) => {
+      expect(resolveHostedParticipantPreviewReminderConfig({
+        ...PRODUCTION,
+        CAPSTONE_PRODUCTION_REMINDERS_ENABLED: flag,
+      })).toEqual({
+        state: 'CONFIGURATION_INVALID',
+        reason: 'PRODUCTION_CAPABILITY_DISABLED',
+      });
+    },
+  );
+
+  it('requires the production-specific operator acknowledgement and never accepts the staging label', () => {
+    expect(resolveHostedParticipantPreviewReminderConfig({
+      ...PRODUCTION,
+      CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT: undefined,
+      CAPSTONE_STAGING_MUTATION_CONFIRMATION: VALID.CAPSTONE_STAGING_MUTATION_CONFIRMATION,
+    })).toEqual({
+      state: 'CONFIGURATION_INVALID',
+      reason: 'MUTATION_CONFIRMATION_INVALID',
     });
   });
 
@@ -95,7 +140,7 @@ describe('hosted participant preview reminder configuration', () => {
   });
 
   it.each([
-    ['production runtime', { CAPSTONE_RUNTIME_ENV: 'production' }],
+    ['unknown runtime', { CAPSTONE_RUNTIME_ENV: 'preview' }],
     ['lookalike host relabelling', {
       CAPSTONE_EXPECTED_SUPABASE_HOST: 'abcdefghijklmnopqrst.supabase.co.attacker.example',
       PARTICIPANT_PREVIEW_REMINDERS_SUPABASE_URL: 'https://abcdefghijklmnopqrst.supabase.co.attacker.example',
@@ -145,6 +190,33 @@ describe('hosted participant preview reminder configuration', () => {
     })).toEqual({
       state: 'CONFIGURATION_INVALID',
       reason: 'TARGET_IDENTITY_INVALID',
+    });
+  });
+
+  it.each([
+    ['mismatched production host', { CAPSTONE_EXPECTED_SUPABASE_HOST: 'abcdefghijklmnopqrst.supabase.co' }],
+    ['mismatched production ref', { CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst' }],
+    ['production path', { PARTICIPANT_PREVIEW_REMINDERS_SUPABASE_URL: 'https://zyxwvutsrqponmlkjihg.supabase.co/rest' }],
+    ['production credentials', { PARTICIPANT_PREVIEW_REMINDERS_SUPABASE_URL: 'https://user:pass@zyxwvutsrqponmlkjihg.supabase.co' }],
+    ['production loopback', {
+      CAPSTONE_EXPECTED_SUPABASE_HOST: 'localhost',
+      CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF: 'zyxwvutsrqponmlkjihg',
+      PARTICIPANT_PREVIEW_REMINDERS_SUPABASE_URL: 'https://localhost',
+    }],
+  ])('rejects %s', (_label, override) => {
+    expect(resolveHostedParticipantPreviewReminderConfig({ ...PRODUCTION, ...override })).toEqual({
+      state: 'CONFIGURATION_INVALID',
+      reason: 'TARGET_IDENTITY_INVALID',
+    });
+  });
+
+  it('rejects a non-secret production database credential', () => {
+    expect(resolveHostedParticipantPreviewReminderConfig({
+      ...PRODUCTION,
+      SUPABASE_SECRET_KEY: 'sb_publishable_browser-test',
+    })).toEqual({
+      state: 'CONFIGURATION_INVALID',
+      reason: 'SUPABASE_CREDENTIAL_INVALID',
     });
   });
 

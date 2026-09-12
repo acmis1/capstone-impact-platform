@@ -167,10 +167,22 @@ describe('package-aware snapshot alt text rule', () => {
     expect(ruleCodes(result)).toContain('METADATA_MISSING_SNAPSHOT_ALT_TEXT');
   });
 
-  it('accepts a standard xlsx package whose snapshot has alt text', () => {
-    const result = validateImportPackage(packageOf({ snapshotAltText: VALID_ALT }, true), { metadataSource: 'xlsx' });
+  it('accepts a standard xlsx package whose snapshot has alt text and a declared content type', () => {
+    const result = validateImportPackage(
+      packageOf({ snapshotAltText: VALID_ALT, galleryAltTexts: [{ position: 1, altText: VALID_ALT, contentKind: 'ordinary', fullText: null }] }, true),
+      { metadataSource: 'xlsx' },
+    );
     expect(ruleCodes(result)).not.toContain('METADATA_MISSING_SNAPSHOT_ALT_TEXT');
     expect(result.valid).toBe(true);
+  });
+
+  it('blocks a standard xlsx package whose described snapshot is not declared ordinary or text-bearing', () => {
+    // Alt text alone is no longer a complete declaration: the classification is authoritative data
+    // in its own right and is never inferred from the description.
+    const result = validateImportPackage(packageOf({ snapshotAltText: VALID_ALT }, true), { metadataSource: 'xlsx' });
+    expect(ruleCodes(result)).not.toContain('METADATA_MISSING_SNAPSHOT_ALT_TEXT');
+    expect(ruleCodes(result)).toContain('METADATA_MISSING_GALLERY_CONTENT_TYPE');
+    expect(result.valid).toBe(false);
   });
 
   it('does not ask a package without a snapshot image to describe one', () => {

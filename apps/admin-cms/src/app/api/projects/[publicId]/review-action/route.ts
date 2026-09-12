@@ -138,12 +138,12 @@ export async function POST(
           );
         case 'ACCESSIBILITY_CONTENT_REQUIRED':
           return NextResponse.json(
-            { success: false, error: 'Poster full text and accessibility text are required before approval. Add them in the project metadata editor, then approve.' },
+            { success: false, error: 'Project-team-authored poster full text and accessibility text are required before approval. Request a complete corrected package, review and accept that exact revision, then approve.' },
             { status: 409 }
           );
         case 'ACCESSIBILITY_CONTENT_INVALID':
           return NextResponse.json(
-            { success: false, error: 'Poster full text or accessibility text exceeds its character safety limit. Shorten it in the project metadata editor, then approve.' },
+            { success: false, error: 'Project-team-authored poster full text or accessibility text exceeds its character safety limit. Request a complete corrected package, review and accept that exact revision, then approve.' },
             { status: 409 }
           );
         case 'PROJECT_MEDIA_REQUIRED':
@@ -158,12 +158,12 @@ export async function POST(
           );
         case 'MEDIA_ACCESSIBILITY_REQUIRED':
           return NextResponse.json(
-            { success: false, error: 'The snapshot image needs alt text before approval. Add it in the project media section, then approve.' },
+            { success: false, error: 'The snapshot image needs project-team-authored alt text before approval. Request a complete corrected package, review and accept that exact revision, then approve.' },
             { status: 409 }
           );
         case 'MEDIA_ACCESSIBILITY_INVALID':
           return NextResponse.json(
-            { success: false, error: 'The snapshot image alt text exceeds its character safety limit. Shorten it in the project media section, then approve.' },
+            { success: false, error: 'The project-team-authored snapshot image alt text exceeds its character safety limit. Request a complete corrected package, review and accept that exact revision, then approve.' },
             { status: 409 }
           );
         case 'RESPONSE_INVALID':

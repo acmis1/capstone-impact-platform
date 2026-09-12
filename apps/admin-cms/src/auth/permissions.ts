@@ -9,7 +9,7 @@ export const CANONICAL_ROLE_ORDER: readonly AdminRole[] = ['admin', 'reviewer', 
 
 /**
  * Canonical permission order. Project permissions are listed workflow-ascending, and the
- * administrative staff-management capability last, so a permission union is always reported
+ * administrative staff and taxonomy-management capabilities last, so a permission union is always reported
  * in one deterministic order regardless of which roles contributed it.
  */
 export const CANONICAL_PERMISSION_ORDER: readonly AdminPermission[] = [
@@ -19,12 +19,13 @@ export const CANONICAL_PERMISSION_ORDER: readonly AdminPermission[] = [
   'projects.edit',
   'projects.publish',
   'staff.manage',
+  'taxonomy.manage',
 ];
 
 const RECOGNIZED_ROLES = new Set<AdminRole>(CANONICAL_ROLE_ORDER);
 
 const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
-  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish', 'staff.manage'],
+  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish', 'staff.manage', 'taxonomy.manage'],
   reviewer: ['projects.read', 'projects.review'],
   editor: ['projects.read', 'projects.edit'],
 };
@@ -112,4 +113,13 @@ export function canPreparePublication(userPermissions: AdminPermission[]): boole
  */
 export function canManageStaff(userPermissions: AdminPermission[]): boolean {
   return hasPermission(userPermissions, 'staff.manage');
+}
+
+/**
+ * Catalogue administration changes values used by intake, metadata and public projection, so it
+ * is deliberately an administrator-only capability. Keeping this as a domain permission avoids
+ * role-string checks at UI and route boundaries.
+ */
+export function canManageTaxonomy(userPermissions: AdminPermission[]): boolean {
+  return hasPermission(userPermissions, 'taxonomy.manage');
 }

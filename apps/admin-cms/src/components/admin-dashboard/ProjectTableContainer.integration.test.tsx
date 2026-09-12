@@ -322,7 +322,9 @@ describe('ProjectTableContainer preference integration', () => {
       publicId: `release-ui-${String(index + 1).padStart(3, '0')}`,
       title: `Synthetic UI project ${index + 1}`,
     }));
-    renderTable('', { rows, total: 120, page: 1, pageSize: 50, pageCount: 3 });
+    renderTable('discipline=Artificial%20Intelligence&industry=Technology&pageSize=50', { rows, total: 120, page: 1, pageSize: 50, pageCount: 3 });
+
+    expect(screen.getByRole('navigation', { name: 'Project results pages' }).textContent).toContain('Page 1 of 3');
 
     fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select current page' }))[0]);
 
@@ -460,6 +462,7 @@ describe('ProjectTableContainer preference integration', () => {
   it.each([
     ['search', 'q=atlas'],
     ['filter', 'status=approved'],
+    ['industry filter', 'industry=Healthcare'],
     ['sort', 'sort=title&direction=asc'],
     ['page size', 'pageSize=25'],
   ])('clears selection when the %s query scope changes', async (_label, nextSearch) => {
@@ -568,5 +571,48 @@ describe('ProjectTableContainer mobile card presentation', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     resolveRequest?.(new Response(JSON.stringify({ action: 'approve', summary: { total: 1, eligible: 0, blocked: 1, alreadyComplete: 0, invalidOrStale: 0 }, items: [] }), { status: 200 }));
+  });
+
+  it('shares the busy guard between archive, review, assistive, selection, and navigation', async () => {
+    let resolveRequest: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => { resolveRequest = resolve; });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockReturnValueOnce(pending);
+    const publishedResult: ProjectIndexResult = {
+      ...result,
+      rows: [{ ...baseRow, status: 'published' }],
+    };
+    render(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={publishedResult}
+            canReviewBulk
+            canRunAssistiveBulk
+            canArchiveBulk
+            archiveExecutionTarget="local"
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Atlas' }))[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Review archive batch' }));
+    fireEvent.change(screen.getByLabelText(/Shared archive reason/), { target: { value: 'Authorized annual retirement' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /I confirm the exact target/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and archive 1 published project' }));
+
+    await waitFor(() => {
+      expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole('button', { name: 'Check eligibility' }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole('button', { name: 'Clear selection' }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getAllByRole('checkbox', { name: 'Select Atlas' }).every((input) => (input as HTMLInputElement).disabled)).toBe(true);
+      expect((screen.getByRole('button', { name: 'Go to next page' }) as HTMLButtonElement).disabled).toBe(true);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    resolveRequest?.(new Response(JSON.stringify({
+      success: true,
+      result: { resultCode: 'COMPLETED', publicId: 'P-1', recordCount: 0, feedHash: 'a'.repeat(64) },
+    }), { status: 200 }));
+    await waitFor(() => expect(screen.getByText(/^Batch result:/)).toBeTruthy());
   });
 });

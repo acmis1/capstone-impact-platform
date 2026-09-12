@@ -18,7 +18,8 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       expect(perms).toContain('projects.edit');
       expect(perms).toContain('projects.publish');
       expect(perms).toContain('staff.manage');
-      expect(perms.length).toBe(6);
+      expect(perms).toContain('taxonomy.manage');
+      expect(perms.length).toBe(7);
     });
 
     it('returns exact permissions for reviewer role', () => {

@@ -1,4 +1,5 @@
-import { resolve } from 'node:path';
+import fs from 'node:fs';
+import path, { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -135,7 +136,7 @@ describe('provider-neutral execution identity', () => {
       CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID: 'capstone-worker-01',
       CAPSTONE_DEPLOYMENT_VERSION: COMMIT,
       RENDER_INSTANCE_ID: 'srv-legacy',
-      RENDER_GIT_COMMIT: 'c'.repeat(40),
+      RENDER_GIT_COMMIT: COMMIT,
     }));
     expect(config).toMatchObject({
       workerInstanceId: 'capstone-worker-01',
@@ -195,6 +196,26 @@ describe('provider-neutral execution identity', () => {
     expect(redactReservationToken('3f1d2f5a-9c4b-4f2e-8a1d-0b7c6e5d4f3a')).toBe('3f1d2f5a…');
     expect(redactReservationToken('short')).toBe('…');
   });
+
+  it('14a. Keeps production in a separate immutable continuous School-host profile', () => {
+    const repoRoot = path.resolve(__dirname, '../../../../..');
+    const staging = fs.readFileSync(path.join(repoRoot, 'infra/assistive-worker/compose.yaml'), 'utf8');
+    const production = fs.readFileSync(path.join(repoRoot, 'infra/assistive-worker/compose.production.yaml'), 'utf8');
+    const example = fs.readFileSync(path.join(repoRoot, 'infra/assistive-worker/worker.production.env.example'), 'utf8');
+
+    expect(staging).toContain('CAPSTONE_RUNTIME_ENV: staging');
+    expect(staging).not.toContain('CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED');
+    expect(production).toContain('CAPSTONE_RUNTIME_ENV: production');
+    expect(production).toContain('CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED: ${CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED:?');
+    expect(production).toContain('CAPSTONE_ASSISTIVE_EXECUTION_MODE: CONTINUOUS');
+    expect(production).toContain('pull_policy: never');
+    expect(production).toContain('user: "1000:1000"');
+    expect(production).toContain('stop_grace_period: 10m');
+    expect(production).toContain('scale: 1');
+    expect(production).not.toMatch(/^\s*ports:\s*$/im);
+    expect(example.split(/\r?\n/).filter(Boolean)
+      .every((line) => /^[A-Z][A-Z0-9_]*=$/.test(line))).toBe(true);
+  });
 });
 
 describe('dispatcher configuration', () => {
@@ -236,6 +257,15 @@ describe('dispatcher configuration', () => {
   it('18. Refuses a mutable worker image identity', () => {
     expect(() => getAssistiveDispatcherConfig(dispatcherEnvironment({
       CAPSTONE_ASSISTIVE_IMAGE_DIGEST: 'latest',
+    }))).toThrow(/image identity is invalid/);
+  });
+
+  it('19. Refuses case-normalized deployment and image identities', () => {
+    expect(() => getAssistiveDispatcherConfig(dispatcherEnvironment({
+      CAPSTONE_DEPLOYMENT_VERSION: COMMIT.toUpperCase(),
+    }))).toThrow(/deployment identity is invalid/);
+    expect(() => getAssistiveDispatcherConfig(dispatcherEnvironment({
+      CAPSTONE_ASSISTIVE_IMAGE_DIGEST: DIGEST.toUpperCase(),
     }))).toThrow(/image identity is invalid/);
   });
 });

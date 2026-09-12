@@ -127,7 +127,7 @@ capstone-impact-platform/
 │   └── developer-troubleshooting.md # Developer setup troubleshooting guide
 ├── infra/
 │   └── supabase/             # Database migrations, seed SQL, runbooks
-│       └── migrations/       # 53 timestamped PostgreSQL migration files
+│       └── migrations/       # 57 timestamped PostgreSQL migration files
 ├── Prototype/                # Historical feasibility material and immutable reference snapshot
 ├── AGENTS.md                 # Agent governance & repository rules
 ├── CONTRIBUTING.md           # Contributor workflow & safety rules
@@ -225,12 +225,12 @@ npm run verify:all
 
 ## 10. Database Migration Rules
 
-1. **Append-Only Policy**: Existing migrations `0001` through `0009` in `infra/supabase/migrations/` are merged and immutable. **Never modify, rename, or delete migrations `0001` through `0009`.** Migration `0009` is `20260808170000_transactional_project_metadata_update.sql`, the atomic project metadata RPC; it remains repository/local-only and is not applied to hosted staging.
+1. **Append-Only Policy**: All 57 existing migrations in `infra/supabase/migrations/` are merged and immutable. **Never modify, rename, or delete an existing migration.** The current repository candidate ends at Migration `0057`, `20260911120000_gallery_full_text_equivalents.sql`.
 2. **New Migrations**: If your feature requires schema, index, RLS, or function changes:
    - Create a new 14-digit timestamped file: `infra/supabase/migrations/YYYYMMDDHHMMSS_description.sql`.
    - Replay locally using `npm run supabase:reset`.
    - Add static contract tests in `apps/admin-cms/src/security/`.
-3. **Local/Repo Scope**: Migrations `0007` through `0009` are repository and local-only. Hosted staging migration application is managed separately by authorized maintainers.
+3. **Local/Repo Scope**: Local reset replays all 57 migrations. The latest accepted hosted staging evidence remains a separate 52-migration observation; applying Migrations `0053`–`0057` requires separately authorized hosted reconciliation.
 
 ---
 
@@ -296,7 +296,7 @@ Do not select broad roadmap topics directly from `docs/implementation-backlog.md
 - ❌ **DO NOT** hardcode or commit API keys, secrets, credentials, passwords, or connection strings.
 - ❌ **DO NOT** use real participant, staff, or supervisor personal identity data (use synthetic data only).
 - ❌ **DO NOT** modify, delete, or redirect current checks to historical `Prototype/` material; maintain the Duda presentation layer under `apps/public-layer/`.
-- ❌ **DO NOT** edit, rename, or delete existing migration files `0001` through the current repository candidate `0053`; migrations are append-only after merge. The latest hosted evidence remains at `0052` until candidate `0053` is separately verified there.
+- ❌ **DO NOT** edit, rename, or delete any of the 57 existing migration files through current repository candidate `0057`; migrations are append-only after merge. The latest hosted evidence remains at `0052` until candidates `0053`–`0057` are separately verified there.
 - ❌ **DO NOT** self-merge Pull Requests without maintainer sign-off.
 
 ---

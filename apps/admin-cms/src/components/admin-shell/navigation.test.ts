@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { NAVIGATION_ITEMS, getRouteDescriptor } from './navigation';
+import { NAVIGATION_ITEMS, getNavigationItems, getRouteDescriptor } from './navigation';
 
 describe('navigation module', () => {
   it('defines exact, unique working navigation items', () => {
@@ -17,6 +17,19 @@ describe('navigation module', () => {
       title: 'Showcase publishing history',
       breadcrumbs: [{ label: 'Publishing' }],
       activeHref: '/admin/public-feed',
+    });
+  });
+
+  it('shows project categories only to staff with the dedicated taxonomy capability', () => {
+    expect(getNavigationItems(false, false)).not.toContainEqual({ name: 'Project categories', href: '/admin/taxonomy' });
+    expect(getNavigationItems(false, true)).toContainEqual({ name: 'Project categories', href: '/admin/taxonomy' });
+  });
+
+  it('maps the project categories route to its own navigation item', () => {
+    expect(getRouteDescriptor('/admin/taxonomy')).toEqual({
+      title: 'Project categories',
+      breadcrumbs: [{ label: 'Project categories' }],
+      activeHref: '/admin/taxonomy',
     });
   });
 

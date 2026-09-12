@@ -41,7 +41,7 @@ import { DashboardPreferencesProvider } from './useDashboardPreferences';
 import { loadDashboardPreferences, saveDashboardPreferences, DEFAULT_DASHBOARD_PREFERENCES } from './dashboardPreferences';
 import { parseProjectListQuery } from '../../domain/projectQuery';
 
-const EMPTY_OPTIONS = { years: [], programs: [], disciplines: [] };
+const EMPTY_OPTIONS = { years: [], programs: [], disciplines: [], industries: [] };
 
 async function renderAdminPage(params: Record<string, string> = {}) {
   navigation.search = new URLSearchParams(params).toString();
@@ -174,11 +174,11 @@ describe('NoMatchingProjectsState', () => {
   afterEach(cleanup);
 
   it('names the active search and filter context without implying missing data', () => {
-    navigation.search = 'q=atlas&status=approved&year=2026';
+    navigation.search = 'q=atlas&status=approved&year=2026&industry=Technology';
     render(
       <DashboardPreferencesProvider>
         <NoMatchingProjectsState
-          query={parseProjectListQuery({ q: 'atlas', status: 'approved', year: '2026' })}
+          query={parseProjectListQuery({ q: 'atlas', status: 'approved', year: '2026', industry: 'Technology' })}
         />
       </DashboardPreferencesProvider>,
     );
@@ -186,7 +186,7 @@ describe('NoMatchingProjectsState', () => {
     expect(screen.getByText('No projects match your search or filters')).toBeTruthy();
     expect(
       screen.getByText(
-        'No project records match search "atlas", status Approved, year 2026. Adjust or remove a filter to widen the results.',
+        'No project records match search "atlas", status Approved, year 2026, industry Technology. Adjust or remove a filter to widen the results.',
       ),
     ).toBeTruthy();
   });
@@ -272,7 +272,7 @@ describe('Projects index page states', () => {
   it('shows the filtered no-results state, kept distinct from the no-records state', async () => {
     repository.listProjectsPage.mockResolvedValue({ projects: [], total: 0, page: 1, pageSize: 10, pageCount: 0 });
     repository.getProjectDashboardMetrics.mockResolvedValue({ totalProjects: 128, publicEligible: 34, inReview: 7, archived: 12 });
-    repository.getProjectFilterOptions.mockResolvedValue({ years: ['2026'], programs: [], disciplines: [] });
+    repository.getProjectFilterOptions.mockResolvedValue({ years: ['2026'], programs: [], disciplines: [], industries: [] });
 
     await renderAdminPage({ q: 'atlas' });
 

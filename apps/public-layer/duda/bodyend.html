@@ -325,7 +325,17 @@
                 mediaByUrl.set(item.url, null);
                 return;
             }
-            mediaByUrl.set(item.url, item);
+            // Governed text-equivalent contract. A classified entry carries `contentKind` and
+            // `fullText`: a text-bearing image must have a non-blank full text and an ordinary one
+            // must not, exactly as the server validator requires, so an incoherent entry is
+            // dropped like any other server-invalid pairing. A legacy entry (neither key) is an
+            // unclassified alt-only image published before the contract existed.
+            const textEquivalent = getSnapshotTextEquivalent(item);
+            if (textEquivalent === false) {
+                mediaByUrl.set(item.url, null);
+                return;
+            }
+            mediaByUrl.set(item.url, { ...item, textEquivalent });
         });
 
         const candidates = snapshotUrls.flatMap(url => {
@@ -333,7 +343,9 @@
                 return [];
             }
             const media = mediaByUrl.get(url);
-            return media ? [{ url, altText: media.altText, galleryPosition: media.galleryPosition }] : [];
+            return media
+                ? [{ url, altText: media.altText, galleryPosition: media.galleryPosition, ...(media.textEquivalent || {}) }]
+                : [];
         });
 
         // A gallery position identifies exactly one image in the governed contract. When two
@@ -347,6 +359,28 @@
         });
 
         return candidates.filter(({ galleryPosition }) => !contestedPositions.has(galleryPosition));
+    };
+
+    /**
+     * Reads the declared text equivalent of one governed snapshot entry. Returns `null` for a
+     * legacy entry with no declaration, `false` for a contradictory declaration, and otherwise the
+     * exact `{ contentKind, fullText }` pair to render — `fullText` is the searchable, selectable
+     * full text of a text-bearing image and `null` for an ordinary one.
+     */
+    const getSnapshotTextEquivalent = (item) => {
+        const hasKind = Object.prototype.hasOwnProperty.call(item, "contentKind");
+        const hasFullText = Object.prototype.hasOwnProperty.call(item, "fullText");
+        if (!hasKind && !hasFullText) return null;
+        if (!hasKind || !hasFullText) return false;
+        if (item.contentKind === "ordinary") {
+            return item.fullText === null ? { contentKind: "ordinary", fullText: null } : false;
+        }
+        if (item.contentKind === "text_bearing") {
+            return typeof item.fullText === "string" && item.fullText === item.fullText.trim() && item.fullText && item.fullText.length <= 5000
+                ? { contentKind: "text_bearing", fullText: item.fullText }
+                : false;
+        }
+        return false;
     };
 
     const normalizeProjectRecord = (record) => {
@@ -404,10 +438,11 @@
         // `galleryPosition` is authoritative feed data, not a display index. It is carried through
         // untouched so a server-valid sparse gallery such as [2] or [2, 5] keeps its exact governed
         // positions instead of being renumbered.
-        const normalizedSnapshotMedia = getSnapshotItems(record).map(({ url, altText, galleryPosition }) => ({
+        const normalizedSnapshotMedia = getSnapshotItems(record).map(({ url, altText, galleryPosition, contentKind, fullText }) => ({
             url,
             altText,
-            galleryPosition
+            galleryPosition,
+            ...(contentKind ? { contentKind, fullText } : {})
         }));
 
         return {
@@ -449,6 +484,27 @@
         };
     };
     // --- PUBLIC RECORD POLICY (end) ---
+
+    /**
+     * Full text versions of the text-bearing images in a rendered gallery, as real selectable
+     * HTML next to the images. Discoverable behind a disclosure so a long transcription never
+     * pushes the gallery away, and never stuffed into an alt attribute.
+     */
+    const renderSnapshotFullTexts = (items) => {
+        const textBearing = items.filter(item => item.contentKind === "text_bearing" && typeof item.fullText === "string");
+        if (textBearing.length === 0) return "";
+        return `
+            <div class="snapshot-full-texts">
+                ${textBearing.map(item => `
+                    <details class="snapshot-text-disclosure" data-gallery-position="${item.galleryPosition}">
+                        <summary>Read full text of image ${item.galleryPosition}</summary>
+                        <p class="snapshot-text-context">${escapeHTML(item.altText)}</p>
+                        <p class="section-text snapshot-text-content">${escapeHTML(item.fullText)}</p>
+                    </details>
+                `).join("")}
+            </div>
+        `;
+    };
 
     const normalizeFeedRecords = (feed) => {
         if (!Array.isArray(feed)) throw createPublicFeedError('FEED_RESPONSE_INVALID');
@@ -700,7 +756,13 @@
         const filteredProjects = allProjects.filter(p => {
             const search = normalizeSearchField(currentFilters.search);
             if (search) {
-                const searchableFields = [p.title, p.publicId, p.industryPartner, p.groupName];
+                // Approved full text of text-bearing gallery images is indexed too: the brief
+                // requires full text versions of image content for search as well as accessibility.
+                const searchableFields = [
+                    p.title, p.publicId, p.industryPartner, p.groupName,
+                    ...(Array.isArray(p.snapshotMedia) ? p.snapshotMedia : [])
+                        .map(media => media && media.contentKind === "text_bearing" ? media.fullText : "")
+                ];
                 if (!searchableFields.some(field => normalizeSearchField(field).includes(search))) return false;
             }
 
@@ -815,6 +877,20 @@
             elevatedMedia = "poster";
         }
 
+        // Resource ownership is pure: content probes must not consume render state.
+        const hasPrimaryPosterAction = templateId === "poster_showcase"
+            || (templateId === "technical_detail" && canShowPoster
+                && elevatedMedia !== "video" && elevatedMedia !== "snapshots");
+        const renderPosterLink = (pdfClass, imageClass = pdfClass) => {
+            if (project.posterPdf && !isHidden("posterPdf")) {
+                return `<a href="${escapeHTML(project.posterPdf)}" class="${pdfClass}" target="_blank" rel="noopener noreferrer">Download Poster PDF</a>`;
+            }
+            if (project.poster && !isHidden("poster")) {
+                return `<a href="${escapeHTML(project.poster)}" class="${imageClass}" target="_blank" rel="noopener noreferrer">View Poster</a>`;
+            }
+            return "";
+        };
+
         const renderMetadataChips = (light = false) => {
             if (isHidden("metadata")) return "";
             const chipValues = [
@@ -856,20 +932,19 @@
         };
 
         const renderLinks = (large = false) => {
-            const showPosterPdf = !!(project.posterPdf && !isHidden("posterPdf"));
-            const showPosterImgLink = !!(!showPosterPdf && project.poster && !isHidden("poster"));
+            const posterLink = hasPrimaryPosterAction ? ""
+                : renderPosterLink("btn-cta poster-download", "btn-cta btn-cta-link");
             const showExternal = !isHidden("externalLinks") && !isHidden("links");
             const extLinks = Array.isArray(project.externalLinks) ? project.externalLinks : [];
             const hasExternal = showExternal && (project.demoUrl || project.repositoryUrl || extLinks.length > 0);
-            if (!hasExternal && !showPosterPdf && !showPosterImgLink) return "";
+            if (!hasExternal && !posterLink) return "";
 
             return `
                 <div class="cip-links ${large ? "cip-links-large" : ""}">
                     ${showExternal && project.demoUrl ? `<a href="${escapeHTML(project.demoUrl)}" class="btn-cta btn-cta-demo" target="_blank" rel="noopener noreferrer">Open Live Demo</a>` : ""}
                     ${showExternal && project.repositoryUrl ? `<a href="${escapeHTML(project.repositoryUrl)}" class="btn-cta btn-cta-code" target="_blank" rel="noopener noreferrer">View Code Repository</a>` : ""}
                     ${showExternal ? extLinks.map(lnk => `<a href="${escapeHTML(lnk.url)}" class="btn-cta btn-cta-link" target="_blank" rel="noopener noreferrer">${escapeHTML(lnk.label || "Project Link")}</a>`).join("") : ""}
-                    ${showPosterPdf ? `<a href="${escapeHTML(project.posterPdf)}" class="btn-cta poster-download" target="_blank" rel="noopener noreferrer">Download Poster PDF</a>` : ""}
-                    ${showPosterImgLink ? `<a href="${escapeHTML(project.poster)}" class="btn-cta btn-cta-link" target="_blank" rel="noopener noreferrer">View Poster</a>` : ""}
+                    ${posterLink}
                 </div>
             `;
         };
@@ -920,6 +995,7 @@
                             </button>
                         `).join("")}
                     </div>
+                    ${renderSnapshotFullTexts(snapshotItems)}
                 `;
             }
             if (sec === "video" && project.videoUrl) return renderVideo(project.videoUrl);
@@ -943,7 +1019,9 @@
         };
 
         const renderSection = (sec, numbered = false) => {
-            if (isHidden(sec)) return "";
+            // External-link visibility does not also hide an independently allowed poster action.
+            // renderLinks owns the separate external, PDF and image visibility checks.
+            if (isHidden(sec) && sec !== "links" && sec !== "externalLinks") return "";
             if (sec === "video" && elevatedMedia === "video") return "";
             if (sec === "snapshots" && elevatedMedia === "snapshots") return "";
 
@@ -963,7 +1041,7 @@
         };
 
         const allPossibleSections = ["background", "solution", "snapshots", "video", "team", "links", "externalLinks", "citations", "accessibilityText"];
-        const fullOrder = [...sectionOrder];
+        const fullOrder = [...new Set(sectionOrder.map(sec => sec === "externalLinks" ? "links" : sec))];
         allPossibleSections.forEach(sec => {
             if (!fullOrder.includes(sec)) {
                 if (sec === "links" && fullOrder.includes("externalLinks")) return;
@@ -972,7 +1050,7 @@
             }
         });
 
-        const consumedSections = [];
+        const consumedSections = templateId === "media_rich" ? ["links", "externalLinks"] : [];
         if (elevatedMedia === "video") consumedSections.push("video");
         if (elevatedMedia === "snapshots") consumedSections.push("snapshots");
         if (elevatedMedia === "poster") consumedSections.push("poster");
@@ -988,7 +1066,7 @@
         const numberedKeys = ["background", "solution", "links", "externalLinks", "snapshots", "video", "citations"];
         const activeNumberedSections = [];
         bodySections.forEach(sec => {
-            if (numberedKeys.includes(sec) && !isHidden(sec)) {
+            if (numberedKeys.includes(sec) && (!isHidden(sec) || sec === "links" || sec === "externalLinks")) {
                 const isLinkSec = sec === "links" || sec === "externalLinks";
                 if (isLinkSec && activeNumberedSections.some(s => s === "links" || s === "externalLinks")) {
                     return;
@@ -1022,6 +1100,7 @@
                             </button>
                         `).join("")}
                     </div>
+                    ${renderSnapshotFullTexts(snapshotItems)}
                 `
                 : elevatedMedia === "poster"
                     ? `<img src="${escapeHTML(project.poster || 'https://via.placeholder.com/400x600?text=No+Poster')}" alt="${escapeHTML(posterAlt)}" class="poster-hero-image">`
@@ -1052,6 +1131,7 @@
                                 </button>
                             `).join("")}
                         </div>
+                        ${renderSnapshotFullTexts(snapshotItems.slice(0, 4))}
                     </div>
                 `;
             }
@@ -1060,14 +1140,14 @@
                     <div class="technical-poster-card">
                         <p class="technical-poster-eyebrow">Appendix Poster</p>
                         <img src="${escapeHTML(project.poster || 'https://via.placeholder.com/400x600?text=No+Poster')}" alt="${escapeHTML(posterAlt)}" class="technical-poster-image">
-                        ${project.posterPdf ? `<a href="${escapeHTML(project.posterPdf)}" class="btn-cta btn-cta-demo technical-poster-button" target="_blank" rel="noopener noreferrer">Download Poster PDF</a>` : ""}
+                        ${renderPosterLink("btn-cta btn-cta-demo technical-poster-button")}
                     </div>
                 `;
             }
             return "";
         })();
 
-        const snapshotStripHTML = templateId === "poster_showcase" && snapshotItems.length > 0 && elevatedMedia !== "snapshots"
+        const snapshotStripHTML = templateId === "poster_showcase" && canShowSnapshots && elevatedMedia !== "snapshots"
             ? `
                 <div class="exhibition-strip">
                     <div>
@@ -1077,6 +1157,7 @@
                             </button>
                         `).join("")}
                     </div>
+                    ${renderSnapshotFullTexts(snapshotItems)}
                 </div>
             `
             : "";
@@ -1087,7 +1168,7 @@
                         <button class="cip-back" onclick="goBack()">
                             <span class="back-icon">&larr;</span> Return to Showcase
                         </button>
-                        <div style="background:#fffdf8; border:1px solid #e4dccf; border-radius:8px; padding:2.5rem; box-shadow:0 8px 24px rgba(31,41,55,.06);">
+                        <div class="technical-report-card" style="background:#fffdf8; border:1px solid #e4dccf; border-radius:8px; padding:2.5rem; box-shadow:0 8px 24px rgba(31,41,55,.06);">
                             <div class="detail-header technical-header">
                                 <span style="background:#0f766e; color:#fff; padding:.35rem .85rem; border-radius:3px; font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.08em; font-family:system-ui,-apple-system,sans-serif;">Formal Project Report</span>
                                 <h1>${escapeHTML(project.title)}</h1>
@@ -1176,7 +1257,7 @@
                             <h1>${escapeHTML(project.title)}</h1>
                             ${renderMetadataChips(false)}
                             ${project.summary ? `<p class="lead-summary section-text">${escapeHTML(project.summary)}</p>` : ""}
-                            ${!isHidden("posterPdf") && project.posterPdf ? `<a href="${escapeHTML(project.posterPdf)}" class="poster-download" target="_blank" rel="noopener noreferrer">Download Poster PDF</a>` : (!isHidden("poster") && project.poster ? `<a href="${escapeHTML(project.poster)}" class="poster-download" target="_blank" rel="noopener noreferrer">View Poster</a>` : "")}
+                            ${renderPosterLink("poster-download")}
                         </div>
                     </div>
                     ${snapshotStripHTML}
@@ -1211,6 +1292,7 @@
                     <div id="capstone-lightbox-img-container" style="max-width:90vw; max-height:85vh; display:flex; align-items:center; justify-content:center; position:relative;">
                         <img id="capstone-lightbox-img" style="max-width:100%; max-height:85vh; object-fit:contain; border-radius:12px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.1); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);" onclick="event.stopPropagation()">
                         <div id="capstone-lightbox-error" style="display:none; color:#fff; text-align:center; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.5); padding:24px; border-radius:12px; backdrop-filter:blur(8px);">Snapshot image failed to load.</div>
+                        <div id="capstone-lightbox-text" style="display:none; position:absolute; left:0; right:0; bottom:0; max-height:38%; overflow:auto; margin:0 12px 12px; padding:14px 18px; color:#f8fafc; background:rgba(2, 6, 23, 0.86); border:1px solid rgba(255,255,255,0.14); border-radius:10px; font-size:0.95rem; line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere;" onclick="event.stopPropagation()"></div>
                     </div>
 
                     <button type="button" class="capstone-lightbox-next" style="position:absolute; right:24px; width:64px; height:64px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="event.stopPropagation(); changeSnapshot(1)" aria-label="Next snapshot" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">›</button>
@@ -1294,10 +1376,18 @@
 
     const updateLightbox = (project) => {
         const img = document.getElementById('capstone-lightbox-img');
+        const text = document.getElementById('capstone-lightbox-text');
         const snapshotItem = getSnapshotItems(project)[currentSnapshotIndex];
         if (img && snapshotItem) {
             img.src = snapshotItem.url;
             img.alt = snapshotItem.altText;
+        }
+        // The full text of a text-bearing image travels with it into the viewer, as text — the
+        // alt attribute keeps the concise description only.
+        if (text) {
+            const fullText = snapshotItem && snapshotItem.contentKind === "text_bearing" ? snapshotItem.fullText : "";
+            text.textContent = fullText || "";
+            text.style.display = fullText ? "block" : "none";
         }
     };
 

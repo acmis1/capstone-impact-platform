@@ -110,6 +110,8 @@ async function buildTestWorkbookBuffer(overrides: Record<string, string> = {}): 
   if (overrides.snapshotAltText !== undefined) {
     headers.push('Snapshot image alt text');
     dataRow.push(overrides.snapshotAltText);
+    headers.push('Snapshot 1 content type');
+    dataRow.push(overrides.snapshot1ContentKind ?? 'Ordinary image');
   }
 
   sheet.addRow(headers);

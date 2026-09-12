@@ -1,6 +1,7 @@
 import type { ServerEnv } from '../lib/env';
 import { classifySupabaseCredential } from '../lib/supabaseCredential';
 import {
+  isVerifiedProductionRuntime,
   isVerifiedStagingRuntime,
   type StagingRuntimeEnvironment,
 } from '../security/stagingRuntimeIdentity';
@@ -102,10 +103,13 @@ function hasValidConfiguration(
     !url.search &&
     !url.hash &&
     (url.pathname === '/' || url.pathname === '') &&
-    isVerifiedStagingRuntime({
+    (isVerifiedStagingRuntime({
       ...runtimeEnv,
       NEXT_PUBLIC_SUPABASE_URL: env.supabaseUrl,
-    }) &&
+    }) || isVerifiedProductionRuntime({
+      ...runtimeEnv,
+      NEXT_PUBLIC_SUPABASE_URL: env.supabaseUrl,
+    })) &&
     hasValidCredentialSemantics(env)
   );
 }

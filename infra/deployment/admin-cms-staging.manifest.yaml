@@ -106,6 +106,10 @@ environment:
     required: false
     source: fail-closed-default
     value: false
+  - name: CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED
+    required: false
+    source: fail-closed-default
+    value: false
   - name: CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED
     required: false
     source: fail-closed-default
@@ -116,3 +120,22 @@ reconciliation:
   providerImportMustNotPublish: true
   productionAndLiveDudaMustRemainSeparate: true
   ownerMustRecheckProviderTerms: true
+
+# Provider-injected identity is observed, not copied into owner environment variables.
+# Never hardcode these values to make a local or unrelated deployment look like Render.
+platformEnvironment:
+  - name: RENDER
+    required: true
+    source: provider-injected
+    value: null
+    consumer: apps/admin-cms/src/deployment/deploymentReadinessEndpoint.ts
+  - name: RENDER_GIT_COMMIT
+    required: true
+    source: provider-injected
+    value: null
+    consumer: apps/admin-cms/src/app/api/readiness/route.ts
+  - name: RENDER_EXTERNAL_URL
+    required: true
+    source: provider-injected
+    value: null
+    consumer: apps/admin-cms/src/auth/csrf.ts

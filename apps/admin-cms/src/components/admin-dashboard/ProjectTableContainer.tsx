@@ -27,6 +27,7 @@ import { cn } from '../../lib/utils';
 import { isSafeBulkPublicId } from '../../projects/bulkProjectReview';
 import { BulkProjectReviewPanel } from './BulkProjectReviewPanel';
 import { BulkAssistiveExecutionPanel } from './BulkAssistiveExecutionPanel';
+import { BulkArchivePanel, type BulkArchiveExecutionTarget } from './BulkArchivePanel';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -54,6 +55,8 @@ export interface ProjectTableContainerProps {
   canSubmitBulk?: boolean;
   canReviewBulk?: boolean;
   canRunAssistiveBulk?: boolean;
+  canArchiveBulk?: boolean;
+  archiveExecutionTarget?: BulkArchiveExecutionTarget;
 }
 
 const columnHelper = createColumnHelper<ProjectIndexRow>();
@@ -185,6 +188,8 @@ export function ProjectTableContainer({
   canSubmitBulk = false,
   canReviewBulk = false,
   canRunAssistiveBulk = false,
+  canArchiveBulk = false,
+  archiveExecutionTarget = null,
 }: ProjectTableContainerProps) {
   // Opt out of React Compiler memoization because useReactTable is an incompatible library boundary
   "use no memo";
@@ -536,10 +541,19 @@ export function ProjectTableContainer({
         canSubmitBulk={canSubmitBulk}
         canReviewBulk={canReviewBulk}
         onBusyChange={setBulkReviewBusy}
+        sharedBusy={bulkReviewBusy}
       />
       <BulkAssistiveExecutionPanel
         selectedProjects={selectedProjects}
         canRunAssistive={canRunAssistiveBulk}
+        onBusyChange={setBulkReviewBusy}
+        sharedBusy={bulkReviewBusy}
+      />
+      <BulkArchivePanel
+        selectedProjects={selectedProjects}
+        canArchive={canArchiveBulk}
+        executionTarget={archiveExecutionTarget}
+        sharedBusy={bulkReviewBusy}
         onBusyChange={setBulkReviewBusy}
       />
 

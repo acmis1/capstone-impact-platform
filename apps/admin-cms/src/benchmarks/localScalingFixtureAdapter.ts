@@ -5,6 +5,27 @@ import { Project } from '../domain/project';
 export interface AdaptedProjectDbRecord {
   projectRow: Record<string, unknown>;
   mediaRows: Array<Record<string, unknown>>;
+  taxonomyMappingIntents: {
+    disciplineNames: string[];
+    industryCategoryNames: string[];
+  };
+}
+
+export type SyntheticTaxonomyKind = 'discipline' | 'industry';
+
+export const SYNTHETIC_SECONDARY_INDUSTRY = 'Synthetic Cross-Industry';
+
+/**
+ * Gives every local scaling run an isolated taxonomy namespace. The name-based intent keeps
+ * database IDs out of the domain fixture while making concurrent runs safe under catalogue
+ * uniqueness constraints.
+ */
+export function scopeSyntheticTaxonomyName(
+  runPrefix: string,
+  kind: SyntheticTaxonomyKind,
+  name: string,
+): string {
+  return `${runPrefix}::${kind}::${name}`;
 }
 
 /**
@@ -32,6 +53,16 @@ export function adaptSyntheticProjectForDb(
   const snapshotAlt = hasSnapshot
     ? (project.snapshotMedia?.[0]?.altText || `Synthetic snapshot description for ${scopedPublicId}`)
     : undefined;
+  const disciplineNames = [...new Set((project.disciplines.length > 0 ? project.disciplines : [project.discipline]).filter(Boolean))]
+    .map((name) => scopeSyntheticTaxonomyName(runPrefix, 'discipline', name));
+  const industryCategoryNames = project.industry
+    ? [
+      scopeSyntheticTaxonomyName(runPrefix, 'industry', project.industry),
+      ...(project.publicId?.endsWith('-0001')
+        ? [scopeSyntheticTaxonomyName(runPrefix, 'industry', SYNTHETIC_SECONDARY_INDUSTRY)]
+        : []),
+    ]
+    : [];
 
   const projectRow: Record<string, unknown> = {
     public_id: scopedPublicId,
@@ -42,8 +73,8 @@ export function adaptSyntheticProjectForDb(
     year: parseInt(project.year, 10),
     program_name: project.program || '',
     study_program: project.studyProgram || project.program || '',
-    discipline: project.discipline || '',
-    industry: project.industry || '',
+    discipline: disciplineNames[0] || '',
+    industry: industryCategoryNames[0] || '',
     industry_partner: project.industryPartner || '',
     academic_supervisor: project.academicSupervisor || '',
     group_name: project.groupName || '',
@@ -103,12 +134,18 @@ export function adaptSyntheticProjectForDb(
       is_public_approved: isPublished,
       public_url: snapshotUrl || null,
       alt_text_public: snapshotAlt,
+      image_content_kind: 'ordinary',
+      full_text_public: null,
     });
   }
 
   return {
     projectRow,
     mediaRows,
+    taxonomyMappingIntents: {
+      disciplineNames,
+      industryCategoryNames,
+    },
   };
 }
 

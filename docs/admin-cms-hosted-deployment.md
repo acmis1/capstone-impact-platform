@@ -16,7 +16,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | **Instance Status** | Active / Separate (Never touch) | **ACTIVE_HEALTHY** (Active Target) | **PAUSED / INACTIVE** (Do not modify) |
 | **Region** | `ap-southeast-1` | `ap-southeast-1` | `ap-southeast-1` |
 | **Hosting Service** | Existing Render static/web service | **Separate** Render/Cloud Web Service | — |
-| **Database State** | Prohibited from mutation | Historical read-only observations recorded 46 then 48/48 rows; the latest hosted Gate 3/4 evidence is the prior 52-migration contract through `20260906120000_public_removal_completion_reconciliation`. The repository candidate now expects Migration 0053 and requires fresh governed Gate 3/4 evidence after authorized application. | Historical manually evolved baseline; migration history untracked |
+| **Database State** | Prohibited from mutation | Historical read-only observations recorded 46 then 48/48 rows; the latest hosted Gate 3/4 evidence is the prior 52-migration contract through `20260906120000_public_removal_completion_reconciliation`. The repository candidate now expects Migrations 0053–0057 and requires fresh governed Gate 3/4 evidence after authorized application. | Historical manually evolved baseline; migration history untracked |
 
 > [!IMPORTANT]
 > The existing Render service configured for `Prototype/` must **NEVER** be repurposed or pointed to `apps/admin-cms`. The Admin/CMS requires an independent web service with its own environment variables and deployment pipeline. Furthermore, the Prototype Supabase project (`capstone-prototype-recovery-2026`) is completely isolated and must never be targeted by Admin/CMS operations.
@@ -36,7 +36,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 - **Build Command**: `npm run build:admin` (or `npm run build --workspace=apps/admin-cms`)
 - **Start Command**: `npm run start --workspace=apps/admin-cms` (or `next start` inside `apps/admin-cms`)
 - **Liveness Endpoint**: `/api/health` (always returns a minimal HTTP 200 while the application route handler is running)
-- **Render Health Check Endpoint**: `/api/readiness` (returns HTTP 200 only when hosted configuration, staging target identity, and the bounded dependency probe are ready)
+- **Render Health Check Endpoint**: `/api/readiness` (returns HTTP 200 only when hosted configuration, the exact declared hosted target identity, and the bounded dependency probe are ready)
 
 ### C. HTTP Liveness and Deployment-Readiness Contracts
 
@@ -45,11 +45,11 @@ The Capstone platform enforces strict architectural and operational isolation be
 | Endpoint | Success contract | What it proves | What it does not prove |
 | :--- | :--- | :--- | :--- |
 | `GET /api/health` | HTTP 200 with `{ "app": "admin-cms", "status": "ok" }` | The deployed application can execute a route handler. | Valid environment variables, Supabase reachability, schema state, authentication, publication, UAT, or production acceptance. |
-| `GET /api/readiness` | HTTP 200 with `readiness: "ready"`, `classification: "READY"`, `configuration: "configured"`, `dependency: "reachable"`, and `databaseCapability: "current"` | Critical server configuration parses; Render supplies a valid full deployment commit; the runtime is the expected HTTPS staging target; and one bounded, two-second, read-only sentinel RPC returns the exact immutable capability marker expected by the application bundle. | Exact migration-history equality, the complete schema/grant/RLS/RPC contract, Auth or Storage readiness, workflow behavior, full UAT, publication readiness, or production acceptance. |
+| `GET /api/readiness` | HTTP 200 with `readiness: "ready"`, `classification: "READY"`, `configuration: "configured"`, `dependency: "reachable"`, and `databaseCapability: "current"` | Critical server configuration parses; Render supplies a valid full deployment commit; the runtime is the exact declared HTTPS hosted target (`staging` or `production`); and one bounded, two-second, read-only sentinel RPC returns the exact immutable capability marker expected by the application bundle. | Publication-feature enablement, exact migration-history equality, the complete schema/grant/RLS/RPC contract, Auth or Storage readiness, workflow behavior, full UAT, publication readiness, or production acceptance. |
 
 Readiness failures return HTTP 503 with one of two bounded classifications:
 
-- `CONFIGURATION_NOT_READY`: critical environment configuration, Render provider identity, full provider commit, or expected staging target identity is missing, malformed, or mismatched; the dependency and database capability are `not-checked`.
+- `CONFIGURATION_NOT_READY`: critical environment configuration, Render provider identity, full provider commit, or expected named hosted target identity is missing, malformed, or mismatched; the dependency and database capability are `not-checked`.
 - `DEPENDENCY_NOT_READY`: configuration and deployment identity are valid but the bounded sentinel call fails, returns a non-success status, times out, exceeds 256 bytes, or does not return the exact current marker; the dependency and database capability are `not-ready`.
 
 Every readiness body includes the repository's expected migration count and latest expected migration identifier. That bundle expectation alone is not database proof; `READY` additionally requires the immutable sentinel installed in the same final migration to return the exact marker for the current lifecycle and catalog-RLS capabilities. `RENDER_GIT_COMMIT` is accepted only with Render's automatic `RENDER=true` marker and only when it is a valid 40-character hexadecimal commit. Missing or invalid evidence is fatal, and no untrusted value is echoed.
@@ -129,7 +129,10 @@ The final line is deterministic. `HOSTED_SMOKE_CLASSIFICATION = READY_FOR_SUPERV
 | `PARTICIPANT_PREVIEW_REMINDERS_ENABLED` | `false` | Reminder scheduler disabled. Scheduled reminders are skipped safely. |
 | `STAFF_PROVISIONING_ENABLED` | `false` | New staff invitations and staging-only direct UAT account creation are disabled. Existing pending invitations can still be activated. Direct creation additionally requires exact staging runtime and Supabase-host identity checks. |
 | `CAPSTONE_STAGING_PUBLICATION_ENABLED` | `false` | Staging showcase publication is absent from the UI and route fails closed. Exact `true` enables it only when the staging runtime identity and expected Supabase host also match. It never enables live production publication. |
-| `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` | `false` | Hosted assistive enqueue remains disabled. Exact `true` is necessary but insufficient: the web service must also prove the staging target identity and observe a fresh compatible worker heartbeat. |
+| `CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED` | `false` | Historical rollback controls are absent unless the exact staging identity also passes. Enabling this flag is necessary but insufficient: an active administrator must separately enable the exact database head, and no writer/recovery may be active. Production and Duda/Render rollback remain unavailable. |
+| `CAPSTONE_PRODUCTION_PUBLICATION_ENABLED` | `false` | Production publication code is implemented but disabled by default. Exact `true` is necessary but insufficient and is valid only on an exact `production` runtime whose canonical Supabase hostname matches `CAPSTONE_EXPECTED_SUPABASE_HOST`. No production host, project identity, deployment, authorization, or live cutover is established by this repository. |
+| `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` | `false` | Hosted assistive enqueue remains disabled. Exact `true` is necessary but insufficient: the web service must also prove its exact hosted target identity and observe a fresh compatible heartbeat for that same environment. |
+| `CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED` | `false` | Production assistive execution remains disabled independently. Exact `true` is necessary but insufficient and is valid only for the verified production Admin/CMS and continuous worker profile; it does not enable staging on-demand control. |
 
 ### E. Assistive Execution
 
@@ -157,11 +160,11 @@ The worker-only environment variables are:
 
 | Variable | Source | Contract |
 | :--- | :--- | :--- |
-| `CAPSTONE_RUNTIME_ENV` | Fixed value | Exact `staging`. |
+| `CAPSTONE_RUNTIME_ENV` | Fixed value | Exact `staging`, or exact `production` for the separately enabled continuous production profile. |
 | `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` | Fixed value | Exact `true`. |
 | `CAPSTONE_ASSISTIVE_EXECUTION_MODE` | Fixed value | `CONTINUOUS` or `ON_DEMAND`. |
-| `CAPSTONE_EXPECTED_SUPABASE_HOST` | Operator secret/config | Exact canonical staging hostname. |
-| `CAPSTONE_ASSISTIVE_SUPABASE_URL` | Operator secret/config | Server-only canonical HTTPS staging base URL; never `NEXT_PUBLIC_`. |
+| `CAPSTONE_EXPECTED_SUPABASE_HOST` | Operator secret/config | Exact canonical hostname for the selected runtime environment. |
+| `CAPSTONE_ASSISTIVE_SUPABASE_URL` | Operator secret/config | Server-only canonical HTTPS base URL for the same environment; never `NEXT_PUBLIC_`. |
 | `SUPABASE_SECRET_KEY` | Platform secret | Modern `sb_secret_...` credential. Legacy service-role JWTs are refused. |
 | `CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID` | Deployment | Bounded worker identity for heartbeat ownership. For Azure on-demand execution this is the worker job name, not the container element name; continuous hosts retain their host-scoped identity. |
 | `CAPSTONE_DEPLOYMENT_VERSION` | Deployment | Exact 40-hex commit recorded with liveness evidence. |
@@ -187,10 +190,12 @@ or a persistent disk to either job.
 The database is the health surface for both profiles. There is no HTTP health endpoint, and one must
 not be added merely to satisfy web-service conventions.
 
-Admin permits staff to enqueue only when the web runtime is the exact verified staging target, its
-hosted flag is exactly `true`, and either a compatible `READY` heartbeat is no more than 60 seconds
-old **or** a compatible on-demand executor is registered with launch capacity remaining. Stale,
-incompatible, malformed, or unreadable evidence disables enqueue and tells staff plainly why.
+Admin permits staff to enqueue only when the web runtime is an exact verified hosted target and its
+required flags are exactly `true`. Staging may use either a compatible same-environment `READY`
+heartbeat no more than 60 seconds old or its existing on-demand executor with launch capacity.
+Production requires its separate flag and a same-environment continuous heartbeat; it never uses
+on-demand control. Stale, incompatible, malformed, or unreadable evidence disables enqueue and
+tells staff plainly why.
 Historical findings remain readable throughout.
 
 This readiness evidence does not replace job fencing. Claimed jobs retain their 120-second lease,
@@ -237,7 +242,7 @@ sequenceDiagram
 8. **Participant Confirmation**: Participant accesses preview URL and submits confirmation for the exact approved version.
 9. **Publication Readiness Check**: Execute `get_project_publication_readiness` verification (the database contract requires the project to already be in `approved` status, with confirmed preview evidence and complete accessibility texts).
 10. **Publication Preparation**: Compile and validate the candidate public feed via the no-write preparation action.
-11. **Staging Showcase Publication (separate authorisation required)**: When the server has exact staging identity/host proof, explicit staging-publication enablement, and an activated exact deployment head, an Admin may acknowledge **Publish to staging showcase**. The controlled ledger coordinator promotes approved media, composes from the current deployment head, verifies and replaces the stable staging feed, and returns bounded feed/snapshot evidence. The supplied synthetic PP1 acceptance is recorded in [Duda Integration Plan](duda-integration-plan.md#5-verified-pp1-duda-test-acceptance--2026-09-08); future runs remain separately authorized. Rollback remains unavailable on hosted targets.
+11. **Staging Showcase Publication (separate authorisation required)**: When the server has exact staging identity/host proof, explicit staging-publication enablement, and an activated exact deployment head, an Admin may acknowledge **Publish to staging showcase**. The controlled ledger coordinator promotes approved media, composes from the current deployment head, verifies and replaces the stable staging feed, and returns bounded feed/snapshot evidence. The supplied synthetic PP1 acceptance is recorded in [Duda Integration Plan](duda-integration-plan.md#5-verified-pp1-duda-test-acceptance--2026-09-08); future runs remain separately authorized. Verified-staging historical-feed rollback code is implemented behind separate environment, enablement, database-capability, authority, and exact-head gates. The current 57-migration repository candidate is not thereby applied or enabled on hosted staging, and production/Duda rollback remains unavailable.
 
 > [!NOTE]
 > There is no ordinary second "final approval" step after participant confirmation. The domain model and database contract require the project to be reviewed and transitioned to `approved` status prior to preview generation and publication readiness checks.
@@ -250,7 +255,7 @@ Stakeholder staging testing does **NOT** automatically authorize:
 
 Controlled staging preparation and synthetic demonstration remain strictly isolated from live public systems.
 
-Local publication, staging/test-showcase publication, and live production publication are distinct capabilities. Local remains loopback-only. Staging is fail-closed unless `CAPSTONE_RUNTIME_ENV=staging`, the actual Supabase hostname exactly matches `CAPSTONE_EXPECTED_SUPABASE_HOST`, and `CAPSTONE_STAGING_PUBLICATION_ENABLED=true`. Live production publication remains unavailable: there is no production route or UI control.
+Local publication, staging/test-showcase publication, and live production publication are distinct capabilities. Local remains loopback-only. Staging is fail-closed unless `CAPSTONE_RUNTIME_ENV=staging`, the actual Supabase hostname exactly matches `CAPSTONE_EXPECTED_SUPABASE_HOST`, and `CAPSTONE_STAGING_PUBLICATION_ENABLED=true`. A production route/UI candidate exists but defaults unavailable and requires the separate exact `CAPSTONE_RUNTIME_ENV=production` identity, canonical expected-host match, and `CAPSTONE_PRODUCTION_PUBLICATION_ENABLED=true`. Code qualification is not hosted/live completion: no production host, Supabase project identity, Duda change, owner approval, or production acceptance is claimed.
 
 ---
 
@@ -262,7 +267,7 @@ The active Admin/CMS staging stack uses Render service `capstone-admin-cms-stagi
 - **Migration History (Gate 3) — later historical observation**: 48/48 repository migrations were recorded through `20260831090000_postgres17_maintain_privilege_alignment`.
 - **Migration History (Gate 3) — current verified observation**: 52 rows were recorded, from earliest `20260601035138` through `20260906120000_public_removal_completion_reconciliation`.
 - **Schema, Grants, and RPCs (Gate 4)**: Independent structural evidence is `GATE4_MATCH` for the 52-migration contract: 44 tables, 514 columns, 387 constraints, 31 policies, 84 application RPC signatures across 83 names, 1 canonical staff-role helper, 4 dispatcher routines, and 4 Storage buckets, with zero differences and validation errors. This is a separate structural evidence layer from the current deployment identity.
-- **Repository release candidate**: The source manifest now contains 53 migrations through `20260909120000_staff_lifecycle_readiness`. The candidate inventory contains 42 public application tables and 88 exact service-role application RPC signatures across 87 names. This is repository evidence only; it is not applied-hosted or fresh Gate 3/4 evidence.
+- **Repository release candidate**: The source manifest now contains 57 migrations through `20260911120000_gallery_full_text_equivalents`. The candidate inventory contains 45 public application tables and 92 exact service-role application RPC signatures across 91 names. This is repository evidence only; it is not applied-hosted or fresh Gate 3/4 evidence.
 - **Latest verified application deployment evidence (2026-09-08)**: Render service `capstone-admin-cms-staging-v2` targets branch `main` and is authoritative at deployment `dep-dafimfn9l3cc73c8blog`, with deployed application commit `50d02632f4403f3acb5620d6b9a2e482e8ac5688`. GET `/api/health` and `/api/readiness` returned 200 with that deployment identity, readiness `READY`, and canonical feed `[]`; the publication gate was restored to disabled. Later documentation-only repository commits do not by themselves change this deployed application baseline.
 - **Render application-release rehearsal (2026-09-03)**: A genuine staging forward deployment, official Render rollback, and exact-SHA redeployment completed with `/api/health` 200, `/login` 200, `/api/readiness` `READY`, and deployment identity matching at every stage. Timings were 145.2 s forward, 52.7 s rollback, and 145.1 s final redeploy; auto-deploy remained disabled. This is `VERIFIED_STAGING` application-release evidence, not database recovery RTO.
 - **Current-52 recovery evidence (2026-09-08)**: The current staging-origin logical capture and isolated PostgreSQL 17 restore are recorded as bounded `VERIFIED_STAGING` evidence in [Current-52 Recovery Evidence](m6-current52-recovery-evidence-2026-09-08.md). This does not establish managed hosted PITR or hosted-to-hosted recovery.
@@ -291,12 +296,12 @@ The automated checker queries the PostgREST Data API and OpenAPI schema. It inte
 - **RPC Signatures**: OpenAPI metadata proves RPC names, but may collapse or omit full overloaded parameter signatures.
 - **Fail-Closed Design**: The checker deliberately refuses to synthesize `SCHEMA_BASELINE = MATCH` or `READY_FOR_MUTATION_DECISION` without explicit, governed Gate 3/4 manual verification inputs.
 
-The checker compares against the current repository contract: 42 public application tables, 87 application RPC names across 88 exact signatures, and 4 canonical Storage buckets. Expected automated inspection output on a target that already matches that contract:
+The checker compares against the current repository contract: 45 public application tables, 91 application RPC names across 92 exact signatures, and 4 canonical Storage buckets. Expected automated inspection output on a target that already matches that contract:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
-- `REQUIRED_TABLE_SET = PRESENT` (All 42 public application tables detected or the documented privilege-hidden subset separately evidenced)
-- `REQUIRED_RPC_NAMES = PRESENT` (All 87 application RPC names detected; 88 exact signatures including the expected overload)
+- `REQUIRED_TABLE_SET = PRESENT` (All 45 public application tables detected or the documented privilege-hidden subset separately evidenced)
+- `REQUIRED_RPC_NAMES = PRESENT` (All 90 application RPC names detected; 91 exact signatures including the expected overload)
 - `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 4 canonical buckets detected)
 - `AUTH_FOUNDATION = READY`
 - `MANUAL_EVIDENCE_REQUIRED = YES`
@@ -306,8 +311,8 @@ A historical target at the 48-migration baseline predates migrations 0049–0051
 
 ### B. Governed Evidence Boundary
 The active staging-v2 migration history is a separate Gate 3 evidence layer from the Gate 4 schema, grant, RLS, and RPC verification that may be required for a release:
-- **Migration History (Gate 3)**: Latest hosted evidence is 52 rows from `20260601035138` through `20260906120000_public_removal_completion_reconciliation`; the 53-migration repository candidate requires fresh evidence after authorized application. The 46-row and 48/48 records remain historical observations.
-- **Schema & Grants (Gate 4)**: The supplied 52-migration hosted structural evidence is `GATE4_MATCH`; it is not evidence for the 53-migration repository candidate, and matching migration-history count alone would not prove schema/grant/RPC parity.
+- **Migration History (Gate 3)**: Latest hosted evidence is 52 rows from `20260601035138` through `20260906120000_public_removal_completion_reconciliation`; the 57-migration repository candidate requires fresh evidence after authorized application. The 46-row and 48/48 records remain historical observations.
+- **Schema & Grants (Gate 4)**: The supplied 52-migration hosted structural evidence is `GATE4_MATCH`; it is not evidence for the 57-migration repository candidate, and matching migration-history count alone would not prove schema/grant/RPC parity.
 - **Other Gates**: Render deployment identity has separately matched `50d02632f4403f3acb5620d6b9a2e482e8ac5688` in bounded read-only smoke. Current-52 Auth/Storage recovery is separately documented above; UAT, monitoring, formal RPO/RTO, and release acceptance remain their own gates.
 
 Auth readiness is verified via:
@@ -340,5 +345,8 @@ A green hosted smoke result is only an application/configuration/dependency and 
 
 The complete M6 release, backup/restore, RPO/RTO, monitoring, incident, and Render web-service
 redeploy/rollback acceptance contract is in [M6 Operational Readiness and Recovery](m6-operational-readiness.md).
+The machine-verifiable, non-mutating exact-commit rollback/redeployment gate and its explicit
+database forward-recovery boundary are in
+[Staging Admin/CMS Application Rollback and Redeployment](operations/staging-application-rollback.md).
 The 2026-09-03 Render application-release rehearsal is already `VERIFIED_STAGING`; any
 future release still requires the supervised evidence checklist against exact reviewed commits.

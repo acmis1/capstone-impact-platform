@@ -7,6 +7,7 @@ import {
   assertPublicationExecutionTarget,
   type PublicationExecutionTarget,
 } from './publicationExecutionPolicy';
+import type { StagingRuntimeEnvironment } from '../security/stagingRuntimeIdentity';
 
 export function createControlledPublicationDependencies(params: {
   supabase: SupabaseClient;
@@ -17,6 +18,7 @@ export function createControlledPublicationDependencies(params: {
   publicFeedBucket: string;
   publicFeedPath: string;
   executionTarget: PublicationExecutionTarget;
+  executionEnvironment?: StagingRuntimeEnvironment;
 }): ControlledPublicationDependencies {
   const {
     supabase,
@@ -35,6 +37,7 @@ export function createControlledPublicationDependencies(params: {
     assertExecutionEnvironment: () => assertPublicationExecutionTarget({
       target: executionTarget,
       supabaseUrl,
+      env: params.executionEnvironment,
     }),
     getReadiness: () => previews.getPublicationReadiness({ publicId, adminId, privateBucket }),
     getReconciliationReadiness: () => previews.getReconciliationReadiness({ publicId, adminId, privateBucket }),

@@ -28,6 +28,21 @@ interface Preparation {
   expiresAt: string;
 }
 
+interface RollbackHeadEvidence {
+  versionNumber: number;
+  generation: number;
+  feedHash: string;
+  recordCount: number;
+}
+
+function requiredCapabilityConfirmation(
+  enabled: boolean,
+  evidence: RollbackHeadEvidence,
+): string {
+  return `${enabled ? 'ENABLE' : 'DISABLE'} PUBLIC FEED ROLLBACK FOR VERSION ${evidence.versionNumber}`
+    + ` GENERATION ${evidence.generation} HASH ${evidence.feedHash} COUNT ${evidence.recordCount}`;
+}
+
 /**
  * Staff-facing outcome. `text` always says what happened, whether anything changed, and what to do
  * next; any raw backend code stays under progressive disclosure rather than in the primary copy.
@@ -62,15 +77,23 @@ export function PublicFeedHistoryControls(props: {
   canPublish: boolean;
   historyActive: boolean;
   rollbackAvailable: boolean;
+  rollbackExecutionTarget: 'local' | 'staging' | null;
+  rollbackEnabled: boolean;
+  rollbackHeadEvidence: RollbackHeadEvidence | null;
   targetVersionNumber: number | null;
   targetIsCurrent: boolean;
   publishingActivity: PublishingActivity;
+  environment: 'local' | 'staging' | 'production';
+  executionAvailable: boolean;
+  recoveryOperationKind: string | null;
 }) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
   const [message, setMessage] = React.useState<PublicFeedControlOutcome | null>(null);
   const [preparation, setPreparation] = React.useState<Preparation | null>(null);
   const [acknowledgement, setAcknowledgement] = React.useState('');
+  const [capabilityConfirmation, setCapabilityConfirmation] = React.useState('');
+  const [productionSetupAcknowledged, setProductionSetupAcknowledged] = React.useState(false);
   const prepareButtonRef = React.useRef<HTMLButtonElement>(null);
   const acknowledgementRef = React.useRef<HTMLInputElement>(null);
   const [preparationFocus, setPreparationFocus] = React.useState<{ origin: Element | null } | null>(null);
@@ -129,6 +152,52 @@ export function PublicFeedHistoryControls(props: {
     } finally {
       setPending(false);
       setPreparationFocus({ origin });
+    }
+  }
+
+  async function transitionRollbackCapability() {
+    if (!props.rollbackHeadEvidence || !props.rollbackExecutionTarget) return;
+    const enabled = !props.rollbackEnabled;
+    const requiredConfirmation = requiredCapabilityConfirmation(
+      enabled, props.rollbackHeadEvidence,
+    );
+    if (capabilityConfirmation !== requiredConfirmation) return;
+    setPending(true);
+    setMessage(null);
+    try {
+      const response = await fetch('/api/public-feed/rollback/capability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled,
+          expectedVersionNumber: props.rollbackHeadEvidence.versionNumber,
+          expectedGeneration: props.rollbackHeadEvidence.generation,
+          expectedFeedHash: props.rollbackHeadEvidence.feedHash,
+          expectedRecordCount: props.rollbackHeadEvidence.recordCount,
+          confirmation: capabilityConfirmation,
+        }),
+      });
+      const body = await response.json() as { success?: boolean; code?: string };
+      if (body.success) {
+        setMessage({
+          text: enabled
+            ? 'Historical rollback is enabled for this exact non-production feed head.'
+            : 'Historical rollback is disabled.',
+        });
+        setCapabilityConfirmation('');
+        router.refresh();
+      } else {
+        setMessage({
+          text: 'Rollback capability was not changed. Refresh the publishing status before trying again.',
+          code: body.code || 'CAPABILITY_CHANGE_FAILED',
+        });
+      }
+    } catch {
+      setMessage({
+        text: 'Rollback capability could not be confirmed. Refresh the publishing status before trying again.',
+      });
+    } finally {
+      setPending(false);
     }
   }
 
@@ -195,22 +264,56 @@ export function PublicFeedHistoryControls(props: {
     </div>
   ) : null;
 
-  const recoveryAvailable = props.publishingActivity === 'RECOVERY_AVAILABLE';
-  const setupAvailable = !props.historyActive && props.publishingActivity === 'IDLE';
+  const productionRollbackRecoveryBlocked = props.environment === 'production'
+    && props.recoveryOperationKind === 'rollback';
+  const productionExecutionUnavailable = props.environment === 'production'
+    && !props.executionAvailable;
+  const recoveryAvailable = props.publishingActivity === 'RECOVERY_AVAILABLE'
+    && props.executionAvailable && !productionRollbackRecoveryBlocked;
+  const setupAvailable = !props.historyActive && props.publishingActivity === 'IDLE'
+    && props.executionAvailable;
   const rollbackAvailable = props.historyActive && props.publishingActivity === 'IDLE'
-    && props.rollbackAvailable && props.targetVersionNumber && !props.targetIsCurrent;
+    && props.rollbackAvailable && props.targetVersionNumber !== null && !props.targetIsCurrent;
+  const capabilityVisible = props.canPublish && props.historyActive && props.rollbackExecutionTarget !== null
+    && props.rollbackHeadEvidence !== null;
+  const capabilityTransitionAvailable = capabilityVisible && props.publishingActivity === 'IDLE';
+  const capabilityWillEnable = !props.rollbackEnabled;
+  const capabilityRequiredConfirmation = props.rollbackHeadEvidence
+    ? requiredCapabilityConfirmation(capabilityWillEnable, props.rollbackHeadEvidence)
+    : '';
 
-  if (!recoveryAvailable && !setupAvailable && !rollbackAvailable) {
+  if (!recoveryAvailable && !setupAvailable && !rollbackAvailable && !capabilityVisible
+      && !productionExecutionUnavailable && !productionRollbackRecoveryBlocked) {
     return outcome;
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {productionExecutionUnavailable && (
+        <section aria-labelledby="production-publishing-unavailable" className="rounded-xl border border-warning/40 bg-warning/5 p-5 shadow-xs">
+          <h2 id="production-publishing-unavailable" className="text-base font-semibold text-foreground">Production publishing unavailable</h2>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            The production publication flag is disabled or the exact production target identity is not verified. No setup, recovery, rollback, or reconciliation mutation is available. Repository code availability is not cutover authorization.
+          </p>
+        </section>
+      )}
+
+      {productionRollbackRecoveryBlocked && (
+        <section aria-labelledby="production-rollback-recovery-unavailable" className="rounded-xl border border-warning/40 bg-warning/5 p-5 shadow-xs">
+          <h2 id="production-rollback-recovery-unavailable" className="text-base font-semibold text-foreground">Production rollback recovery unavailable</h2>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            Historical public-feed rollback cannot be prepared, executed, or recovered in production. Keep other feed mutations stopped and escalate for an independently reviewed forward-recovery decision.
+          </p>
+        </section>
+      )}
+
       {recoveryAvailable && (
         <section aria-labelledby="publishing-recovery-heading" className="rounded-xl border border-warning/40 bg-warning/5 p-5 shadow-xs">
           <h2 id="publishing-recovery-heading" className="text-base font-semibold text-foreground">Publishing recovery available</h2>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            The earlier action&apos;s lease and safety window have expired. Recovery will either finish its durable publishing intent or clear an abandoned pre-write reservation.
+            {props.environment === 'production'
+              ? 'The earlier production action\'s lease and safety window have expired. Forward recovery will finish its exact durable publishing intent or clear an abandoned pre-write reservation; it cannot restore historical feed content.'
+              : 'The earlier action\'s lease and safety window have expired. Recovery will either finish its durable publishing intent or clear an abandoned pre-write reservation.'}
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button type="button" variant="outline" onClick={recover} disabled={pending}>
@@ -230,10 +333,24 @@ export function PublicFeedHistoryControls(props: {
         <section aria-labelledby="publishing-setup-heading" className="rounded-xl border border-border-structural bg-card p-5 shadow-xs">
           <h2 id="publishing-setup-heading" className="text-base font-semibold text-foreground">Showcase setup required</h2>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            Showcase publishing needs to be set up before projects can be published.
+            {props.environment === 'production'
+              ? 'Production feed history must be established before projects can be published. This is a live production mutation and does not enable historical rollback.'
+              : 'Showcase publishing needs to be set up before projects can be published.'}
           </p>
+          {props.environment === 'production' && (
+            <label className="mt-4 flex items-start gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={productionSetupAcknowledged}
+                disabled={pending}
+                onChange={(event) => setProductionSetupAcknowledged(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span>I understand this establishes production feed history, may write the live feed, and requires separate institutional cutover authorization.</span>
+            </label>
+          )}
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={activate} disabled={pending}>
+            <Button type="button" onClick={activate} disabled={pending || (props.environment === 'production' && !productionSetupAcknowledged)}>
               {pending ? 'Setting up…' : 'Set up showcase publishing'}
             </Button>
           </div>
@@ -246,12 +363,57 @@ export function PublicFeedHistoryControls(props: {
         </section>
       )}
 
+      {capabilityVisible && props.rollbackHeadEvidence && (
+        <details className="rounded-xl border border-warning/40 bg-warning/5 p-5 shadow-xs">
+          <summary className="cursor-pointer rounded-sm text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            Advanced rollback capability ({props.rollbackExecutionTarget === 'staging' ? 'verified staging' : 'disposable Local'})
+          </summary>
+          <div className="mt-4 space-y-4 text-sm">
+            <p className="leading-relaxed text-muted-foreground">
+              Rollback is currently <strong className="text-foreground">{props.rollbackEnabled ? 'enabled' : 'disabled'}</strong>.
+              {' '}Changing it is bound to the exact current version, generation, hash, and record count. It does not change project lifecycle state or any Duda/production site.
+            </p>
+            {props.publishingActivity !== 'IDLE' && (
+              <p className="font-medium text-foreground">
+                Wait for the current publishing action or recovery to finish, then refresh before changing rollback capability.
+              </p>
+            )}
+            <div>
+              <label htmlFor="rollback-capability-confirmation" className="text-sm font-medium text-foreground">
+                Type the exact capability confirmation
+              </label>
+              <p className="mt-1 break-all rounded bg-muted p-2 font-mono text-xs text-foreground">
+                {capabilityRequiredConfirmation}
+              </p>
+              <input
+                id="rollback-capability-confirmation"
+                value={capabilityConfirmation}
+                onChange={(event) => setCapabilityConfirmation(event.target.value)}
+                autoComplete="off"
+                className="mt-2 min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+            <Button
+              type="button"
+              variant={capabilityWillEnable ? 'destructive' : 'outline'}
+              onClick={transitionRollbackCapability}
+              disabled={pending || !capabilityTransitionAvailable
+                || capabilityConfirmation !== capabilityRequiredConfirmation}
+            >
+              {pending
+                ? 'Changing capability…'
+                : `${capabilityWillEnable ? 'Enable' : 'Disable'} ${props.rollbackExecutionTarget === 'staging' ? 'staging' : 'Local'} rollback`}
+            </Button>
+          </div>
+        </details>
+      )}
+
       {rollbackAvailable && (
         <details className="rounded-xl border border-border-structural bg-card p-5 shadow-xs">
-          <summary className="cursor-pointer rounded-sm text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Advanced rollback tools (Local test only)</summary>
+          <summary className="cursor-pointer rounded-sm text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Advanced historical rollback tools</summary>
           <div className="mt-4 space-y-4 text-sm">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Preparation performs no public write. Rollback execution is available only in an explicitly enabled disposable Local runtime.
+              Preparation performs no public write. Execution is available only for explicitly enabled verified staging or disposable Local history; production and Duda rollback remain unavailable.
             </p>
             <Button type="button" variant="outline" onClick={prepareRollback} ref={prepareButtonRef} disabled={pending || !props.rollbackAvailable}>
               {pending ? 'Preparing…' : `Prepare rollback to version ${props.targetVersionNumber}`}
@@ -284,7 +446,7 @@ export function PublicFeedHistoryControls(props: {
                 </div>
                 <Button type="button" variant="destructive" onClick={executeRollback}
                   disabled={pending || acknowledgement !== preparation.requiredAcknowledgement}>
-                  {pending ? 'Executing…' : 'Execute prepared Local rollback'}
+                  {pending ? 'Executing…' : 'Execute prepared rollback'}
                 </Button>
               </div>
             )}

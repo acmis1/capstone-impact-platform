@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { recordPreviewResponsePrepared, readPreviewAccessEvidence } from '../previews/participantPreviewAccessEvidence';
 import { ParticipantPreviewExecutionError } from './ParticipantPreviewRepository';
 import {
   ParticipantPreviewConfirmationResult,
@@ -10,6 +11,11 @@ import {
   ParticipantPreviewSnapshot,
 } from '../domain/participantPreview';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
+import {
+  getSnapshotTextEquivalentProblem,
+  isSnapshotImageContentKind,
+  type SnapshotImageContentKind,
+} from '../domain/galleryTextEquivalent';
 import { normalizeParticipantPreviewTimestamp } from './participantPreviewTimestamp';
 
 export const DEFAULT_PREVIEW_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60; // 7 days
@@ -54,6 +60,11 @@ function isNonEmptyString(value: unknown): value is string {
  * fallback for it. Any other asset type must carry null: the poster's text alternative is the
  * project-level accessibilityText in the project snapshot, and a value here would mean the stored
  * evidence disagrees with the contract that produced it.
+ *
+ * `contentKind` / `fullText` are optional on a snapshot element because previews issued before
+ * Migration 0057 carry neither and stored evidence is never rewritten. When present they must be
+ * coherent (a declared kind; a non-blank bounded full text exactly for `text_bearing`), since that
+ * text is what the participant is confirming. They never appear on a poster/PDF element.
  */
 function parseMediaSnapshot(raw: unknown[]): ParticipantPreviewMediaRef[] | null {
   const parsed: ParticipantPreviewMediaRef[] = [];
@@ -152,6 +163,33 @@ function parseMediaSnapshot(raw: unknown[]): ParticipantPreviewMediaRef[] | null
       altText = null;
     }
 
+    const hasContentKind = 'contentKind' in item;
+    const hasFullText = 'fullText' in item;
+    let textEquivalent: { contentKind: SnapshotImageContentKind; fullText: string | null } | null = null;
+
+    if (item.assetType === 'snapshot_image') {
+      if (hasContentKind !== hasFullText) {
+        return null;
+      }
+      if (hasContentKind) {
+        if (!isSnapshotImageContentKind(item.contentKind)) {
+          return null;
+        }
+        if (item.fullText !== null && typeof item.fullText !== 'string') {
+          return null;
+        }
+        if (getSnapshotTextEquivalentProblem({ contentKind: item.contentKind, fullText: item.fullText }) !== null) {
+          return null;
+        }
+        if (item.contentKind === 'ordinary' && item.fullText !== null) {
+          return null;
+        }
+        textEquivalent = { contentKind: item.contentKind, fullText: item.fullText };
+      }
+    } else if (hasContentKind || hasFullText) {
+      return null;
+    }
+
     parsed.push({
       mediaAssetId: item.mediaAssetId,
       assetType: item.assetType,
@@ -161,6 +199,7 @@ function parseMediaSnapshot(raw: unknown[]): ParticipantPreviewMediaRef[] | null
       storagePath: item.storagePath,
       mimeType,
       altText,
+      ...(textEquivalent ?? {}),
     });
   }
 
@@ -169,6 +208,14 @@ function parseMediaSnapshot(raw: unknown[]): ParticipantPreviewMediaRef[] | null
 
 export class SupabaseParticipantPreviewRepositoryCore {
   constructor(protected supabase: SupabaseClient) {}
+
+  recordResponsePrepared(previewId: string, tokenHash: string): Promise<boolean> {
+    return recordPreviewResponsePrepared(this.supabase, previewId, tokenHash);
+  }
+
+  getAccessEvidence(previewId: string) {
+    return readPreviewAccessEvidence(this.supabase, previewId);
+  }
 
   /**
    * Atomically generates a new participant preview via the service-role-only

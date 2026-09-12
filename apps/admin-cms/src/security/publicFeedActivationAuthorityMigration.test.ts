@@ -11,13 +11,18 @@ const source = fs.readFileSync(path.join(migrations, migrationName), 'utf8').rep
 describe('public-feed activation authority migration', () => {
   it('leaves every earlier migration byte-identical to current main', () => {
     const files = fs.readdirSync(migrations).filter((name) => name.endsWith('.sql')).sort();
-    expect(files).toHaveLength(53);
+    expect(files).toHaveLength(57);
     expect(files).toContain(migrationName);
 
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'origin/main', '--',
-      // Migration 0053 is the only migration newer than this branch's verified origin/main base.
-      ...files.filter((file) => file !== '20260909120000_staff_lifecycle_readiness.sql')
+      // Migrations 0053-0057 are newer than this branch's verified origin/main base.
+      ...files.filter((file) => ![
+        '20260909120000_staff_lifecycle_readiness.sql',
+        '20260910120000_public_feed_rollback_capability.sql', '20260910120100_participant_preview_access_observations.sql',
+        '20260910120200_assistive_worker_production_identity.sql',
+        '20260911120000_gallery_full_text_equivalents.sql',
+      ].includes(file))
                       .map((file) => `infra/supabase/migrations/${file}`)
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
 

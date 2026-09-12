@@ -23,6 +23,11 @@ export function computeCanonicalMediaIntentHash(params: {
       fileSizeBytes: file.fileSizeBytes,
       galleryPosition: file.galleryPosition,
       snapshotAltText: file.snapshotAltText ?? null,
+      // Present in the canonical object only when declared, so a batch completed before the
+      // text-equivalent contract existed still converges on its recorded intent when retried with
+      // the identical (undeclared) package, while any declaration changes the intent.
+      ...(file.snapshotContentKind ? { snapshotContentKind: file.snapshotContentKind } : {}),
+      ...(file.snapshotFullText ? { snapshotFullText: file.snapshotFullText } : {}),
     }));
 
   const canonicalObj = {

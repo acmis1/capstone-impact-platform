@@ -1,9 +1,9 @@
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { EXPECTED_MIGRATION_FILENAMES } from '../scripts/onboardingCheck';
+import { assertGitMigrationBaselineUnchanged } from '../test-support/gitBatchParser';
 
 describe('assistive language finding migration contract', () => {
   const root = path.resolve(__dirname, '../../../..');
@@ -16,15 +16,9 @@ describe('assistive language finding migration contract', () => {
   it('remains byte-identical to current main in the combined migration inventory', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(53);
+    expect(files).toHaveLength(57);
     expect(files).toContain(filename);
-    expect(() => execFileSync(
-      'git',
-      ['diff', '--exit-code', 'origin/main', '--', ...files
-        .filter((file) => file !== '20260909120000_staff_lifecycle_readiness.sql')
-        .map((file) => `infra/supabase/migrations/${file}`)],
-      { cwd: root, stdio: 'pipe' },
-    )).not.toThrow();
+    expect(() => assertGitMigrationBaselineUnchanged(root)).not.toThrow();
   });
 
   it('keeps language evidence non-authoritative and grants no browser or direct table access', () => {

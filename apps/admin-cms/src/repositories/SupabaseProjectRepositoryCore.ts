@@ -1,6 +1,11 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Project } from '../domain/project';
 import {
+  isSnapshotImageContentKind,
+  toPublicSnapshotTextEquivalent,
+  type PublicSnapshotTextEquivalent,
+} from '../domain/galleryTextEquivalent';
+import {
   ProjectListQuery,
   ProjectListResult,
   ProjectDashboardMetrics,
@@ -19,7 +24,23 @@ import {
  * bucket or draft path is ever read into a project the feed is compiled from.
  */
 const PROJECT_WITH_RELATIONS_SELECT =
-  '*, project_disciplines(disciplines(name)), media_assets(asset_type,gallery_position,public_url,alt_text_public,is_public_approved)';
+  '*, project_disciplines(disciplines(name)), media_assets(asset_type,gallery_position,public_url,alt_text_public,image_content_kind,full_text_public,is_public_approved)';
+
+const DISCIPLINE_FILTER_SELECT =
+  'discipline_filter:project_disciplines!inner(disciplines!inner(name))';
+const INDUSTRY_FILTER_SELECT =
+  'industry_filter:project_industry_categories!inner(industry_categories!inner(name))';
+
+function projectSelectForQuery(query: ProjectListQuery): string {
+  const filterRelations = [
+    query.discipline ? DISCIPLINE_FILTER_SELECT : null,
+    query.industry ? INDUSTRY_FILTER_SELECT : null,
+  ].filter((value): value is string => value !== null);
+
+  return filterRelations.length > 0
+    ? `${PROJECT_WITH_RELATIONS_SELECT}, ${filterRelations.join(', ')}`
+    : PROJECT_WITH_RELATIONS_SELECT;
+}
 
 /** Maximum number of lightweight filter-option rows fetched per database round-trip. */
 const PROJECT_FILTER_OPTION_CHUNK_SIZE = 500;
@@ -74,6 +95,11 @@ export interface DatabaseProjectRow {
       name?: string;
     };
   }>;
+  project_industry_categories?: Array<{
+    industry_categories?: {
+      name?: string;
+    };
+  }>;
   /**
    * Joined snapshot media, present only on the queries that request it. Publication writes
    * `projects.snapshots` and the corresponding `media_assets` public columns in one transaction, so
@@ -84,6 +110,8 @@ export interface DatabaseProjectRow {
     gallery_position: number | null;
     public_url?: string | null;
     alt_text_public?: string | null;
+    image_content_kind?: string | null;
+    full_text_public?: string | null;
     is_public_approved?: boolean | null;
   }>;
 }
@@ -96,6 +124,13 @@ export interface DatabaseProjectRow {
  * with no matching media row, or a matching row with no alt text, is deliberately left out rather
  * than emitted with a fabricated description — the feed validator then reports that snapshot as
  * published without a text alternative instead of the record passing silently.
+ *
+ * The declared text-equivalent contract (`contentKind` / `fullText`) is carried when the row is
+ * classified. A row published before Migration 0057 carries neither key: that legacy shape stays
+ * readable so an already-deployed feed can still be recompiled for an unrelated removal or
+ * reconciliation, while the publication planner and the database readiness gates refuse to
+ * publish such media anew. A contradictory row (text-bearing with no full text) is left out
+ * exactly like a missing alt text, so the validator reports it rather than the feed passing.
  */
 function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
   const snapshots = row.snapshots || [];
@@ -109,6 +144,7 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
     {
       altText: string;
       galleryPosition: number;
+      textEquivalent: PublicSnapshotTextEquivalent | null;
     }
   >();
 
@@ -138,6 +174,11 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
         : '';
 
     const galleryPosition = asset.gallery_position;
+    const declared = asset.image_content_kind !== null && asset.image_content_kind !== undefined;
+    const textEquivalent = toPublicSnapshotTextEquivalent({
+      contentKind: isSnapshotImageContentKind(asset.image_content_kind) ? asset.image_content_kind : null,
+      fullText: asset.full_text_public ?? null,
+    });
 
     if (
       url === '' ||
@@ -146,7 +187,8 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
       typeof galleryPosition !== 'number' ||
       !Number.isInteger(galleryPosition) ||
       galleryPosition < 1 ||
-      galleryPosition > 10
+      galleryPosition > 10 ||
+      (declared && textEquivalent === null)
     ) {
       continue;
     }
@@ -154,6 +196,7 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
     mediaByUrl.set(url, {
       altText,
       galleryPosition,
+      textEquivalent,
     });
   }
 
@@ -166,6 +209,7 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
         url,
         altText: media.altText,
         galleryPosition: media.galleryPosition,
+        ...(media.textEquivalent ?? {}),
       };
     });
 }
@@ -298,7 +342,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
   private buildFilteredQuery(query: ProjectListQuery, selectOpts?: { count?: 'exact' }) {
     let dbQuery = this.supabase
       .from('projects')
-      .select(PROJECT_WITH_RELATIONS_SELECT, selectOpts)
+      .select(projectSelectForQuery(query), selectOpts)
       .is('deleted_at', null);
 
     // Apply search
@@ -331,7 +375,12 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
 
     // Apply discipline filter
     if (query.discipline) {
-      dbQuery = dbQuery.eq('discipline', query.discipline);
+      dbQuery = dbQuery.eq('discipline_filter.disciplines.name', query.discipline);
+    }
+
+    // Apply industry filter through the authoritative many-to-many mapping.
+    if (query.industry) {
+      dbQuery = dbQuery.eq('industry_filter.industry_categories.name', query.industry);
     }
 
     // Apply sort with deterministic public_id tie-breaker
@@ -381,7 +430,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
         throw new Error(`Failed to query clamped page from Supabase: ${clampedError.message}`);
       }
 
-      const clampedProjects = (clampedData || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
+      const clampedProjects = (clampedData || []).map((row) => this.mapDbToDomain(row as unknown as DatabaseProjectRow));
       return {
         projects: clampedProjects,
         total,
@@ -391,7 +440,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       };
     }
 
-    const projects = (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
+    const projects = (data || []).map((row) => this.mapDbToDomain(row as unknown as DatabaseProjectRow));
 
     return {
       projects,
@@ -451,6 +500,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     const yearsSet = new Set<string>();
     const programsSet = new Set<string>();
     const disciplinesSet = new Set<string>();
+    const industriesSet = new Set<string>();
 
     let iteration = 0;
     let offset = 0;
@@ -462,7 +512,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
 
       const { data, error } = await this.supabase
         .from('projects')
-        .select('year, program_name, discipline')
+        .select('year, program_name, project_disciplines(disciplines(name)), project_industry_categories(industry_categories(name))')
         .is('deleted_at', null)
         .order('id', { ascending: true })
         .range(from, to);
@@ -471,12 +521,24 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
         throw new Error('Failed to fetch project filter options');
       }
 
-      const rows = data || [];
+      const rows = (data || []) as unknown as Array<{
+        year?: number;
+        program_name?: string;
+        project_disciplines?: Array<{ disciplines?: { name?: string } }>;
+        project_industry_categories?: Array<{ industry_categories?: { name?: string } }>;
+      }>;
 
       for (const row of rows) {
         if (row.year) yearsSet.add(row.year.toString());
         if (row.program_name && row.program_name.trim()) programsSet.add(row.program_name.trim());
-        if (row.discipline && row.discipline.trim()) disciplinesSet.add(row.discipline.trim());
+        for (const mapping of row.project_disciplines || []) {
+          const name = mapping.disciplines?.name?.trim();
+          if (name) disciplinesSet.add(name);
+        }
+        for (const mapping of row.project_industry_categories || []) {
+          const name = mapping.industry_categories?.name?.trim();
+          if (name) industriesSet.add(name);
+        }
       }
 
       if (rows.length < PROJECT_FILTER_OPTION_CHUNK_SIZE) {
@@ -493,11 +555,13 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     const years = Array.from(yearsSet).sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
     const programs = Array.from(programsSet).sort((a, b) => a.localeCompare(b));
     const disciplines = Array.from(disciplinesSet).sort((a, b) => a.localeCompare(b));
+    const industries = Array.from(industriesSet).sort((a, b) => a.localeCompare(b));
 
     return {
       years,
       programs,
       disciplines,
+      industries,
     };
   }
 

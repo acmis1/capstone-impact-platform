@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 
 import { describe, expect, it } from 'vitest';
 
 import { EXPECTED_MIGRATION_FILENAMES } from '../scripts/onboardingCheck';
+import { assertGitMigrationBaselineUnchanged } from '../test-support/gitBatchParser';
 import {
   EXPECTED_REPOSITORY_MIGRATIONS,
   EXPECTED_REPOSITORY_MIGRATION_COUNT,
@@ -67,27 +67,20 @@ describe('participant-preview controlled-links migration (0050)', () => {
   it('preserves the forward-only migration and every manifest agrees', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
 
-    expect(files).toHaveLength(53);
-    expect(files.at(-4)).toBe(FILENAME);
-    expect(files.at(-5)).toBe(IMPORT_MIGRATION);
+    expect(files).toHaveLength(57);
+    expect(files.at(-8)).toBe(FILENAME);
+    expect(files.at(-9)).toBe(IMPORT_MIGRATION);
 
     expect([...EXPECTED_MIGRATION_FILENAMES]).toEqual(files);
     expect([...EXPECTED_REPOSITORY_MIGRATIONS]).toEqual(files);
-    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(53);
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(57);
 
     const ci = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
-    expect(ci).toContain("test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 53");
+    expect(ci).toContain("test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 57");
   });
 
   it('edits no migration that already exists on origin/main', () => {
-    const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
-
-    expect(() => execFileSync('git', [
-      'diff', '--exit-code', 'origin/main', '--',
-      ...files
-        .filter((file) => file !== '20260909120000_staff_lifecycle_readiness.sql')
-        .map((file) => `infra/supabase/migrations/${file}`),
-    ], { cwd: root, stdio: 'pipe' })).not.toThrow();
+    expect(() => assertGitMigrationBaselineUnchanged(root)).not.toThrow();
   });
 
   it('replaces exactly the three snapshot authorities and nothing else', () => {

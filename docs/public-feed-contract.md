@@ -208,7 +208,9 @@ Rollback restores public deployment state, not project lifecycle state or the wh
 *   Execution requires the same authorized actor, the unexpired preparation, the exact acknowledgement, and an unchanged baseline.
 *   The selected historical artifact is verified again and deployed as a new immutable version whose provenance identifies the restored version. The head advances to the new version; historical rows are never mutated.
 *   Project lifecycle and publication audits are not reversed. After rollback, later publication/removal composes from the restored deployment head, so a later publish adds only its explicit target rather than silently reintroducing all lifecycle-`published` projects.
-*   Rollback execution is fail-closed outside an explicitly enabled loopback Local/disposable application and a database head whose rollback capability was activated there. Hosted rollback is unavailable.
+*   Rollback is available only in explicitly enabled disposable Local or canonical verified staging. Staging additionally requires the exact server-only `CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED=true` value. Production, arbitrary hosted targets, Render/Duda control, and live-site rollback have no execution path.
+*   Database rollback authority is independently off by default. An active administrator may enable or disable it only through the service-role RPC while no canonical or legacy writer/recovery is active, using typed confirmation bound to the exact current version, generation, SHA-256 hash, and record count. Every real transition appends an immutable capability event; migration apply creates no event and changes no feed/head row.
+*   Route, service, and database boundaries recheck environment, actor, capability, acknowledgement, target, baseline, writer, recovery, and idempotency evidence. Once `WRITE_STARTED` is durable, recovery remains forward-only on the bound artifact; capability cannot be disabled while that operation is active.
 
 ---
 

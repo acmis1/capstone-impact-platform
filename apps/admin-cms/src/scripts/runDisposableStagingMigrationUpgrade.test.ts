@@ -8,7 +8,7 @@ import {
   readStorageEvidence,
 } from './runDisposableStagingMigrationUpgrade';
 
-describe('48-to-53 preservation evidence', () => {
+describe('48-to-57 preservation evidence', () => {
   it('covers every table created by the exact first 48 repository migrations', () => {
     const directory = path.resolve(__dirname, '../../../../infra/supabase/migrations');
     const migrations = fs.readdirSync(directory).filter((file) => file.endsWith('.sql')).sort().slice(0, 48);

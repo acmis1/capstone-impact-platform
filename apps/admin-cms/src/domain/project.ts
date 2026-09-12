@@ -1,3 +1,4 @@
+import type { PublicSnapshotTextEquivalent } from './galleryTextEquivalent';
 import { WorkflowStatus } from './workflowStatus';
 
 export interface ExternalLink {
@@ -25,9 +26,9 @@ export interface ValidationFlagRecord {
 /**
  * One public snapshot image paired with the text alternative that describes it. Both values are
  * public-safe by construction: the URL is the promoted public object and the alt text is the
- * staff-authored description carried through from the media asset.
+ * project-team-authored description carried through from the media asset.
  */
-export interface PublicSnapshotMedia {
+export interface PublicSnapshotMedia extends Partial<PublicSnapshotTextEquivalent> {
   url: string;
   altText: string;
 
@@ -36,6 +37,15 @@ export interface PublicSnapshotMedia {
    * Must be a unique integer from 1 through 10.
    */
   galleryPosition: number;
+
+  /*
+   * `contentKind` and `fullText` (inherited above) are the project-team-declared text-equivalent
+   * contract for this image: both keys are present once the image has been classified, and
+   * `fullText` is the searchable/selectable full textual equivalent for a `text_bearing` image
+   * (null for `ordinary`). Both keys are absent only on a legacy record published before
+   * Migration 0057; new publication readiness fails closed on such media, so the absence is a
+   * transitional wire-compatibility state rather than a valid new shape.
+   */
 }
 
 export interface Project {
@@ -67,7 +77,7 @@ export interface Project {
   accessibilityText: string; // Public-safe accessibility description text
   snapshots: string[]; // Array of public snapshot image URLs
   /**
-   * The same public snapshot URLs as `snapshots`, each paired with its authoritative staff-authored
+   * The same public snapshot URLs as `snapshots`, each paired with its authoritative project-team-authored
    * text alternative. Structured pairing rather than a parallel `snapshotAltTexts` array, because
    * two independent arrays can silently drift out of order and publish an image with someone else's
    * description.

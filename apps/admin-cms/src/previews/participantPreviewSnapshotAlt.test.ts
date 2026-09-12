@@ -58,6 +58,54 @@ describe('participant-facing image alt attributes', () => {
     expect(altAttributes(html)).toEqual([SNAPSHOT_ALT]);
   });
 
+  it('renders a text-bearing snapshot full equivalent as escaped selectable HTML', () => {
+    const html = render([media({
+      mediaAssetId: 'm2',
+      assetType: 'snapshot_image',
+      galleryPosition: 3,
+      fileName: 'snapshot-3.png',
+      altText: SNAPSHOT_ALT,
+      contentKind: 'text_bearing',
+      fullText: 'Queue <script>alert(1)</script>: 12 vehicles.\nWait: 41 seconds.',
+      signedUrl: 'https://signed.invalid/snapshot-3.png',
+    })]);
+    const document = new JSDOM(html).window.document;
+    const fullText = document.querySelector('.media-full-text__body');
+
+    expect(fullText?.textContent).toBe('Queue <script>alert(1)</script>: 12 vehicles.Wait: 41 seconds.');
+    expect(fullText?.innerHTML).toContain('12 vehicles.<br>Wait: 41 seconds.');
+    expect(fullText?.getAttribute('aria-labelledby')).toBe('snapshot-full-text-1');
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(altAttributes(html)).toEqual([SNAPSHOT_ALT]);
+  });
+
+  it('renders the ordinary declaration without inventing a full text', () => {
+    const html = render([media({
+      mediaAssetId: 'm2',
+      assetType: 'snapshot_image',
+      fileName: 'snapshot-1.png',
+      altText: SNAPSHOT_ALT,
+      contentKind: 'ordinary',
+      fullText: null,
+      signedUrl: 'https://signed.invalid/snapshot-1.png',
+    })]);
+
+    expect(html).toContain('data-content-kind="ordinary"');
+    expect(new JSDOM(html).window.document.querySelector('.media-full-text__body')).toBeNull();
+  });
+
+  it('fails closed when immutable text-bearing evidence has no full text', () => {
+    expect(() => render([media({
+      mediaAssetId: 'm2',
+      assetType: 'snapshot_image',
+      fileName: 'snapshot-1.png',
+      altText: SNAPSHOT_ALT,
+      contentKind: 'text_bearing',
+      fullText: null,
+      signedUrl: 'https://signed.invalid/snapshot-1.png',
+    })])).toThrow(ParticipantPreviewMediaAccessibilityError);
+  });
+
   it('gives each image its own description when both are present', () => {
     const html = render([
       media(),

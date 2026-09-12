@@ -5,6 +5,7 @@ import type {
 import type { PublicationReadinessResult } from '../domain/publicationReadiness';
 import type { ParticipantPreviewNotificationView } from '../notifications/participantPreviewNotification';
 import type { ParticipantPreviewReminderView } from '../reminders/participantPreviewReminder';
+import type { PreviewAccessEvidence } from '../previews/participantPreviewAccessEvidence';
 import { ParticipantPreviewExecutionError } from '../repositories/ParticipantPreviewRepository';
 import { postgresUuidSchema } from './projectMetadata';
 import { z } from 'zod';
@@ -166,6 +167,8 @@ export interface ProjectDetailPreviewState {
   notification: ParticipantPreviewNotificationView | null;
   /** Staff-facing reminder history across exact preview versions for this project. */
   reminders: ParticipantPreviewReminderView[];
+  /** Server response-preparation evidence for the exact active preview, when available. */
+  accessEvidence?: PreviewAccessEvidence;
 }
 
 export interface ProjectDetailAuxiliaryData<TProject> {
@@ -260,7 +263,7 @@ export async function loadProjectDetailAuxiliaryData<TProject>(
     auditRecords: audit.available ? audit.value : null,
     previewState: preview.available
       ? preview.value
-      : { activePreview: null, responseState: { type: 'unresponded' }, notification: null, reminders: [] },
+      : { activePreview: null, responseState: { type: 'unresponded' }, notification: null, reminders: [], accessEvidence: { available: false } },
     previewStateAvailable: preview.available,
     resolutionStatus: resolution.available ? resolution.value : null,
     resolutionStatusAvailable: resolution.available,

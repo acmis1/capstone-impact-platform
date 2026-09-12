@@ -5,6 +5,11 @@ import {
   getSnapshotAltTextProblem,
   isAccessibleContentPresent,
 } from '../domain/accessibleContent';
+import {
+  describeSnapshotTextEquivalentProblem,
+  getSnapshotTextEquivalentProblem,
+  type SnapshotImageContentKind,
+} from '../domain/galleryTextEquivalent';
 
 export interface ValidationOutput {
   valid: boolean;
@@ -79,6 +84,9 @@ export interface ApprovalSnapshotMediaInput {
   galleryPosition: number | null;
   validPrivate: boolean;
   altText: string | null;
+  /** Declared classification and full text; null means "not yet declared" and blocks approval. */
+  imageContentKind: SnapshotImageContentKind | null;
+  fullTextPublic: string | null;
 }
 
 export interface ApprovalMediaInput {
@@ -132,8 +140,8 @@ export function validateProjectForApproval(
 
   // Accessible poster content blocks approval, whether it is absent or beyond its bounded ceiling.
   // The published page must carry a full text version of its poster and a text alternative for the
-  // poster image; both are staff-authored or imported, and the metadata editor is the correction
-  // path in either direction. Oversized content is never downgraded to a warning.
+  // poster image; both are project-team-authored package content, and exact correction-package
+  // acceptance is the correction path in either direction. Oversized content is never downgraded to a warning.
   for (const field of ['posterText', 'accessibilityText'] as const) {
     const problem = getAccessibleContentProblem(project[field], field);
     if (problem) {
@@ -175,6 +183,17 @@ export function validateProjectForApproval(
         if (!errors.includes(message)) {
           errors.push(message);
         }
+      }
+
+      // Text-equivalent contract, mirroring the approve branch of perform_project_review_action.
+      // Unclassified legacy media blocks approval rather than passing as an ordinary photograph.
+      const textProblem = getSnapshotTextEquivalentProblem({
+        contentKind: snapshot.imageContentKind,
+        fullText: snapshot.fullTextPublic,
+      });
+      if (textProblem) {
+        const message = `${prefix} ${describeSnapshotTextEquivalentProblem(textProblem, position)} Approval blocked.`;
+        if (!errors.includes(message)) errors.push(message);
       }
     }
 

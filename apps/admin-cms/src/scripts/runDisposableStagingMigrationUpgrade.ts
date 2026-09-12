@@ -17,15 +17,15 @@ import { collectLocalGate4Evidence } from './checkGate4SchemaEvidence';
 import { MIGRATION_MANAGED_BUCKETS } from '../local-development/localSupabaseFixtures';
 
 /**
- * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 migration transition on a stack this verifier
- * owns outright.
+ * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 -> 55 -> 56 -> 57 migration transition on a stack this
+ * verifier owns outright.
  *
  * The known hosted staging-v2 baseline is 48 migrations through
- * 20260831090000_postgres17_maintain_privilege_alignment. A clean 53-migration install proves the
+ * 20260831090000_postgres17_maintain_privilege_alignment. A clean 57-migration install proves the
  * end state but not the transition, and the existing deployment-ledger upgrade proves a different
  * single migration. This rehearsal provisions exactly the 48-migration baseline, seeds the minimum
  * representative synthetic evidence a real 48-state database would hold, applies 0049 through
- * 0053 one at a time in deterministic order, and asserts after each step that nothing existing was
+ * 0057 one at a time in deterministic order, and asserts after each step that nothing existing was
  * rewritten and that the new authority is exactly what the migration declares.
  *
  * Everything is disposable and loopback-only: its own project id, port block, Docker network,
@@ -39,6 +39,10 @@ const RELEASE_MIGRATIONS = [
   { ordinal: 51, version: '20260903130000', file: '20260903130000_participant_owned_corrections.sql' },
   { ordinal: 52, version: '20260906120000', file: '20260906120000_public_removal_completion_reconciliation.sql' },
   { ordinal: 53, version: '20260909120000', file: '20260909120000_staff_lifecycle_readiness.sql' },
+  { ordinal: 54, version: '20260910120000', file: '20260910120000_public_feed_rollback_capability.sql' },
+  { ordinal: 55, version: '20260910120100', file: '20260910120100_participant_preview_access_observations.sql' },
+  { ordinal: 56, version: '20260910120200', file: '20260910120200_assistive_worker_production_identity.sql' },
+  { ordinal: 57, version: '20260911120000', file: '20260911120000_gallery_full_text_equivalents.sql' },
 ] as const;
 
 const BASELINE_MIGRATION_COUNT = 48;
@@ -76,10 +80,14 @@ const CORRECTION_RPC_SIGNATURES = [
  * Rows that must survive 0049 through 0052 byte-identically. Shared taxonomy, publication and
  * deployment-ledger state are included because a release migration must never quietly touch them.
  */
-// The 41-table release inventory minus the four tables first created by 0051 is the exact
-// 37-table public contract at 6125bb56 (0048). Assert the live baseline set before fingerprinting.
+// The 44-table release inventory minus the four tables first created by 0051 and the three tables
+// first created by 0053/0054/0055 is the exact 37-table public contract at 6125bb56 (0048). Assert the
+// live baseline set before fingerprinting.
 export const PRESERVED_PUBLIC_TABLES = ALL_REQUIRED_TABLES.filter(
   (table) => table !== 'staff_lifecycle_events'
+    && table !== 'participant_preview_access_observations'
+    && table !== 'public_feed_rollback_capability_events'
+    && table !== 'public_feed_rollback_preparation_capabilities'
     && !(CORRECTION_TABLES as readonly string[]).includes(table),
 );
 export const PRESERVED_EXECUTION_CONTROL_TABLES = [
@@ -89,6 +97,16 @@ export const PRESERVED_EXECUTION_CONTROL_TABLES = [
 ] as const;
 const PRESERVED_TABLES = [
   ...PRESERVED_PUBLIC_TABLES.map((table) => `public.${table}`),
+  ...PRESERVED_EXECUTION_CONTROL_TABLES,
+];
+const CURRENT_54_TABLES = [
+  ...ALL_REQUIRED_TABLES
+    .filter((table) => table !== 'participant_preview_access_observations')
+    .map((table) => `public.${table}`),
+  ...PRESERVED_EXECUTION_CONTROL_TABLES,
+];
+const CURRENT_55_TABLES = [
+  ...ALL_REQUIRED_TABLES.map((table) => `public.${table}`),
   ...PRESERVED_EXECUTION_CONTROL_TABLES,
 ];
 
@@ -241,6 +259,16 @@ function fingerprintPreservedTables(): Record<string, string> {
   return fingerprints;
 }
 
+function fingerprintTables(tables: readonly string[]): Record<string, string> {
+  return Object.fromEntries(tables.map((table) => [table, tableFingerprint(table)]));
+}
+
+function assertTablesUnchanged(before: Record<string, string>, stage: string): void {
+  for (const [table, fingerprint] of Object.entries(before)) {
+    assert.equal(tableFingerprint(table), fingerprint, `${stage} changed existing rows in ${table}.`);
+  }
+}
+
 function assertPreservedTablesUnchanged(
   before: Record<string, string>,
   stage: string,
@@ -382,6 +410,29 @@ export async function readStorageEvidence(
   return evidence;
 }
 
+/**
+ * The long-running rehearsal keeps the local Storage service alive while PostgreSQL applies and
+ * fingerprints each release migration. Retry only a transient read failure, for a bounded 3.5
+ * seconds; every successful result is still checked by exact key, byte length and SHA-256, and a
+ * missing or changed object therefore remains a hard failure.
+ */
+async function readStorageEvidenceAfterTransientFailure(
+  client: SupabaseClient,
+  objects: Array<{ bucket: string; key: string }>,
+): Promise<StorageObjectEvidence[]> {
+  for (const delayMs of [0, 500, 1_000, 2_000]) {
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    try {
+      return await readStorageEvidence(client, objects);
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'UPGRADE_STORAGE_DOWNLOAD_FAILED' || delayMs === 2_000) {
+        throw error;
+      }
+    }
+  }
+  throw new Error('UPGRADE_STORAGE_DOWNLOAD_FAILED');
+}
+
 function storageInventory(): Array<{ bucket: string; key: string }> {
   return JSON.parse(psql(
     "SELECT COALESCE(jsonb_agg(jsonb_build_object('bucket', bucket_id, 'key', name)"
@@ -411,7 +462,7 @@ async function seedStorageEvidence(client: SupabaseClient): Promise<StorageObjec
 
 async function assertStorageUnchanged(client: SupabaseClient, baseline: BaselineEvidence, stage: string): Promise<void> {
   assert.deepEqual(
-    await readStorageEvidence(client, storageInventory()), baseline.storageObjects,
+    await readStorageEvidenceAfterTransientFailure(client, storageInventory()), baseline.storageObjects,
     `${stage} changed the Storage object set or bytes.`,
   );
   assert.equal(tableFingerprint('storage.objects'), baseline.storageRows, `${stage} changed Storage metadata.`);
@@ -945,6 +996,413 @@ function assertAfter53(
   console.log('PASS: Migration 0053 installed lifecycle, retained-token RLS, and immutable readiness authority without rewriting existing records');
 }
 
+function assertAfter54(
+  preservedTablesBefore54: Record<string, string>,
+  untrustedRoutineGrantsBefore54: string,
+): void {
+  assertPreservedTablesUnchanged(preservedTablesBefore54, 'Migration 0054');
+  assert.equal(
+    psql("SELECT pg_catalog.to_regclass('public.public_feed_rollback_capability_events') IS NOT NULL;"),
+    't',
+  );
+  assert.equal(
+    psql('SELECT pg_catalog.count(*)::text FROM public.public_feed_rollback_capability_events;'),
+    '0',
+    'Migration 0054 created a capability event without an operator transition.',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.to_regclass('public.public_feed_rollback_preparation_capabilities') IS NOT NULL;"),
+    't',
+  );
+  assert.equal(
+    psql('SELECT pg_catalog.count(*)::text FROM public.public_feed_rollback_preparation_capabilities;'),
+    '0',
+    'Migration 0054 bound a preexisting rollback preparation to a capability event.',
+  );
+  assert.equal(
+    psql("SELECT relrowsecurity::text || '|' || relforcerowsecurity::text"
+      + " FROM pg_catalog.pg_class WHERE oid = 'public.public_feed_rollback_capability_events'::regclass;"),
+    'true|true',
+  );
+  assert.equal(
+    psql("SELECT relrowsecurity::text || '|' || relforcerowsecurity::text"
+      + " FROM pg_catalog.pg_class WHERE oid = 'public.public_feed_rollback_preparation_capabilities'::regclass;"),
+    'true|true',
+  );
+  assert.equal(
+    tableGrantsFor('public_feed_rollback_capability_events'),
+    'service_role:SELECT',
+  );
+  assert.equal(
+    tableGrantsFor('public_feed_rollback_preparation_capabilities'),
+    'service_role:SELECT',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.count(*)::text FROM pg_catalog.pg_trigger"
+      + " WHERE tgrelid = 'public.public_feed_rollback_capability_events'::regclass"
+      + " AND tgname = 'reject_public_feed_rollback_capability_event_mutation' AND NOT tgisinternal;"),
+    '1',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.count(*)::text FROM pg_catalog.pg_indexes"
+      + " WHERE schemaname = 'public' AND tablename = 'public_feed_rollback_capability_events'"
+      + " AND indexname IN ('public_feed_rollback_capability_events_actor_idx',"
+      + " 'public_feed_rollback_capability_events_head_version_idx');"),
+    '2',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.count(*)::text FROM pg_catalog.pg_trigger"
+      + " WHERE tgrelid = 'public.public_feed_rollback_preparation_capabilities'::regclass"
+      + " AND tgname = 'reject_public_feed_rollback_preparation_capability_mutation' AND NOT tgisinternal;"),
+    '1',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.count(*)::text FROM pg_catalog.pg_indexes"
+      + " WHERE schemaname = 'public' AND tablename = 'public_feed_rollback_preparation_capabilities'"
+      + " AND indexname = 'public_feed_rollback_preparation_capabilities_event_idx';"),
+    '1',
+  );
+  for (const signature of [
+    'public.transition_public_feed_rollback_capability(uuid,boolean,boolean,bigint,bigint,text,integer,text)',
+    'public.prepare_verified_staging_public_feed_rollback(uuid,bigint,text,integer,jsonb)',
+    'public.reserve_verified_staging_public_feed_rollback(uuid,text,uuid,text,text,text)',
+  ]) {
+    assert.equal(
+      psql(`SELECT has_function_privilege('service_role', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('anon', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('authenticated', '${signature}', 'EXECUTE')::text;`),
+      'true|false|false',
+      `${signature} has an unsafe runtime EXECUTE grant.`,
+    );
+    assert.equal(
+      psql(`SELECT prosecdef::text || '|' || pg_catalog.array_to_string(proconfig, ',')`
+        + ` FROM pg_catalog.pg_proc WHERE oid = '${signature}'::regprocedure;`),
+      'true|search_path=""',
+      `${signature} is not a search-path-pinned SECURITY DEFINER function.`,
+    );
+  }
+  const transition = routineDefinition('transition_public_feed_rollback_capability');
+  for (const requiredFragment of [
+    'SECURITY DEFINER',
+    "SET search_path TO ''",
+    'public_feed_canonical_writer',
+    'p_require_exact_head_event',
+    'RECOVERY_REQUIRED',
+    'PUBLICATION_IN_PROGRESS',
+    'CONFIRMATION_MISMATCH',
+    'confirmation_digest',
+  ]) {
+    assert.ok(transition.includes(requiredFragment), `Migration 0054 RPC is missing ${requiredFragment}.`);
+  }
+  const actorGuard = routineDefinition('public_feed_actor_is_admin');
+  for (const requiredFragment of [
+    'capstone.staff_lifecycle_admin_invariant',
+    "lifecycle_status = 'active'",
+    'auth_user_id IS NOT NULL',
+    "status = 'pending_activation'",
+    'FOR SHARE',
+  ]) {
+    assert.ok(actorGuard.includes(requiredFragment), `Migration 0054 active-admin guard is missing ${requiredFragment}.`);
+  }
+  assert.equal(
+    psql(`SELECT public.public_feed_actor_is_admin('${ADMIN_ID}'::uuid)::text;`),
+    'false',
+    'Migration 0054 treated a historical profile without a canonical Auth identity as active.',
+  );
+  assert.equal(
+    psql("SELECT public.transition_public_feed_rollback_capability("
+      + `'${ADMIN_ID}'::uuid,true,true,1,1,repeat('0',64),0,`
+      + "'ENABLE PUBLIC FEED ROLLBACK FOR VERSION 1 GENERATION 1 HASH "
+      + "0000000000000000000000000000000000000000000000000000000000000000 COUNT 0'"
+      + ")->>'resultCode';"),
+    'PERMISSION_DENIED',
+  );
+  assert.equal(
+    psql("SELECT public.prepare_verified_staging_public_feed_rollback("
+      + `'${ADMIN_ID}'::uuid,1,repeat('0',64),0,'{}'::jsonb)->>'resultCode';`),
+    'PERMISSION_DENIED',
+  );
+  assert.equal(
+    psql("SELECT public.reserve_verified_staging_public_feed_rollback("
+      + `'${ADMIN_ID}'::uuid,repeat('x',32),'00000000-0000-4000-8000-000000000001'::uuid,`
+      + "'synthetic acknowledgement','public-feeds','capstones-latest.json')->>'resultCode';"),
+    'PERMISSION_DENIED',
+  );
+  assert.equal(
+    psql('SELECT pg_catalog.count(*)::text FROM public.public_feed_rollback_capability_events;'),
+    '0',
+    'A denied Migration 0054 request created a capability event.',
+  );
+  assert.equal(
+    psql('SELECT pg_catalog.count(*)::text FROM public.public_feed_rollback_preparation_capabilities;'),
+    '0',
+    'A denied Migration 0054 request created a preparation binding.',
+  );
+  assert.equal(
+    untrustedRoutineExecuteGrants(),
+    untrustedRoutineGrantsBefore54,
+    'Migration 0054 introduced an unsafe direct routine grant.',
+  );
+  assert.equal(
+    psql('SELECT public.get_release_capability_sentinel();'),
+    '20260910120000_public_feed_rollback_capability|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1',
+  );
+  console.log('PASS: Migration 0054 installed disabled-by-default exact-head rollback authority and empty immutable audit without rewriting existing records');
+}
+
+function assertAfter55(
+  current54Tables: Record<string, string>,
+  untrustedRoutineGrantsBefore55: string,
+): void {
+  assert.equal(Object.keys(current54Tables).length, 47, 'The current 0054 table inventory is incomplete.');
+  assertTablesUnchanged(current54Tables, 'Migration 0055');
+  assert.equal(
+    psql("SELECT pg_catalog.to_regclass('public.participant_preview_access_observations') IS NOT NULL;"),
+    't',
+  );
+  assert.equal(
+    psql('SELECT pg_catalog.count(*)::text FROM public.participant_preview_access_observations;'),
+    '0',
+    'Migration 0055 backfilled historical access observations.',
+  );
+  assert.equal(
+    psql("SELECT relrowsecurity::text || '|' || relforcerowsecurity::text"
+      + " FROM pg_catalog.pg_class WHERE oid = 'public.participant_preview_access_observations'::regclass;"),
+    'true|true',
+  );
+  assert.equal(tableGrantsFor('participant_preview_access_observations'), 'service_role:SELECT');
+  assert.equal(
+    psql("SELECT has_function_privilege('service_role',"
+      + " 'public.record_participant_preview_response_prepared(uuid,text)', 'EXECUTE')::text"
+      + " || '|' || has_function_privilege('anon',"
+      + " 'public.record_participant_preview_response_prepared(uuid,text)', 'EXECUTE')::text"
+      + " || '|' || has_function_privilege('authenticated',"
+      + " 'public.record_participant_preview_response_prepared(uuid,text)', 'EXECUTE')::text;"),
+    'true|false|false',
+  );
+  assert.equal(
+    psql("SELECT prosecdef::text || '|' || pg_catalog.array_to_string(proconfig, ',')"
+      + " FROM pg_catalog.pg_proc WHERE oid ="
+      + " 'public.record_participant_preview_response_prepared(uuid,text)'::regprocedure;"),
+    'true|search_path=""',
+  );
+  const observation = routineDefinition('record_participant_preview_response_prepared');
+  for (const requiredFragment of [
+    'SECURITY DEFINER', "SET search_path TO ''", 'participant_preview_id',
+    'token_hash = p_token_hash', 'FOR SHARE', "status <> 'active'", 'expires_at <= v_observed_at',
+    'ON CONFLICT (participant_preview_id) DO NOTHING',
+  ]) {
+    assert.ok(observation.includes(requiredFragment), `Migration 0055 RPC is missing ${requiredFragment}.`);
+  }
+  assert.equal(
+    untrustedRoutineExecuteGrants(),
+    untrustedRoutineGrantsBefore55,
+    'Migration 0055 introduced an unsafe direct routine grant.',
+  );
+  assert.equal(psql('SELECT public.get_release_capability_sentinel();'),
+    '20260910120100_participant_preview_access_observations|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1');
+  console.log('PASS: Migration 0055 preserved all current 0054 data, performed no backfill, and installed narrow response-observation authority');
+}
+
+function assertAfter56(
+  current55Tables: Record<string, string>,
+  publicTableGrantsBefore56: string,
+  untrustedRoutineGrantsBefore56: string,
+): void {
+  assert.equal(Object.keys(current55Tables).length, 48, 'The current 0055 table inventory is incomplete.');
+  assertTablesUnchanged(current55Tables, 'Migration 0056');
+  assert.equal(publicTableGrants(), publicTableGrantsBefore56, 'Migration 0056 changed direct table grants.');
+  assert.equal(
+    untrustedRoutineExecuteGrants(),
+    untrustedRoutineGrantsBefore56,
+    'Migration 0056 introduced an unsafe direct routine grant.',
+  );
+  assert.equal(
+    psql("SELECT relrowsecurity::text || '|' || relforcerowsecurity::text"
+      + " FROM pg_catalog.pg_class WHERE oid = 'public.assistive_worker_heartbeats'::regclass;"),
+    'true|true',
+  );
+  assert.equal(tableGrantsFor('assistive_worker_heartbeats'), 'NONE');
+  const environmentConstraint = psql("SELECT pg_catalog.pg_get_constraintdef(oid)"
+    + " FROM pg_catalog.pg_constraint WHERE conrelid='public.assistive_worker_heartbeats'::regclass"
+    + " AND conname='check_assistive_worker_environment';");
+  assert.ok(environmentConstraint.includes('staging') && environmentConstraint.includes('production'));
+
+  for (const signature of [
+    'public.upsert_assistive_worker_heartbeat(text,text,text,text,text,text,text)',
+    'public.get_assistive_worker_availability(text,text,text,text,text,integer)',
+  ]) {
+    assert.equal(
+      psql(`SELECT has_function_privilege('service_role', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('anon', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('authenticated', '${signature}', 'EXECUTE')::text;`),
+      'true|false|false',
+    );
+    assert.equal(
+      psql(`SELECT prosecdef::text || '|' || pg_catalog.array_to_string(proconfig, ',')`
+        + ` FROM pg_catalog.pg_proc WHERE oid = '${signature}'::regprocedure;`),
+      'true|search_path=""',
+    );
+  }
+
+  const heartbeatArguments = `'assistive-deterministic-checks/v3','${'a'.repeat(40)}',`
+    + "'paddle-title/pp-ocrv6-small@3.7.0','languagetool/en-au@6.6'";
+  assert.equal(
+    psql(`SELECT public.get_assistive_worker_availability('production',${heartbeatArguments},60)->>'resultCode';`),
+    'UNAVAILABLE',
+    'Synthetic staging evidence qualified production at the same deployment and capabilities.',
+  );
+  assert.equal(
+    psql(`SELECT public.upsert_assistive_worker_heartbeat('upgrade-synthetic-staging','production',${heartbeatArguments},'READY')->>'resultCode';`),
+    'VALIDATION_FAILED',
+    'Migration 0056 allowed a synthetic staging instance ID to be relabelled as production.',
+  );
+  assert.equal(
+    psql("SELECT environment FROM public.assistive_worker_heartbeats"
+      + " WHERE worker_instance_id='upgrade-synthetic-staging';"),
+    'staging',
+  );
+  assert.equal(
+    psql(`SELECT public.upsert_assistive_worker_heartbeat('upgrade-synthetic-production','production',${heartbeatArguments},'READY')->>'resultCode';`),
+    'HEARTBEAT_RECORDED',
+  );
+  assert.equal(
+    psql(`SELECT public.get_assistive_worker_availability('production',${heartbeatArguments},60)->>'compatibleWorkerCount';`),
+    '1',
+  );
+  assert.equal(
+    psql(`SELECT public.get_assistive_worker_availability('staging',${heartbeatArguments},60)->>'compatibleWorkerCount';`),
+    '1',
+  );
+  assert.equal(
+    psql(`SELECT public.get_assistive_worker_availability('local',${heartbeatArguments},60)->>'resultCode';`),
+    'VALIDATION_FAILED',
+  );
+  assert.equal(
+    psql('SELECT public.get_release_capability_sentinel();'),
+    '20260910120200_assistive_worker_production_identity|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1',
+  );
+  console.log('PASS: Migration 0056 preserved all current 0055 data and installed exact, service-only staging/production heartbeat identity');
+}
+
+/** Digest media rows on their pre-0057 columns only, so the two additive columns cannot mask drift. */
+function historicalMediaAssetFingerprint(): string {
+  return psql(
+    "SELECT pg_catalog.count(*)::text || ':' || pg_catalog.encode(pg_catalog.sha256("
+    + "pg_catalog.convert_to(COALESCE(pg_catalog.string_agg(row_text, chr(10) ORDER BY row_text), ''), 'UTF8')), 'hex')"
+    + " FROM (SELECT (pg_catalog.to_jsonb(m) - 'image_content_kind' - 'full_text_public')::text AS row_text"
+    + ' FROM public.media_assets AS m) AS s;',
+  );
+}
+
+/** Runs a mutation that must be refused by the gallery text-equivalent check constraint. */
+function assertGalleryCheckRefuses(mutation: string, label: string): void {
+  const diagnosticLabel = label.replaceAll("'", "''");
+  psql(`DO $$ BEGIN
+    BEGIN
+      ${mutation}
+      RAISE EXCEPTION 'GALLERY_CHECK_NOT_ENFORCED: ${diagnosticLabel}';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END $$;`);
+  assert.equal(psql("SELECT count(*) FROM public.media_assets WHERE file_name = 'upgrade-check.png';"), '0',
+    `Migration 0057 check constraint did not refuse: ${label}`);
+}
+
+function assertAfter57(
+  current56Tables: Record<string, string>,
+  mediaAssetsBefore57: string,
+  publicTableGrantsBefore57: string,
+  untrustedRoutineGrantsBefore57: string,
+): void {
+  assert.equal(Object.keys(current56Tables).length, 47, 'The current 0056 table inventory is incomplete.');
+  assertTablesUnchanged(current56Tables, 'Migration 0057');
+  assert.equal(historicalMediaAssetFingerprint(), mediaAssetsBefore57, 'Migration 0057 changed existing media rows.');
+  // Additive and unbackfilled: every pre-existing snapshot stays undeclared (NULL), never "ordinary".
+  assert.equal(
+    psql('SELECT count(*) FROM public.media_assets WHERE image_content_kind IS NOT NULL OR full_text_public IS NOT NULL;'),
+    '0',
+    'Migration 0057 backfilled a text-equivalent declaration.',
+  );
+  assert.equal(publicTableGrants(), publicTableGrantsBefore57, 'Migration 0057 changed direct table grants.');
+  assert.equal(
+    untrustedRoutineExecuteGrants(),
+    untrustedRoutineGrantsBefore57,
+    'Migration 0057 introduced an unsafe direct routine grant.',
+  );
+  assert.equal(
+    psql("SELECT string_agg(column_name || ':' || data_type || ':' || is_nullable, ',' ORDER BY column_name)"
+      + " FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'media_assets'"
+      + " AND column_name IN ('image_content_kind', 'full_text_public');"),
+    'full_text_public:text:YES,image_content_kind:text:YES',
+  );
+  const galleryConstraint = psql("SELECT pg_catalog.pg_get_constraintdef(oid)"
+    + " FROM pg_catalog.pg_constraint WHERE conrelid='public.media_assets'::regclass"
+    + " AND conname='check_media_asset_gallery_text_equivalent';");
+  for (const fragment of ["'ordinary'", "'text_bearing'", 'full_text_public IS NULL', '<= 5000', 'btrim(full_text_public)']) {
+    assert.ok(galleryConstraint.includes(fragment), `Migration 0057 constraint is missing ${fragment}.`);
+  }
+
+  // Every forward-redefined RPC carries the contract, stays SECURITY DEFINER with an empty
+  // search_path, and remains service-role-only.
+  for (const [signature, fragment] of [
+    ['public.finalize_browser_import_media_stage(uuid,text,text,uuid,jsonb)', "'snapshotContentKind'"],
+    ['public.submit_import_projects_for_review(uuid,text[],uuid,text)', "'MISSING_SNAPSHOT_CONTENT_TYPE'"],
+    ['public.perform_project_review_action(text,text,text,uuid)', 'v_undeclared_snapshot_count'],
+    ['public.generate_participant_preview(text,uuid,text,integer,text,boolean)', "'contentKind', ma.image_content_kind"],
+    ['public.get_project_publication_readiness(text,uuid,text)', "'Snapshot image %s content type is missing'"],
+    ['public.get_project_reconciliation_readiness(text,uuid,text)', "'Snapshot image %s content type is missing'"],
+    ['public.reserve_participant_correction(text,text,jsonb,jsonb,jsonb,text,jsonb,text,uuid)', "'contentKind','fullText'"],
+    ['public.review_participant_correction(text,uuid,uuid,text,text,text)', "image_content_kind=f->>'contentKind'"],
+  ] as const) {
+    assert.ok(
+      psql(`SELECT pg_catalog.pg_get_functiondef('${signature}'::regprocedure);`).includes(fragment),
+      `Migration 0057 did not redefine ${signature} (${fragment} missing).`,
+    );
+    assert.equal(
+      psql(`SELECT has_function_privilege('service_role', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('anon', '${signature}', 'EXECUTE')::text`
+        + ` || '|' || has_function_privilege('authenticated', '${signature}', 'EXECUTE')::text;`),
+      'true|false|false',
+    );
+    assert.equal(
+      psql(`SELECT prosecdef::text || '|' || pg_catalog.array_to_string(proconfig, ',')`
+        + ` FROM pg_catalog.pg_proc WHERE oid = '${signature}'::regprocedure;`),
+      'true|search_path=""',
+    );
+  }
+
+  // Constraint behaviour on a synthetic snapshot row: coherent declarations persist, incoherent
+  // ones are refused, and nothing is inferred for an undeclared row.
+  const insertSnapshot = (kind: string, fullText: string) => `INSERT INTO public.media_assets (
+      project_id, asset_type, gallery_position, file_name, storage_bucket, storage_path, mime_type,
+      file_size_bytes, is_public_approved, alt_text_public, image_content_kind, full_text_public
+    ) SELECT projects.id, 'snapshot_image', 9, 'upgrade-check.png', 'project-drafts-private',
+      'drafts/' || projects.public_id || '/snapshot_image/upgrade-check.png', 'image/png', 1024, false,
+      'Synthetic upgrade check image.', ${kind}, ${fullText}
+    FROM public.projects AS projects WHERE projects.source_folder = 'upgrade-rehearsal' LIMIT 1;`;
+  assertGalleryCheckRefuses(insertSnapshot("'text_bearing'", 'NULL'), 'text-bearing without full text');
+  assertGalleryCheckRefuses(insertSnapshot("'ordinary'", "'Unexpected transcription.'"), 'ordinary with full text');
+  assertGalleryCheckRefuses(insertSnapshot('NULL', "'Undeclared transcription.'"), 'full text without declaration');
+  assertGalleryCheckRefuses(insertSnapshot("'photograph'", 'NULL'), 'unknown content kind');
+  assertGalleryCheckRefuses(insertSnapshot("'text_bearing'", `'${'x'.repeat(5001)}'`), 'oversized full text');
+  assertGalleryCheckRefuses(insertSnapshot("'text_bearing'", "'  padded  '"), 'untrimmed full text');
+  psql(insertSnapshot("'text_bearing'", "'Synthetic dashboard: queue length 12 vehicles; wait 41 s.'"));
+  psql("UPDATE public.media_assets SET image_content_kind = 'ordinary', full_text_public = NULL WHERE file_name = 'upgrade-check.png';");
+  assert.equal(
+    psql("SELECT image_content_kind || '|' || COALESCE(full_text_public, '<null>') FROM public.media_assets WHERE file_name = 'upgrade-check.png';"),
+    'ordinary|<null>',
+  );
+  psql("DELETE FROM public.media_assets WHERE file_name = 'upgrade-check.png';");
+  assert.equal(historicalMediaAssetFingerprint(), mediaAssetsBefore57, 'Migration 0057 rehearsal left synthetic media behind.');
+
+  assert.equal(
+    psql('SELECT public.get_release_capability_sentinel();'),
+    '20260911120000_gallery_full_text_equivalents|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1',
+  );
+  console.log('PASS: Migration 0057 preserved all current 0056 data, performed no backfill, and installed the gallery text-equivalent contract');
+}
+
 async function verifyUpgrade(workdir: string, networkId: string): Promise<void> {
   assertBaseline();
   seedBaselineEvidence();
@@ -954,7 +1412,7 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   const baselineGate4Errors = gate4ContractErrors();
   assert.ok(
     baselineGate4Errors.length > 0,
-    'The current 53-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
+    'The current 57-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
   );
   console.log(
     `PASS: current Gate 4 contract refuses the 48-state source (${baselineGate4Errors.length} findings)`,
@@ -990,6 +1448,37 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   applyRelease(workdir, networkId, 53);
   assertAfter53(baseline, historicalAdminUsersBefore53);
   await assertStorageUnchanged(storageClient, baseline, 'Migration 0053');
+  const preservedTablesBefore54 = fingerprintPreservedTables();
+  const untrustedRoutineGrantsBefore54 = untrustedRoutineExecuteGrants();
+  applyRelease(workdir, networkId, 54);
+  assertAfter54(preservedTablesBefore54, untrustedRoutineGrantsBefore54);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0054');
+  const current54Tables = fingerprintTables(CURRENT_54_TABLES);
+  const untrustedRoutineGrantsBefore55 = untrustedRoutineExecuteGrants();
+  applyRelease(workdir, networkId, 55);
+  assertAfter55(current54Tables, untrustedRoutineGrantsBefore55);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0055');
+  psql(`INSERT INTO public.assistive_worker_heartbeats (
+    worker_instance_id, environment, pipeline_version, deployment_version,
+    ocr_capability, language_capability, health_state, heartbeat_at
+  ) VALUES (
+    'upgrade-synthetic-staging', 'staging', 'assistive-deterministic-checks/v3', '${'a'.repeat(40)}',
+    'paddle-title/pp-ocrv6-small@3.7.0', 'languagetool/en-au@6.6', 'READY', pg_catalog.statement_timestamp()
+  );`);
+  const current55Tables = fingerprintTables(CURRENT_55_TABLES);
+  const publicTableGrantsBefore56 = publicTableGrants();
+  const untrustedRoutineGrantsBefore56 = untrustedRoutineExecuteGrants();
+  applyRelease(workdir, networkId, 56);
+  assertAfter56(current55Tables, publicTableGrantsBefore56, untrustedRoutineGrantsBefore56);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0056');
+  // media_assets gains two columns in 0057, so it is fingerprinted on its historical columns only.
+  const current56Tables = fingerprintTables(CURRENT_55_TABLES.filter((table) => table !== 'public.media_assets'));
+  const mediaAssetsBefore57 = historicalMediaAssetFingerprint();
+  const publicTableGrantsBefore57 = publicTableGrants();
+  const untrustedRoutineGrantsBefore57 = untrustedRoutineExecuteGrants();
+  applyRelease(workdir, networkId, 57);
+  assertAfter57(current56Tables, mediaAssetsBefore57, publicTableGrantsBefore57, untrustedRoutineGrantsBefore57);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0057');
 
   const applied = appliedMigrations();
   assert.equal(applied.length, RELEASE_MIGRATION_COUNT, 'The upgraded head is not the full release migration set.');
@@ -1036,7 +1525,7 @@ async function main(): Promise<void> {
     startAttempted = true;
     runSupabase('start', workdir, networkId);
     await verifyUpgrade(workdir, networkId);
-    console.log('PASS: staging migration 0048 -> 0053 upgrade rehearsal');
+    console.log('PASS: staging migration 0048 -> 0057 upgrade rehearsal');
     console.log('HOSTED_SYSTEMS_CONTACTED = NO');
     exitCode = 0;
   } catch (error) {

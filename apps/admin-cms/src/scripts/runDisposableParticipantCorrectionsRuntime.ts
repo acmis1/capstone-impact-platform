@@ -24,9 +24,12 @@ export async function runDisposableParticipantCorrectionsRuntime(): Promise<void
     assertDatabaseContainerOwned(identity);
     await verifyParticipantOwnedCorrectionsRuntime(repositoryRoot, identity);
     console.log('PASS: participant-owned corrections runtime');
-  } catch {
+  } catch (error) {
     // Never print raw errors: CLI and API failures may contain disposable credentials.
     console.error('FAIL: participant-owned corrections runtime');
+    if (error instanceof Error && error.message.startsWith('PARTICIPANT_CORRECTION_RUNTIME_FAILED:')) {
+      console.error(error.message);
+    }
     process.exitCode = 1;
   } finally {
     if (identity && startAttempted) {

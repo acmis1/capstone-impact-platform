@@ -1,9 +1,16 @@
 import { isLoopbackUrl } from '../../local-development/localEnvironmentFile';
-import { getServerEnv } from '../../lib/env';
-import { isVerifiedStagingRuntime, type StagingRuntimeEnvironment } from '../../security/stagingRuntimeIdentity';
+import { isProductionAssistiveEnabled } from '../../security/operationalProductionCapabilities';
+import {
+  isVerifiedProductionRuntime,
+  isVerifiedStagingRuntime,
+  type StagingRuntimeEnvironment,
+} from '../../security/stagingRuntimeIdentity';
 import { executorAvailabilityResponseSchema } from '../domain/executionControlContract';
 import type { AssistiveExecutionControlGateway } from '../repositories/assistiveExecutionControlRepository';
-import type { AssistiveWorkerHeartbeatGateway } from '../repositories/assistiveWorkerHeartbeatRepository';
+import {
+  resolveAssistiveWorkerRuntimeIdentity,
+  type AssistiveWorkerHeartbeatGateway,
+} from '../repositories/assistiveWorkerHeartbeatRepository';
 import { hasCompatibleAssistiveWorker } from './assistiveWorkerHeartbeat';
 
 /**
@@ -29,7 +36,7 @@ const UNAVAILABLE_MESSAGE =
   'Assistive checks are temporarily unavailable because the processing worker is not ready.';
 const BUDGET_MESSAGE =
   'Assistive checks have reached their processing limit for now. You can continue reviewing and '
-  + 'editing project information manually.';
+  + 'requesting corrected project-team packages through the normal workflow.';
 
 function unavailable(): AssistiveExecutionAvailability {
   return { state: 'TEMPORARILY_UNAVAILABLE', canEnqueue: false, message: UNAVAILABLE_MESSAGE };
@@ -39,8 +46,8 @@ async function resolveOnDemandAvailability(
   gateway: AssistiveExecutionControlGateway,
   env: StagingRuntimeEnvironment,
 ): Promise<AssistiveExecutionAvailability | null> {
-  const deploymentVersion = env.CAPSTONE_ASSISTIVE_EXPECTED_WORKER_DEPLOYMENT_VERSION?.toLowerCase();
-  const imageDigest = env.CAPSTONE_ASSISTIVE_EXPECTED_WORKER_IMAGE_DIGEST?.toLowerCase();
+  const deploymentVersion = env.CAPSTONE_ASSISTIVE_EXPECTED_WORKER_DEPLOYMENT_VERSION;
+  const imageDigest = env.CAPSTONE_ASSISTIVE_EXPECTED_WORKER_IMAGE_DIGEST;
   if (!deploymentVersion || !imageDigest) return null;
 
   const parsed = executorAvailabilityResponseSchema.safeParse(
@@ -58,8 +65,9 @@ async function resolveOnDemandAvailability(
  * Resolves whether assistive validation execution is supported in the current environment.
  *
  * Local execution remains available on loopback. Hosted execution fails closed unless this is the
- * explicitly enabled, verified staging target and either a compatible continuous worker heartbeat
- * is fresh or a compatible on-demand executor is registered with launch capacity remaining.
+ * explicitly enabled, verified hosted target. Staging may use a compatible continuous heartbeat or
+ * its existing on-demand executor. Production requires its separate capability and a compatible
+ * continuous heartbeat; it never consults on-demand execution control.
  */
 export async function resolveAssistiveExecutionAvailability(
   supabaseUrl?: string,
@@ -68,18 +76,29 @@ export async function resolveAssistiveExecutionAvailability(
   env: StagingRuntimeEnvironment = process.env,
 ): Promise<AssistiveExecutionAvailability> {
   try {
-    const url = supabaseUrl ?? getServerEnv().NEXT_PUBLIC_SUPABASE_URL;
+    const url = supabaseUrl ?? env.NEXT_PUBLIC_SUPABASE_URL;
     if (!url) return unavailable();
     if (isLoopbackUrl(url)) return { state: 'LOCAL_READY', canEnqueue: true, message: null };
-    if (env.CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED !== 'true'
-        || !isVerifiedStagingRuntime({ ...env, NEXT_PUBLIC_SUPABASE_URL: url })) {
+    if (env.CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED !== 'true') {
       return unavailable();
     }
+
+    const runtimeEnv = { ...env, NEXT_PUBLIC_SUPABASE_URL: url };
+    const production = env.CAPSTONE_RUNTIME_ENV === 'production';
+    if (production) {
+      if (!isProductionAssistiveEnabled(env) || !isVerifiedProductionRuntime(runtimeEnv)) {
+        return unavailable();
+      }
+    } else if (!isVerifiedStagingRuntime(runtimeEnv)) {
+      return unavailable();
+    }
+
+    if (!resolveAssistiveWorkerRuntimeIdentity(env)) return unavailable();
 
     if (heartbeatGateway && await hasCompatibleAssistiveWorker(heartbeatGateway)) {
       return { state: 'READY', canEnqueue: true, message: null };
     }
-    if (executionControlGateway) {
+    if (!production && executionControlGateway) {
       const onDemand = await resolveOnDemandAvailability(executionControlGateway, env);
       if (onDemand) return onDemand;
     }

@@ -53,7 +53,7 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
     return { token, hash, id: result.previewId as string };
   };
   try {
-    assert.match(sql('SELECT count(*) AS migration_count FROM supabase_migrations.schema_migrations;'), /\b53\b/);
+    assert.match(sql('SELECT count(*) AS migration_count FROM supabase_migrations.schema_migrations;'), /\b57\b/);
     // Default ACLs materialize as direct grants at CREATE TABLE; SELECT alone cannot narrow them.
     const correctionTables = ['participant_correction_events', 'participant_correction_prior_revisions',
       'participant_correction_recovery_rows', 'participant_correction_submissions'];
@@ -123,7 +123,8 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
       const uploaded = await client.storage.from(bucket).upload(path, bytes, { upsert: false, contentType: mimeType });
       assert.equal(uploaded.error, null);
       await data(client.from('media_assets').insert({ project_id: id, asset_type: role, gallery_position: position, file_name: fileName, storage_bucket: bucket, storage_path: path,
-        mime_type: mimeType, file_size_bytes: bytes.length, is_public_approved: false, alt_text_public: position ? `Original gallery ${position}` : null }).select());
+        mime_type: mimeType, file_size_bytes: bytes.length, is_public_approved: false, alt_text_public: position ? `Original gallery ${position}` : null,
+        image_content_kind: position ? 'ordinary' : null, full_text_public: null }).select());
     }
     const historical = await generate();
     assert.equal((await rpc('confirm_participant_preview', { p_token_hash: historical.hash })).resultCode, 'SUCCESS');
@@ -144,11 +145,14 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
     const initial = await project(); const oldMedia = await media();
     const previewBefore = await data(client.from('participant_previews').select('*').eq('id', preview.id).single());
     const correctionBefore = await data(client.from('participant_preview_correction_requests').select('*').eq('id', correctionId).single());
-    pass('53 migrations; synthetic source, old gallery and confirmed historical evidence');
+    pass('57 migrations; synthetic source, old gallery and confirmed historical evidence');
 
     phase = 'participant staging and access controls';
     const form = await correctionForm();
     const candidate = await parseParticipantCorrectionPackage(form, publicId);
+    const candidateSnapshotFile = candidate.files.find((file) => file.role === 'snapshot_image' && file.position === 1);
+    assert.equal(candidateSnapshotFile?.contentKind, 'ordinary');
+    assert.equal(candidateSnapshotFile?.fullText, null);
     assert.equal(await stageParticipantCorrection(failUpload(2), preview.hash, candidate), 'failed');
     assert.deepEqual(await project(), initial); assert.deepEqual(await media(), oldMedia);
     const preparing = await data(client.from('participant_correction_submissions').select('*').eq('project_id', id).single());
@@ -171,8 +175,16 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
     phase = 'freeze, stale selection and concurrent review';
     const firstSubmission = view.candidate.id;
     const changedForm = await correctionForm();
-    changedForm.set('workbook', new File([new Uint8Array(await correctionWorkbook({ title: 'Final synthetic participant revision' }))], 'project-details.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    changedForm.set('workbook', new File([new Uint8Array(await correctionWorkbook({
+      title: 'Final synthetic participant revision',
+      snapshot1ContentKind: 'Text-bearing image',
+      snapshot1FullText: 'Synthetic prototype diagram. Input A flows to decision B, then output C.',
+    }))], 'project-details.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     const finalCandidate = await parseParticipantCorrectionPackage(changedForm, publicId);
+    const finalSnapshotFile = finalCandidate.files.find((file) => file.role === 'snapshot_image' && file.position === 1);
+    assert.equal(finalSnapshotFile?.contentKind, 'text_bearing');
+    assert.equal(finalSnapshotFile?.fullText, 'Synthetic prototype diagram. Input A flows to decision B, then output C.');
+    assert.notEqual(finalCandidate.hash, candidate.hash);
     assert.equal(await stageParticipantCorrection(client, preview.hash, finalCandidate), 'submitted');
     const current = (await loadCorrectionReviewView(client, publicId, correctionId)).candidate!;
     assert.ok(current); assert.notEqual(current.id, firstSubmission);
@@ -224,12 +236,17 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
       assert.notEqual(file.sha256, correctionDigest(replacement.asset_type === 'poster_pdf' ? ORIGINAL_PDF : ORIGINAL_PNG));
     }
     assert.equal(newMedia.length, 3); assert.equal(newMedia.some((m) => m.id === oldGallery.id), false);
+    const acceptedSnapshot = newMedia.find((m) => m.asset_type === 'snapshot_image')!;
+    assert.equal(acceptedSnapshot.image_content_kind, 'text_bearing');
+    assert.equal(acceptedSnapshot.full_text_public, finalSnapshotFile?.fullText);
     for (const old of oldMedia) { const bytes = await client.storage.from(bucket).download(old.storage_path); assert.equal(bytes.error, null); assert.equal(bytes.data?.size, old.file_size_bytes); assert.equal(correctionDigest(Buffer.from(await bytes.data!.arrayBuffer())), correctionDigest(old.asset_type === 'poster_pdf' ? ORIGINAL_PDF : ORIGINAL_PNG)); }
     const header = await data(client.from('participant_correction_prior_revisions').select('*').eq('submission_id', current.id).single());
     assert.equal(header.project_id, id); assert.equal(header.correction_request_id, correctionId); assert.equal(header.package_hash, current.hash); assert.equal(header.accepted_by, staff.admin);
     assert.deepEqual(header.project_record, beforeAcceptProject); assert.deepEqual(header.media_records, beforeAcceptMedia);
     const recovery = await data(client.from('participant_correction_recovery_rows').select('*').eq('submission_id', current.id));
     assert.deepEqual(recovery.find((r) => r.source_table === 'media_assets' && r.original_identity.id === oldGallery.id)?.row_data, oldGallery);
+    assert.equal(oldGallery.image_content_kind, 'ordinary');
+    assert.equal(oldGallery.full_text_public, null);
     assert.deepEqual(recovery.find((r) => r.source_table === 'project_disciplines' && r.original_identity.discipline_id === obsoleteDiscipline)?.row_data, { project_id: id, discipline_id: obsoleteDiscipline });
     assert.equal((await data(client.from('project_disciplines').select('*').eq('project_id', id))).length, 1);
     assert.equal((await data(client.from('project_industry_categories').select('*').eq('project_id', id))).length, 0);
@@ -252,16 +269,25 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
     const previewB = await generate(true);
     const snapshotB = await data(client.from('participant_previews').select('*').eq('id', previewB.id).single());
     assert.equal(snapshotB.snapshot.title, 'Final synthetic participant revision'); assert.equal(snapshotB.media_snapshot.length, 3);
+    const frozenSnapshot = snapshotB.media_snapshot.find((item: { assetType: string }) => item.assetType === 'snapshot_image');
+    assert.equal(frozenSnapshot?.contentKind, 'text_bearing');
+    assert.equal(frozenSnapshot?.fullText, finalSnapshotFile?.fullText);
     assert.equal(snapshotB.snapshot.demoUrl, 'https://example.com/demo');
     assert.equal((await data(client.from('participant_preview_confirmations').select('*').eq('participant_preview_id', previewB.id))).length, 0);
     assert.equal((await rpc('confirm_participant_preview', { p_token_hash: previewB.hash })).resultCode, 'SUCCESS');
     assert.equal((await project()).status, 'approved');
     const readiness = await rpc('get_project_publication_readiness', { p_public_id: publicId, p_admin_id: staff.admin, p_private_bucket: bucket });
     assert.equal(readiness.resultCode, 'READY'); assert.equal(readiness.ready, true);
+    const confirmedAccessibilityVersion = await version();
+    await data(client.from('media_assets').update({ full_text_public: `${finalSnapshotFile?.fullText} Changed.` }).eq('id', acceptedSnapshot.id).select());
+    assert.notEqual(await version(), confirmedAccessibilityVersion);
+    assert.equal((await rpc('get_project_publication_readiness', { p_public_id: publicId, p_admin_id: staff.admin, p_private_bucket: bucket })).resultCode, 'MEDIA_SNAPSHOT_STALE');
+    await data(client.from('media_assets').update({ full_text_public: finalSnapshotFile?.fullText }).eq('id', acceptedSnapshot.id).select());
+    assert.equal(await version(), confirmedAccessibilityVersion);
     await data(client.from('projects').update({ demo_url: 'https://example.com/changed-after-confirmation' }).eq('id', id).select());
     assert.equal((await rpc('get_project_publication_readiness', { p_public_id: publicId, p_admin_id: staff.admin, p_private_bucket: bucket })).resultCode, 'PROJECT_SNAPSHOT_STALE');
     await data(client.from('projects').update({ demo_url: finalCandidate.metadata.demoUrl }).eq('id', id).select());
-    pass('normal reapproval, corrected immutable Preview B, fresh confirmation and readiness without publication; post-confirmation link mutation is stale');
+    pass('normal reapproval, corrected immutable Preview B, fresh confirmation and readiness without publication; post-confirmation gallery full-text and link mutations are stale');
     await rpc('revoke_participant_preview', { p_public_id: publicId, p_admin_id: staff.admin });
     assert.equal(await getParticipantCorrectionContext(client, previewB.hash), null);
     pass('synthetic capabilities revoked; no raw token persisted');

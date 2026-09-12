@@ -34,12 +34,16 @@
       {
         "url": "https://media.example.test/snapshots/flood-map.jpg",
         "altText": "Map view showing three synthetic flood-response zones and their resource status.",
-        "galleryPosition": 1
+        "galleryPosition": 1,
+        "contentKind": "text_bearing",
+        "fullText": "Flood map legend: Zone <Alpha> — high risk, 12 response units; Zone Bravo — moderate risk, 8 response units; Zone Charlie — low risk, 5 response units."
       },
       {
         "url": "https://media.example.test/snapshots/flood-alerts.jpg",
         "altText": "Alert panel grouping synthetic road closures by urgency and affected district.",
-        "galleryPosition": 2
+        "galleryPosition": 2,
+        "contentKind": "ordinary",
+        "fullText": null
       }
     ],
     "videoUrl": "https://media.example.test/videos/flood-response.mp4",

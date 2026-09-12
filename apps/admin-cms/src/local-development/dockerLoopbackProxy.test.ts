@@ -1,3 +1,4 @@
+import { observeRejectedHttpUpload, type RejectedUploadOutcome } from '../test-support/observeRejectedHttpUpload';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
@@ -32,6 +33,7 @@ interface ProxyResponse {
   statusCode: number;
   body: Buffer;
 }
+
 
 const authorizationToken = 'synthetic-static-proxy-authorization-fixture';
 const repoRoot = path.resolve(__dirname, '../../../..');
@@ -155,6 +157,23 @@ function requestProxy(options: {
       request.end(options.body);
     }
   });
+}
+
+function requestOversizedCreateBody(): Promise<RejectedUploadOutcome> {
+  if (!proxy) throw new Error('SYNTHETIC_PROXY_NOT_RUNNING');
+  const body = Buffer.alloc(MAX_DOCKER_CREATE_BODY_BYTES + 1, 0x20);
+  const request = http.request({
+    socketPath: proxy.listenPath,
+    method: 'POST',
+    path: '/containers/create',
+    headers: {
+      [DOCKER_PROXY_AUTH_HEADER]: authorizationToken,
+      'content-length': body.length,
+    },
+  });
+  const observed = observeRejectedHttpUpload(request);
+  request.end(body);
+  return observed;
 }
 
 function rawProxyRequest(lines: string[], partialBody?: string): Promise<string> {
@@ -352,17 +371,17 @@ describe.sequential('authenticated Docker loopback proxy', () => {
     });
     await interruptCreateRequest();
     await new Promise((resolve) => setTimeout(resolve, 25));
-    const oversized = await requestProxy({
-      method: 'POST',
-      requestPath: '/containers/create',
-      token: authorizationToken,
-      body: Buffer.alloc(MAX_DOCKER_CREATE_BODY_BYTES + 1, 0x20),
-    });
+    const oversized = await requestOversizedCreateBody();
 
     expect(malformed.statusCode).toBe(400);
     expect(absent.statusCode).toBe(400);
-    expect(oversized.statusCode).toBe(413);
-    expect([malformed.body, absent.body, oversized.body].every((body) => body.length === 0)).toBe(true);
+    expect([malformed.body, absent.body].every((body) => body.length === 0)).toBe(true);
+    if (oversized.kind === 'response') {
+      expect(oversized.response.statusCode).toBe(413);
+      expect(oversized.response.body).toHaveLength(0);
+    } else {
+      expect(['EPIPE', 'ECONNRESET']).toContain(oversized.errorCode);
+    }
     expect(recordedRequests).toHaveLength(upstreamCount);
   });
 

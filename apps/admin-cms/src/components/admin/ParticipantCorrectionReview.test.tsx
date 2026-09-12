@@ -9,8 +9,8 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
 const candidate: NonNullable<CorrectionReviewView['candidate']> = {
   id: '22222222-2222-4222-8222-222222222222', hash: 'a'.repeat(64), expectedVersion: 'b'.repeat(64), state: 'submitted', submittedAt: '2026-09-03T00:00:00Z', warnings: [], validationFlags: [],
   fields: [{ name: 'title', current: 'Old title', proposed: '<script>Participant text</script>', changed: true }],
-  files: [{ role: 'poster_pdf', position: null, fileName: 'poster.pdf', bytes: 100, hash: 'c'.repeat(64), altText: null, url: 'https://example.test/private/signed-pdf' }],
-  currentMedia: [{ role: 'snapshot_image', position: 2, fileName: 'omitted.png', hash: 'd'.repeat(64), altText: 'Original description' }],
+  files: [{ role: 'poster_pdf', position: null, fileName: 'poster.pdf', bytes: 100, hash: 'c'.repeat(64), altText: null, contentKind: null, fullText: null, url: 'https://example.test/private/signed-pdf' }],
+  currentMedia: [{ role: 'snapshot_image', position: 2, fileName: 'omitted.png', hash: 'd'.repeat(64), altText: 'Original description', contentKind: null, fullText: null }],
 };
 beforeEach(() => { refresh.mockReset(); vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } }))); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });

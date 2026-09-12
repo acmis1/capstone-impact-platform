@@ -9,6 +9,28 @@ import {
 } from '../deployment/hostedDeploymentReadiness';
 import { EXPECTED_MIGRATION_FILENAMES } from '../scripts/onboardingCheck';
 
+import { parseGitBatchObjects, readGitMigrationObjects } from '../test-support/gitBatchParser';
+
+function normalizeMigrationContent(content: Buffer): string {
+  return content.toString('utf8').replace(/\r\n/g, '\n');
+}
+
+describe('Git batch migration object reader', () => {
+  const syntheticBlobId = '0'.repeat(40);
+
+  it('fails closed for a missing batch object', () => {
+    expect(() => parseGitBatchObjects(Buffer.from('missing-ref missing\n'), 1))
+      .toThrow('GIT_BATCH_OBJECT_MISSING');
+  });
+
+  it.each([
+    ['a malformed header', Buffer.from('not-a-git-batch-header\n')],
+    ['a truncated body', Buffer.from(`${syntheticBlobId} blob 3\nab\n`)],
+  ])('fails closed for %s', (_description, output) => {
+    expect(() => parseGitBatchObjects(output, 1)).toThrow(/GIT_BATCH_MALFORMED/);
+  });
+});
+
 /**
  * Migration 0048 exists only to keep one reviewed privilege contract identical across PostgreSQL
  * engine versions. These tests hold it to that narrow purpose: exactly one privilege, exactly one
@@ -89,13 +111,17 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
     expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
     expect(files).toHaveLength(EXPECTED_REPOSITORY_MIGRATION_COUNT);
-    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(53);
-    expect(files.at(-1)).toBe('20260909120000_staff_lifecycle_readiness.sql');
-    expect(files.at(-2)).toBe('20260906120000_public_removal_completion_reconciliation.sql');
-    expect(files.at(-4)).toBe('20260903120000_participant_preview_controlled_links.sql');
-    expect(files.at(-5)).toBe('20260902010606_controlled_project_links_import.sql');
-    expect(files.at(-6)).toBe(filename);
-    expect(files.at(-7)).toBe('20260828170000_assistive_execution_control.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(57);
+    expect(files.at(-1)).toBe('20260911120000_gallery_full_text_equivalents.sql');
+    expect(files.at(-2)).toBe('20260910120200_assistive_worker_production_identity.sql');
+    expect(files.at(-3)).toBe('20260910120100_participant_preview_access_observations.sql');
+    expect(files.at(-4)).toBe('20260910120000_public_feed_rollback_capability.sql');
+    expect(files.at(-5)).toBe('20260909120000_staff_lifecycle_readiness.sql');
+    expect(files.at(-6)).toBe('20260906120000_public_removal_completion_reconciliation.sql');
+    expect(files.at(-8)).toBe('20260903120000_participant_preview_controlled_links.sql');
+    expect(files.at(-9)).toBe('20260902010606_controlled_project_links_import.sql');
+    expect(files.at(-10)).toBe(filename);
+    expect(files.at(-11)).toBe('20260828170000_assistive_execution_control.sql');
 
     // Forward-only: every migration that existed immediately before 0048 was introduced remains
     // present in the same ordered prefix. This works before and after merge and catches deletion,
@@ -115,18 +141,32 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
       '20260903130000_participant_owned_corrections.sql',
       '20260906120000_public_removal_completion_reconciliation.sql',
       '20260909120000_staff_lifecycle_readiness.sql',
+      '20260910120000_public_feed_rollback_capability.sql',
+      '20260910120100_participant_preview_access_observations.sql',
+      '20260910120200_assistive_worker_production_identity.sql',
+      '20260911120000_gallery_full_text_equivalents.sql',
     ]);
   });
 
   it('leaves every migration through 0048 byte-identical to its introduction baseline', () => {
     const baseline = migrationIntroductionBaseline();
+    const historicalReferences = baseline.files.map((historical) =>
+      `${baseline.parentCommit}:infra/supabase/migrations/${historical}`);
+    const introducedReferences = baseline.introducedFiles.map((introduced) =>
+      `${baseline.introductionCommit}:infra/supabase/migrations/${introduced}`);
+    const grantingReferences = GRANTING_MIGRATIONS.map((historical) =>
+      `${baseline.parentCommit}:infra/supabase/migrations/${historical}`);
+    const committedObjects = readGitMigrationObjects(root, [
+      ...historicalReferences,
+      ...introducedReferences,
+      ...grantingReferences,
+    ]);
+    let objectIndex = 0;
+    const nextCommitted = (): string => normalizeMigrationContent(committedObjects[objectIndex++]);
 
     for (const historical of baseline.files) {
       const repositoryPath = `infra/supabase/migrations/${historical}`;
-      const committed = execFileSync('git', ['show', `${baseline.parentCommit}:${repositoryPath}`], {
-        cwd: root,
-        encoding: 'utf8',
-      }).replace(/\r\n/g, '\n');
+      const committed = nextCommitted();
       expect(fs.readFileSync(path.join(root, repositoryPath), 'utf8').replace(/\r\n/g, '\n')).toBe(committed);
     }
 
@@ -134,10 +174,7 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     // bytes to the introduction commit so a future PR cannot mutate 0047 or 0048 in place.
     for (const introduced of baseline.introducedFiles) {
       const repositoryPath = `infra/supabase/migrations/${introduced}`;
-      const committed = execFileSync('git', ['show', `${baseline.introductionCommit}:${repositoryPath}`], {
-        cwd: root,
-        encoding: 'utf8',
-      }).replace(/\r\n/g, '\n');
+      const committed = nextCommitted();
       expect(fs.readFileSync(path.join(root, repositoryPath), 'utf8').replace(/\r\n/g, '\n')).toBe(committed);
     }
 
@@ -146,13 +183,11 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     for (const historical of GRANTING_MIGRATIONS) {
       expect(baseline.files).toContain(historical);
       const repositoryPath = `infra/supabase/migrations/${historical}`;
-      const committed = execFileSync('git', ['show', `${baseline.parentCommit}:${repositoryPath}`], {
-        cwd: root,
-        encoding: 'utf8',
-      }).replace(/\r\n/g, '\n');
+      const committed = nextCommitted();
       expect(fs.readFileSync(path.join(root, repositoryPath), 'utf8').replace(/\r\n/g, '\n')).toBe(committed);
       expect(committed).toMatch(/GRANT ALL ON public\.[a-z_]+ TO service_role;/);
     }
+    expect(objectIndex).toBe(committedObjects.length);
   });
 
   it('guards the MAINTAIN statement behind a deterministic server-version branch', () => {
@@ -236,18 +271,20 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
   });
 
   it('keeps the exact migration manifest, count and latest-migration contracts in step', () => {
-    expect(EXPECTED_MIGRATION_FILENAMES).toHaveLength(53);
-    expect(EXPECTED_MIGRATION_FILENAMES.at(-1)).toBe('20260909120000_staff_lifecycle_readiness.sql');
-    expect(EXPECTED_MIGRATION_FILENAMES.at(-5)).toBe('20260902010606_controlled_project_links_import.sql');
-    expect(EXPECTED_MIGRATION_FILENAMES.at(-6)).toBe(filename);
-    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-1)).toBe('20260909120000_staff_lifecycle_readiness.sql');
-    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-5)).toBe('20260902010606_controlled_project_links_import.sql');
-    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-6)).toBe(filename);
+    expect(EXPECTED_MIGRATION_FILENAMES).toHaveLength(57);
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-1)).toBe('20260911120000_gallery_full_text_equivalents.sql');
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-2)).toBe('20260910120200_assistive_worker_production_identity.sql');
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-9)).toBe('20260902010606_controlled_project_links_import.sql');
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-10)).toBe(filename);
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-1)).toBe('20260911120000_gallery_full_text_equivalents.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-2)).toBe('20260910120200_assistive_worker_production_identity.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-9)).toBe('20260902010606_controlled_project_links_import.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-10)).toBe(filename);
     expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(EXPECTED_REPOSITORY_MIGRATIONS.length);
 
     const ci = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
     expect(ci).toContain(
-      "test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 53",
+      "test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 57",
     );
   });
 

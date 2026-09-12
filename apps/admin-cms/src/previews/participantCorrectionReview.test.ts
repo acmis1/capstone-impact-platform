@@ -11,7 +11,7 @@ beforeEach(async () => { candidate = await parseParticipantCorrectionPackage(awa
 function boundary(state = 'frozen') {
   const stored = { id, project_id: '33333333-3333-4333-8333-333333333333', correction_request_id: '44444444-4444-4444-8444-444444444444', participant_preview_id: '55555555-5555-4555-8555-555555555555',
     source: 'participant_capability', base_version: null, validation_checks: candidate.validationChecks, package_hash: candidate.hash, metadata: candidate.metadata, warnings: candidate.warnings, state, frozen_at: '2026-09-03T00:00:00Z', submitted_at: '2026-09-03T00:00:00Z', frozen_version: version,
-    storage_bucket: 'participant-corrections-private', files: candidate.files.map(({ role, position, fileName, mimeType, bytes, sha256, altText }) => ({ role, position, fileName, mimeType, bytes, sha256, altText, storageName: `${role}${position === null ? '' : `-${position}`}.${fileName.split('.').at(-1)}` })) };
+    storage_bucket: 'participant-corrections-private', files: candidate.files.map(({ role, position, fileName, mimeType, bytes, sha256, altText, contentKind, fullText }) => ({ role, position, fileName, mimeType, bytes, sha256, altText, contentKind, fullText, storageName: `${role}${position === null ? '' : `-${position}`}.${fileName.split('.').at(-1)}` })) };
   const upload = vi.fn().mockResolvedValue({ error: null });
   const remove = vi.fn();
   const download = vi.fn(async (path: string) => {

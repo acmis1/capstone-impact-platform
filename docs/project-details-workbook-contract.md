@@ -75,6 +75,8 @@ Header matching is case-insensitive, order-independent, trims surrounding whites
 | `Snapshot 8 alt text` | `snapshot8AltText` | Conditional — required when gallery position 8 exists | `snapshot 8 alt text`, `snapshot8 alt text`, `snapshot8alttext` |
 | `Snapshot 9 alt text` | `snapshot9AltText` | Conditional — required when gallery position 9 exists | `snapshot 9 alt text`, `snapshot9 alt text`, `snapshot9alttext` |
 | `Snapshot 10 alt text` | `snapshot10AltText` | Conditional — required when gallery position 10 exists | `snapshot 10 alt text`, `snapshot10 alt text`, `snapshot10alttext` |
+| `Snapshot 1 content type` through `Snapshot 10 content type` | `snapshot1ContentKind` through `snapshot10ContentKind` | Conditional — required when that gallery position exists | Numeric-position aliases defined by the executable workbook contract |
+| `Snapshot 1 full text` through `Snapshot 10 full text` | `snapshot1FullText` through `snapshot10FullText` | Conditional — required when that position is classified `Text-bearing image`; blank for `Ordinary image` | Numeric-position aliases defined by the executable workbook contract |
 
 ### Participant Contact Email
 
@@ -125,16 +127,16 @@ must carry a full text version of its image content plus a text alternative for 
 - Each value is bounded by a transport/storage safety ceiling — 20,000 characters for `posterText`
   and 2,000 for `accessibilityText` — enforced as `WORKBOOK_VALUE_TOO_LONG`. These are size limits,
   **not** content-quality rules.
-- Nothing judges whether the prose is complete, accurate, or well written. There is no word count,
-  no keyword check, no comparison against the title, and no OCR or AI. Both values are authored by
-  staff or supplied in the workbook.
+- Workbook parsing does not author or rewrite these values. They are project-team-authored package
+  content. The separate assistive pipeline may produce non-authoritative OCR, title, formatting,
+  language, and duplicate-review evidence, but it cannot silently replace accepted content.
 - A legacy `project.json` package may still be staged without either value, but it cannot be
-  submitted for review, approved, or published until staff supply both through the Project Metadata
-  editor in the Admin/CMS.
+  submitted for review, approved, or published until the project team supplies a complete corrected
+  package and staff review and explicitly accept that exact replacement.
 
 ### Snapshot Gallery Alt Text
 
-Snapshot gallery images are optional, but every included gallery image must have its own authoritative staff-authored text alternative.
+Snapshot gallery images are optional, but every included gallery image must have its own authoritative project-team-authored text alternative.
 
 - Gallery positions are numeric and bounded from **1 through 10**.
 - `snapshot-1` uses the backwards-compatible `Snapshot image alt text` workbook column.
@@ -144,9 +146,10 @@ Snapshot gallery images are optional, but every included gallery image must have
 - Gallery order is authoritative numeric position order, not filesystem selection order or workbook column order.
 - Positions do not need to be contiguous; the numeric position remains the authoritative identity and ordering value.
 - Every alt value must be non-blank after trim and is bounded at 2,000 characters. Oversized values are rejected rather than truncated.
+- Every included image declares `Ordinary image` or `Text-bearing image`. A text-bearing image requires a non-blank full textual equivalent of at most 20,000 characters; an ordinary image must not provide one.
 - Package-aware validation binds each image to the alt text for that exact gallery position. Alt text from another position is never used as a fallback.
 - The authoritative value is stored per media asset on `media_assets.alt_text_public`; gallery position is stored separately on the same media identity.
-- Nothing derives alt text from filenames, project titles, poster text, OCR, or AI.
+- Accepted alt/full text is never silently derived from filenames, project titles, poster text, OCR, or AI. Assistive output remains non-authoritative review evidence.
 - The browser preview, server revalidation, staging intent, participant preview, publication readiness, and public feed preserve the same gallery identity, numeric ordering, and per-image alt text.
 - A missing, malformed, unmatched, duplicated, or oversized gallery alt blocks the workflow at the applicable validation/readiness boundary.
 - A legacy `project.json` package remains a developer/testing fallback, but it cannot bypass the authoritative gallery accessibility and readiness gates.

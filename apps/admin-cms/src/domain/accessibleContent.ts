@@ -5,9 +5,9 @@
  * poster. `accessibilityText` is the concise descriptive text alternative/context for the poster
  * image. The two serve different purposes and are deliberately never required to match.
  *
- * These values are staff-authored or imported from the project workbook. Nothing in this codebase
- * generates them — no OCR, no AI, no derivation from other fields. Future OCR assistance may only
- * ever populate a draft suggestion for staff to accept; it must never become publication authority.
+ * These values are project-team-authored and imported from an accepted project package. Assistive OCR
+ * and language checks may produce non-authoritative review evidence, but they never generate or
+ * silently replace these accepted values and can never become publication authority.
  */
 
 /**
@@ -28,6 +28,14 @@ export const ACCESSIBLE_CONTENT_LIMITS = {
    * than a transcription and shares the same ceiling.
    */
   snapshotAltText: 2_000,
+  /**
+   * Full textual equivalent of one text-bearing snapshot image (a screenshot, slide, diagram,
+   * chart or infographic). A gallery image is screen-sized rather than poster-sized, so it
+   * transcribes well under this ceiling; ten of them must also fit, together with the poster text,
+   * inside the bounded participant-correction metadata document. Never a content-quality rule.
+   * Mirrored by the `media_assets` check constraint in Migration 0057.
+   */
+  snapshotFullText: 5_000,
 } as const;
 
 export type AccessibleContentField = keyof typeof ACCESSIBLE_CONTENT_LIMITS;
@@ -37,6 +45,7 @@ export const ACCESSIBLE_CONTENT_LABELS: Record<AccessibleContentField, string> =
   posterText: 'Poster full text',
   accessibilityText: 'Accessibility text',
   snapshotAltText: 'Snapshot image alt text',
+  snapshotFullText: 'Snapshot image full text',
 };
 
 /**
