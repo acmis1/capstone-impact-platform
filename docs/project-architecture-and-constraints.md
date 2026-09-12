@@ -24,23 +24,37 @@ The platform is designed to support at least **100 projects per year** and remai
 ---
 
 ## 4. Data and Publication Flow
-The overall data lifecycle is structured as follows:
+The overall data lifecycle is structured as follows. Standard package and standardized form intake converge into the same canonical workflow:
 
 ```
-Standard Project Package / Excel
-   └── Ingestion & Parsing
-   └── Rules-First Deterministic Validation
-   └── Assistive OCR and AI Metadata Extraction
-   └── Admin Excel Cross-Check & Review (CMS Dashboard)
-   └── Generate Participant Preview & Send Preview Email
-   └── Email Reminder Scheduling
-   └── Participant Confirmation / Correction Request (Participant Preview)
-   └── Human Administrative Review & Approval (Staging status update)
-   └── Compilation (Administrative data stripped)
-   └── Approved-Only Public Feed JSON Publish
-   └── Duda Client-side Listing & Detail Rendering
+Standard Project Package / Excel ─┐
+                                  ├── Ingestion / Canonical Server Parsing
+Standardized Form (single project) ┘
+   └── Deterministic Rules-First Validation
+   └── Assistive Validation Findings (OCR/AI; non-authoritative)
+   └── Admin Excel Reconciliation (where applicable)
+   └── Metadata Staging → Private Media Staging
+   └── Submit for Review
+   └── HUMAN STAFF REVIEW
+   └── APPROVAL
+   └── Generate Participant Preview of the Approved Version
+   └── Send Preview Link / Reminder Handling
+   └── Participant Confirmation
+          └── Correction Request
+                 └── Complete corrected package supplied by project team/participant
+                        └── Authorized staff compares and accepts the exact correction
+                               └── Review / Reapproval
+                                      └── Issue a NEW preview of that exact version
+                                             └── Participant confirmation
+   └── Only the current confirmed approved version proceeds to:
+       └── Publication Preparation
+       └── Controlled Publication
+       └── Approved-Only Public Feed
+       └── Duda Client-side Listing & Detail Rendering
    └── Post-Publishing: Archive / Unpublish / Failure Recovery
 ```
+
+The correction path loops back through review and approval. Participant-owned content is never silently rewritten, and an old confirmation does not survive an authoritative content change.
 
 ---
 
