@@ -49,7 +49,7 @@ These files live **outside Git** at `D:\IT RMIT\Capstone\Capstone Impact Project
 | File | Date / scope | What it records |
 | :--- | :--- | :--- |
 | `website_audit.md` | 2026-04-09, live `rmitvn-showcase.com/vi` | Navigation structure, page types, usability/accessibility observations, inferred maintenance workflow |
-| `duda_pages_cms_audit.md` | Duda editor, page tree and CMS collections | Page tree, SSET hidden-subpage model, `Student Project` collection at 10/10 |
+| `duda_pages_cms_audit.md` | Duda editor, page tree and CMS collections | Page tree, SSET hidden-subpage model, legacy project collection at 10/10 |
 | `duda_backend_audit.md` | Duda editor backend | 70+ project-specific entities (popups and hidden subpages), Filestack media manager, empty form-responses dashboard, site-audit findings |
 | `duda_workflow_ops_audit.md` | Duda editor operations | Meta-tag and alt-text site-audit issues, native EN/VI multi-language with manual content sync |
 | `duda_sset_constraints_findings.md` | SSET operational constraints | Manual page creation, manual linking matrix, EN/VI double maintenance, intake gap |
@@ -145,7 +145,7 @@ Not supported, and not claimed: "total screen-reader failure", specific alt-text
 
 Observed (`duda_pages_cms_audit.md`, `duda_backend_audit.md`, `duda_scalability_final_report.md`), all against the inspected test environment `testwww-rmitvn-showcase-comsset` (site `c5bc8c6b`, April 2026):
 
-- The internal `Student Project` collection showed **10/10** items.
+- The inspected internal project collection showed **10/10** items.
 - The "External Collection" option (Google Sheets / Airtable) was **missing** from the "Add Collection" menu in that environment.
 - The "Project Page" dynamic template existed but was bound to the 10-item internal collection.
 - The Form Responses dashboard was empty; no automated intake existed.
@@ -184,7 +184,7 @@ Two tiers, joined by one published JSON file. All statements below are from repo
 
 **Tier 1 — School-owned Admin/CMS** (`apps/admin-cms/`, Next.js `16.3.4`, React `19.2.4`, Supabase Postgres/Auth/Storage):
 
-- Provisioned **staff roles** only: `admin`, `reviewer`, `editor` (`apps/admin-cms/src/auth/authTypes.ts`). There is no student portal, supervisor portal, or program-admin portal, and no single-sign-on path for participants.
+- Provisioned **staff roles** only: `admin`, `reviewer`, `editor` (`apps/admin-cms/src/auth/authTypes.ts`). There is no participant portal, supervisor portal, or program-admin portal, and no single-sign-on path for participants.
 - Participant / project-team content enters through **package, form, and correction workflows** (`docs/participant-owned-corrections-handoff.md`, `docs/project-details-workbook-contract.md`). Participants receive **secure participant previews**; they are not Admin/CMS roles.
 - Review is the existing reviewer workflow (approve / request changes / archive) operated by staff (`docs/admin-operator-guide.md`). There is no supervisor-approval or dean-approval stage in the source.
 - **OCR / AI-assisted validation is assistive and non-authoritative.** It produces findings for staff; it does not author published content. The project team / participant authors the final public text, including the full text of text-bearing gallery images; the accepted source or correction package remains the publication authority.
@@ -271,7 +271,7 @@ Each recommendation carries one of four statuses:
 | R-12 | Render bounded, non-technical error and empty states rather than a blank page when the feed is missing, malformed, or empty. | IMPLEMENTED AND LOCALLY TESTED ("renders a bounded unavailable state", "empty feed renders a bounded empty state") |
 | R-13 | Tolerate a partially bad feed: drop only structurally unusable records and unsafe optional links, keep the rest visible. | IMPLEMENTED AND LOCALLY TESTED (mixed-feed-availability and unsafe-record scenarios) |
 | R-14 | Open external links safely (`target="_blank"` with `rel="noopener noreferrer"`), and reject non-`https`/unsafe URL schemes before rendering. | IMPLEMENTED AND LOCALLY TESTED (URL validator: 2 accepted / 16 rejected; link checks) |
-| R-15 | Human usability testing with the School's actual audiences (industry partners, prospective students, staff). | RECOMMENDED / INSTITUTIONAL — not performed |
+| R-15 | Human usability testing with the School's actual audiences (industry partners, prospective applicants, staff). | RECOMMENDED / INSTITUTIONAL — not performed |
 
 ### 6.4 Accessibility
 
@@ -441,7 +441,7 @@ Remaining items, by category:
 - **Single identical 100+ integrated cohort proof**: one cohort of 100+ records passing intake → review → publication → public rendering on the same head.
 - **GitHub / CI**: PR, external review, CI on the integrated branch.
 - **Hosted staging**: inject the public layer into a staging Duda site; verify theme interaction (R-27), detail URL behaviour (R-2), and feed fetch from hosted Storage.
-- **Real SMTP / student UAT**: preview links and confirmation workflow with real mail delivery.
+- **Real SMTP / participant UAT**: preview links and confirmation workflow with real mail delivery.
 - **Accessibility UAT**: R-19 – R-21 (keyboard, zoom, native screen readers, formal assessment).
 - **Institutional inputs**: brand tokens (R-7), facet vocabulary ratification, decisions on R-4/R-5 and R-28, designation of staff roles.
 - **Authorized live Impact deployment**: only after the above, by the School's decision.
@@ -449,7 +449,7 @@ Remaining items, by category:
 ### 12.1 Non-claims
 
 1. No live Duda deployment or publishing has occurred.
-2. No student / staff UAT has occurred for the public layer.
+2. No participant / staff UAT has occurred for the public layer.
 3. No taxonomy has been ratified by the School.
 4. No accessibility conformance or certification is claimed.
 5. No performance metrics are claimed.
