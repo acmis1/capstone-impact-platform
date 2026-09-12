@@ -433,7 +433,7 @@ To prevent misreading of the "full text of image content" requirement:
 
 ## 12. Remaining work and human / institutional decisions
 
-MG-01 is a design and reporting artifact. At `d6cd337` the repository already contains accepted local implementation for MG-02 (standardised form intake), MG-03 (named/future-program operability), MG-04 (Admin four-facet filtering), and MG-05 (gallery full-text equivalents). MG-06/07 exist on a separate, not-yet-integrated documentation branch. No further milestone roadmap is defined by this document.
+MG-01 is a design and reporting artifact. The current locally integrated candidate includes the accepted local implementation for MG-02 (standardised form intake), MG-03 (named/future-program operability), MG-04 (Admin four-facet filtering), MG-05 (gallery full-text equivalents), and the MG-06/07 documentation and dual-efficiency-measurement corrections. No further milestone roadmap is defined by this document.
 
 Remaining items, by category:
 
