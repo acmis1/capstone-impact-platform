@@ -370,7 +370,9 @@ function harnessDriver() {
     check(document.body.textContent.includes(accessibilityText), 'concise accessibility text remains user-visible');
     check(disclosure?.querySelector('.poster-text-content')?.textContent !== accessibilityText, 'full poster text remains separate from concise accessibility text');
     const expectedAlts = new Map(expected.snapshotMedia.map((media) => [new URL(media.url).pathname, media.altText]));
-    const snapshotImages = Array.from(document.querySelectorAll('img[src*="/snapshots/"]'));
+    const snapshotImages = Array.from(document.querySelectorAll(
+      window.__CAPSTONE_LV01_EXACT_FEED ? '.snapshot-card img' : 'img[src*="/snapshots/"]',
+    ));
     check(snapshotImages.length > 0, 'detail renders governed snapshot media');
     check(snapshotImages.every((image) => expectedAlts.get(new URL(image.src).pathname) === image.alt), 'governed snapshot alt text is exact for every rendered image');
     check(snapshotImages.every((image) => !/^Snapshot \d+$/i.test(image.alt)), 'snapshot alternatives are not generic numbered text');
