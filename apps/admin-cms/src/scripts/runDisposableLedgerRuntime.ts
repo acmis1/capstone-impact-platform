@@ -507,6 +507,7 @@ async function main(): Promise<void> {
           ON CONFLICT DO NOTHING;`);
       }
       const runtime = spawnSync(process.execPath, [
+        ...(name === 'integrated-cohort' ? ['--conditions=react-server'] : []),
         path.join(repositoryRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
         path.join(__dirname, script.file),
       ], {
