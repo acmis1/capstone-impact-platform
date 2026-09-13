@@ -431,6 +431,8 @@ jobs:
 
       - name: Verify assistive worker heartbeat runtime behavior
         run: npm run verify:assistive-worker-heartbeat-runtime --workspace=apps/admin-cms
+        env:
+          CAPSTONE_LEDGER_RUNTIME_PORT_BASE: '55220'
 
       - name: Verify bulk project review workflow runtime behavior
         run: npm run verify:bulk-project-review-runtime --workspace=apps/admin-cms
