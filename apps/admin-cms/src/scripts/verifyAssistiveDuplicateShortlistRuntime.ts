@@ -598,14 +598,16 @@ async function main(): Promise<void> {
      * characters. U+001F, U+0001 and U+007F are all storable PostgreSQL text (unlike NUL, which the
      * text type itself refuses), so this is reachable legacy data rather than a hypothetical.
      */
-    const controlTitle = 'Synthetic Control\u001FCandidate';
-    const controlSummary = 'Legacy prose with\u0001an unexpected control and\u007Fa delete marker.';
+    const controlTitle = 'Synthetic Phase\u001F6B Project';
+    const controlSummary = 'Disposable local duplicate\u0001shortlist fixture.\u007F';
     let controlRunId = '';
     let candidateProseBefore = '';
 
     await scenario(19, 'a candidate control character cannot fail the whole assistive run', async () => {
       const hostile = await service.from('projects').update({
         title: controlTitle, summary: controlSummary,
+        background: 'The fixture exists only for loopback verification.',
+        solution: 'The verifier checks bounded lexical evidence.',
       }).eq('id', candidateProjectIds[0]);
       assert.ifError(hostile.error);
       candidateProseBefore = psql(`SELECT to_jsonb(p)::text FROM public.projects p WHERE p.id = '${candidateProjectIds[0]}'::uuid;`);
@@ -655,10 +657,10 @@ async function main(): Promise<void> {
         (item) => item.publicId === `2026-${prefix}-candidate`,
       );
       assert(hostileCandidate, 'The hostile candidate is missing from the shortlist.');
-      assert.equal(hostileCandidate.title, 'Synthetic Control�Candidate');
+      assert.equal(hostileCandidate.title, 'Synthetic Phase�6B Project');
       assert.equal(
         hostileCandidate.summaryExcerpt,
-        'Legacy prose with�an unexpected control and�a delete marker.',
+        'Disposable local duplicate�shortlist fixture.�',
       );
       assert.equal(PROHIBITED_CONTROLS.test(JSON.stringify(raw)), false, 'Inspection returned a raw prohibited control.');
       assert.equal(PROHIBITED_CONTROLS.test(psql(`SELECT evidence::text FROM public.assistive_validation_findings WHERE run_id = '${controlRunId}'::uuid AND check_type = 'DUPLICATE_SHORTLIST';`)), false);
