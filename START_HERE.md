@@ -230,7 +230,7 @@ npm run verify:all
    - Create a new 14-digit timestamped file: `infra/supabase/migrations/YYYYMMDDHHMMSS_description.sql`.
    - Replay locally using `npm run supabase:reset`.
    - Add static contract tests in `apps/admin-cms/src/security/`.
-3. **Local/Repo Scope**: Local reset replays all 57 migrations. The latest accepted hosted staging evidence remains a separate 52-migration observation; applying Migrations `0053`–`0057` requires separately authorized hosted reconciliation.
+3. **Local/Repo Scope**: Local reset replays all 57 migrations. Current hosted staging evidence records all 57 migrations through `20260911120000_gallery_full_text_equivalents`; earlier 52-migration evidence remains historical.
 
 ---
 
@@ -296,7 +296,7 @@ Do not select broad roadmap topics directly from `docs/implementation-backlog.md
 - ❌ **DO NOT** hardcode or commit API keys, secrets, credentials, passwords, or connection strings.
 - ❌ **DO NOT** use real participant, staff, or supervisor personal identity data (use synthetic data only).
 - ❌ **DO NOT** modify, delete, or redirect current checks to historical `Prototype/` material; maintain the Duda presentation layer under `apps/public-layer/`.
-- ❌ **DO NOT** edit, rename, or delete any of the 57 existing migration files through current repository candidate `0057`; migrations are append-only after merge. The latest hosted evidence remains at `0052` until candidates `0053`–`0057` are separately verified there.
+- ❌ **DO NOT** edit, rename, or delete any of the 57 existing migration files through current repository `0057`; migrations are append-only after merge. Current hosted staging has separately verified `0053`–`0057`; this does not authorize routine hosted mutation.
 - ❌ **DO NOT** self-merge Pull Requests without maintainer sign-off.
 
 ---
