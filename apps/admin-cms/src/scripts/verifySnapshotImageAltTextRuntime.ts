@@ -153,6 +153,7 @@ const snapshotFile: ImportPackageFileMetadata = { fileName: 'snapshot-1.png', fi
 function packageFrom(
   snapshotAltText: string | undefined,
   snapshotPresent: boolean,
+  contentKind?: 'ordinary' | 'text_bearing',
 ): ImportPackageParseResult<ImportPackageFileMetadata> {
   const snapshot1 = snapshotPresent ? snapshotFile : null;
   return {
@@ -174,6 +175,9 @@ function packageFrom(
       teamMembers: ['A'],
       layoutConfig: { templateId: 'poster_showcase' },
       ...(snapshotAltText === undefined ? {} : { snapshotAltText }),
+      ...(contentKind && snapshotPresent && snapshotAltText !== undefined
+        ? { galleryAltTexts: [{ position: 1, altText: snapshotAltText, contentKind, fullText: null }] }
+        : {}),
     },
     posterImage,
     posterPdf,
@@ -277,7 +281,9 @@ function seedProject(
       storage_path,
       is_public_approved,
       public_url,
-      alt_text_public
+      alt_text_public,
+      image_content_kind,
+      full_text_public
     )
     SELECT
       id,
@@ -290,7 +296,9 @@ function seedProject(
       ${sqlText(`drafts/${publicId}/snapshot_image/snapshot-1.png`)},
       false,
       NULL,
-      ${sqlText(snapshotAlt)}
+      ${sqlText(snapshotAlt)},
+      'ordinary',
+      NULL
     FROM public.projects
     WHERE public_id = ${sqlText(publicId)};` : ''}
   `);
@@ -319,7 +327,9 @@ function addSnapshotMedia(
       storage_path,
       is_public_approved,
       public_url,
-      alt_text_public
+      alt_text_public,
+      image_content_kind,
+      full_text_public
     )
     SELECT
       id,
@@ -332,7 +342,9 @@ function addSnapshotMedia(
       ${sqlText(`drafts/${publicId}/snapshot_image/${fileName}`)},
       false,
       NULL,
-      ${sqlText(altText)}
+      ${sqlText(altText)},
+      'ordinary',
+      NULL
     FROM public.projects
     WHERE public_id = ${sqlText(publicId)};
   `);
@@ -518,7 +530,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
     });
 
     await scenario(14, 'A snapshot-present standard package with valid alt text is valid', () => {
-      const result = validateImportPackage(packageFrom(SNAPSHOT_ALT, true), { metadataSource: 'xlsx' });
+      const result = validateImportPackage(packageFrom(SNAPSHOT_ALT, true, 'ordinary'), { metadataSource: 'xlsx' });
       assert(result.valid, `A compliant package was rejected: ${JSON.stringify(result.errors)}`);
     });
 
@@ -793,7 +805,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
         mediaAssets: [
           { assetType: 'poster_image', isPublicApproved: false, publicUrl: null, altText: null },
           { assetType: 'poster_pdf', isPublicApproved: false, publicUrl: null, altText: null },
-          { assetType: 'snapshot_image', isPublicApproved: false, publicUrl: null, altText: SNAPSHOT_ALT },
+          { assetType: 'snapshot_image', isPublicApproved: false, publicUrl: null, altText: SNAPSHOT_ALT, imageContentKind: 'ordinary', fullTextPublic: null },
         ],
       });
       assert(withAlt.ready, `A described snapshot blocked readiness: ${withAlt.blockingReasons.join('; ')}`);
@@ -806,7 +818,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
         mediaAssets: [
           { assetType: 'poster_image', isPublicApproved: false, publicUrl: null, altText: null },
           { assetType: 'poster_pdf', isPublicApproved: false, publicUrl: null, altText: null },
-          { assetType: 'snapshot_image', isPublicApproved: false, publicUrl: null, altText: null },
+          { assetType: 'snapshot_image', isPublicApproved: false, publicUrl: null, altText: null, imageContentKind: 'ordinary', fullTextPublic: null },
         ],
       });
       assert(!withoutAlt.ready, 'An undescribed snapshot passed application readiness.');
@@ -1076,7 +1088,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(data?.ready === false, 'An undescribed snapshot was publication-ready.');
       assert(data?.resultCode === 'ACCESSIBILITY_CONTENT_REQUIRED', `Expected ACCESSIBILITY_CONTENT_REQUIRED, got ${JSON.stringify(data)}`);
       assert(
-        JSON.stringify(data?.blockers ?? []).includes('Snapshot image alt text is missing'),
+        JSON.stringify(data?.blockers ?? []).includes('Snapshot image 1 alt text is missing'),
         `Expected the snapshot-alt blocker, got ${JSON.stringify(data?.blockers)}`,
       );
     });
