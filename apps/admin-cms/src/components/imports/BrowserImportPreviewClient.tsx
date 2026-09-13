@@ -4,6 +4,7 @@ import React, { useEffect, useId, useState, useRef } from 'react';
 import Link from 'next/link';
 import {
   FolderOpen,
+  FileText,
   Search,
   RotateCcw,
   CheckCircle2,
@@ -18,6 +19,8 @@ import {
   CheckSquare,
   ShieldCheck,
 } from 'lucide-react';
+import { ProjectIntakeForm } from './ProjectIntakeForm';
+import type { MaterializedPackageFiles } from '../../import/formIntakeMaterializerClient';
 import { generateUploadKey, isIgnoredSystemFile, normalizeRelativePath } from '../../import/browserSelection';
 import {
   BrowserImportPreviewBatch,
@@ -67,6 +70,7 @@ export default function BrowserImportPreviewClient() {
   const [selectedRootName, setSelectedRootName] = useState<string | null>(null);
   const [declaredTotalBytes, setDeclaredTotalBytes] = useState(0);
   const [detectedPackageCount, setDetectedPackageCount] = useState(0);
+  const [intakeMode, setIntakeMode] = useState<'package' | 'form'>('package');
 
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -244,8 +248,16 @@ export default function BrowserImportPreviewClient() {
     setDetectedPackageCount(calculatedPackagePaths.size);
   };
 
-  const handleRequestPreview = async () => {
-    if (selectedFiles.length === 0 || !selectedRootName || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
+  const handleRequestPreview = async (
+    filesParam?: File[],
+    rootNameParam?: string,
+    detectedCountParam?: number
+  ) => {
+    const filesToUse = filesParam || selectedFiles;
+    const rootNameToUse = rootNameParam || selectedRootName;
+    const packageCount = detectedCountParam !== undefined ? detectedCountParam : detectedPackageCount;
+
+    if (filesToUse.length === 0 || !rootNameToUse || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
     const origin = document.activeElement;
 
     setIsLoading(true);
@@ -262,10 +274,10 @@ export default function BrowserImportPreviewClient() {
     updateSelectionState(resetSelectionState());
 
     try {
-      if (detectedPackageCount > 25) {
+      if (packageCount > 25) {
         const annualResult = await runAnnualIntakePreview({
-          selectedFiles,
-          selectedRootName,
+          selectedFiles: filesToUse,
+          selectedRootName: rootNameToUse,
           adminReferenceFile: adminReferenceData?.referenceFile,
           adminReferenceMappingConfig: adminReferenceData?.mappingConfig,
           onProgress: ({ completedChunks, totalChunks }) => setAnnualPreviewProgress({ completedChunks, totalChunks }),
@@ -309,7 +321,7 @@ export default function BrowserImportPreviewClient() {
       let totalBytes = 0;
       let ignoredCount = 0;
 
-      for (const file of selectedFiles) {
+      for (const file of filesToUse) {
         const relPath = file.webkitRelativePath || file.name;
         const norm = normalizeRelativePath(relPath);
 
@@ -332,7 +344,7 @@ export default function BrowserImportPreviewClient() {
       }
 
       const manifest: SelectionManifest = {
-        selectedRootName,
+        selectedRootName: rootNameToUse,
         fileCount: descriptors.length,
         declaredTotalBytes: totalBytes,
         ignoredSystemFilesCount: ignoredCount,
@@ -429,6 +441,20 @@ export default function BrowserImportPreviewClient() {
     setManifestCache(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setFocusRequest({ origin: document.activeElement, action: 'folder' });
+  };
+
+  const handleFormPackageReady = async (pkg: MaterializedPackageFiles) => {
+    setSelectedFiles(pkg.files);
+    setSelectedRootName(pkg.selectedRootName);
+    setDeclaredTotalBytes(pkg.totalBytes);
+    setDetectedPackageCount(1);
+    await handleRequestPreview(pkg.files, pkg.selectedRootName, 1);
+  };
+
+  const handleSwitchIntakeMode = (mode: 'package' | 'form') => {
+    if (isPreparingOrLocked || intakeMode === mode) return;
+    handleClearSelection();
+    setIntakeMode(mode);
   };
 
   const handleToggleValid = (pkgPath: string) => {
@@ -642,116 +668,165 @@ export default function BrowserImportPreviewClient() {
         disabled={isPreparingOrLocked}
       />
 
-      {/* Step 3: Choose project folder */}
-      <Card className="border-border-structural">
-        <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
-          <div className="flex items-center gap-2">
-            <FolderOpen className="h-4 w-4 text-primary" aria-hidden="true" />
-            <CardTitle className="text-sm font-semibold text-foreground">
-              Choose project folder
-            </CardTitle>
-          </div>
-          <CardDescription className="text-xs text-muted-foreground">
-            Choose one project folder, or choose a parent folder that contains several project folders.
-          </CardDescription>
-        </CardHeader>
+      {/* Intake Method Selection Tabs */}
+      <div className="flex items-center gap-2 p-1 bg-muted/60 border border-border rounded-lg w-fit" role="tablist" aria-label="Project intake method">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={intakeMode === 'package'}
+          id="tab-package"
+          aria-controls="panel-package"
+          onClick={() => handleSwitchIntakeMode('package')}
+          disabled={isPreparingOrLocked}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            intakeMode === 'package'
+              ? 'bg-background text-foreground shadow-xs'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
+          Upload project package
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={intakeMode === 'form'}
+          id="tab-form"
+          aria-controls="panel-form"
+          onClick={() => handleSwitchIntakeMode('form')}
+          disabled={isPreparingOrLocked}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            intakeMode === 'form'
+              ? 'bg-background text-foreground shadow-xs'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+          Enter project using form
+        </button>
+      </div>
 
-        <CardContent className="p-4 sm:p-6 flex flex-col gap-5">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFolderSelection}
-            disabled={isLoading || !isSupported || isPreparingOrLocked}
-            {...({ webkitdirectory: '', directory: '' } as unknown as React.InputHTMLAttributes<HTMLInputElement>)}
-            className="hidden"
-            aria-label="Upload project directory"
+      {/* Step 3: Project Intake Surface */}
+      {intakeMode === 'form' ? (
+        <div id="panel-form" role="tabpanel" aria-labelledby="tab-form" className="w-full">
+          <ProjectIntakeForm
+            onPackageReady={handleFormPackageReady}
+            disabled={isPreparingOrLocked}
           />
+        </div>
+      ) : (
+        <div id="panel-package" role="tabpanel" aria-labelledby="tab-package" className="w-full">
+          <Card className="border-border-structural">
+            <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="h-4 w-4 text-primary" aria-hidden="true" />
+                <CardTitle className="text-sm font-semibold text-foreground">
+                  Choose project folder
+                </CardTitle>
+              </div>
+              <CardDescription className="text-xs text-muted-foreground">
+                Choose one project folder, or choose a parent folder that contains several project folders.
+              </CardDescription>
+            </CardHeader>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              ref={folderButtonRef}
-              disabled={isLoading || !isSupported || isPreparingOrLocked}
-              className="font-semibold"
-            >
-              <FolderOpen className="h-4 w-4 mr-2" aria-hidden="true" />
-              {selectedFiles.length > 0 ? 'Change project folder' : 'Choose project folder'}
-            </Button>
+            <CardContent className="p-4 sm:p-6 flex flex-col gap-5">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFolderSelection}
+                disabled={isLoading || !isSupported || isPreparingOrLocked}
+                {...({ webkitdirectory: '', directory: '' } as unknown as React.InputHTMLAttributes<HTMLInputElement>)}
+                className="hidden"
+                aria-label="Upload project directory"
+              />
 
-            {selectedFiles.length > 0 && (
-              <>
+              <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
-                  onClick={handleRequestPreview}
-                  ref={checkButtonRef}
-                  disabled={isLoading || isPreparingOrLocked}
-                  className="bg-primary hover:bg-primary font-semibold shadow-xs hover:shadow-md"
+                  onClick={() => fileInputRef.current?.click()}
+                  ref={folderButtonRef}
+                  disabled={isLoading || !isSupported || isPreparingOrLocked}
+                  className="font-semibold"
                 >
-                  <Search className="h-4 w-4 mr-2" aria-hidden="true" />
-                  {detectedPackageCount > 25
-                    ? (isLoading ? 'Checking annual intake…' : 'Preview annual intake')
-                    : (isLoading ? 'Checking files…' : 'Check files and continue')}
+                  <FolderOpen className="h-4 w-4 mr-2" aria-hidden="true" />
+                  {selectedFiles.length > 0 ? 'Change project folder' : 'Choose project folder'}
                 </Button>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleClearSelection}
-                  disabled={isLoading || isPreparingOrLocked}
-                >
-                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
-                  Clear selection
-                </Button>
-              </>
-            )}
-          </div>
+                {selectedFiles.length > 0 && (
+                  <>
+                    <Button
+                      type="button"
+                      onClick={() => handleRequestPreview()}
+                      ref={checkButtonRef}
+                      disabled={isLoading || isPreparingOrLocked}
+                      className="bg-primary hover:bg-primary font-semibold shadow-xs hover:shadow-md"
+                    >
+                      <Search className="h-4 w-4 mr-2" aria-hidden="true" />
+                      {detectedPackageCount > 25
+                        ? (isLoading ? 'Checking annual intake…' : 'Preview annual intake')
+                        : (isLoading ? 'Checking files…' : 'Check files and continue')}
+                    </Button>
 
-          {/* Selected Folder Metrics Summary */}
-          {selectedRootName && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-lg bg-muted/40 border border-border text-xs">
-              <div>
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
-                  Selected folder
-                </span>
-                <span className="font-semibold text-foreground truncate block mt-0.5" title={selectedRootName}>
-                  {selectedRootName}
-                </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleClearSelection}
+                      disabled={isLoading || isPreparingOrLocked}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+                      Clear selection
+                    </Button>
+                  </>
+                )}
               </div>
-              <div>
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
-                  Projects detected
-                </span>
-                <span className="font-semibold text-foreground block mt-0.5">
-                  {detectedPackageCount}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
-                  Files selected
-                </span>
-                <span className="font-semibold text-foreground block mt-0.5">
-                  {selectedFiles.length}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
-                  Total size
-                </span>
-                <span className="font-semibold text-foreground block mt-0.5">
-                  {formatMB(declaredTotalBytes)} MB
-                </span>
-              </div>
-            </div>
-          )}
 
-          {isAnnualIntake && annualPreviewProgress && isLoading && (
-            <div className="rounded-lg border border-information/30 bg-information/10 px-3.5 py-3 text-xs text-foreground" role="status" aria-live="polite">
-              Previewing annual intake chunk {annualPreviewProgress.completedChunks + 1} of {annualPreviewProgress.totalChunks}. Each request remains capped at 25 packages.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              {/* Selected Folder Metrics Summary */}
+              {selectedRootName && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-lg bg-muted/40 border border-border text-xs">
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
+                      Selected folder
+                    </span>
+                    <span className="font-semibold text-foreground truncate block mt-0.5" title={selectedRootName}>
+                      {selectedRootName}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
+                      Projects detected
+                    </span>
+                    <span className="font-semibold text-foreground block mt-0.5">
+                      {detectedPackageCount}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
+                      Files selected
+                    </span>
+                    <span className="font-semibold text-foreground block mt-0.5">
+                      {selectedFiles.length}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
+                      Total size
+                    </span>
+                    <span className="font-semibold text-foreground block mt-0.5">
+                      {formatMB(declaredTotalBytes)} MB
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {isAnnualIntake && annualPreviewProgress && isLoading && (
+                <div className="rounded-lg border border-information/30 bg-information/10 px-3.5 py-3 text-xs text-foreground" role="status" aria-live="polite">
+                  Previewing annual intake chunk {annualPreviewProgress.completedChunks + 1} of {annualPreviewProgress.totalChunks}. Each request remains capped at 25 packages.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* API Error Message */}
       {apiError && (

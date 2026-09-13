@@ -164,4 +164,11 @@ export interface CanonicalExpectedMediaFile {
    * intent, not display metadata — see the binding note on `computeCanonicalMediaIntentHash`.
    */
   snapshotAltText?: string | null;
+  /**
+   * Declared classification and full textual equivalent for a snapshot, bound into the canonical
+   * intent exactly like the alt text so a changed declaration can never reuse an already-recorded
+   * media intent hash.
+   */
+  snapshotContentKind?: string | null;
+  snapshotFullText?: string | null;
 }

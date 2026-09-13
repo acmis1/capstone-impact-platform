@@ -22,6 +22,7 @@ const EXPECTED_ENV_VALUES = new Map<string, string | boolean>([
   ['PARTICIPANT_PREVIEW_REMINDERS_ENABLED', false],
   ['STAFF_PROVISIONING_ENABLED', false],
   ['CAPSTONE_STAGING_PUBLICATION_ENABLED', false],
+  ['CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED', false],
   ['CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED', false],
 ]);
 const REQUIRED_ENV_NAMES = new Set([
@@ -40,6 +41,16 @@ const OWNER_SUPPLIED_ENV_NAMES = new Set([
   'CAPSTONE_EXPECTED_SUPABASE_HOST',
   'CAPSTONE_STAGING_MUTATION_CONFIRMATION',
   'GEMINI_API_KEY',
+]);
+const EXPECTED_PLATFORM_ENVIRONMENT = new Map([
+  ['RENDER', 'apps/admin-cms/src/deployment/deploymentReadinessEndpoint.ts'],
+  ['RENDER_GIT_COMMIT', 'apps/admin-cms/src/app/api/readiness/route.ts'],
+  ['RENDER_EXTERNAL_URL', 'apps/admin-cms/src/auth/csrf.ts'],
+]);
+const MANIFEST_ENV_NAMES = new Set([
+  ...REQUIRED_ENV_NAMES,
+  ...EXPECTED_ENV_VALUES.keys(),
+  ...OWNER_SUPPLIED_ENV_NAMES,
 ]);
 type UnknownRecord = Record<string, unknown>;
 
@@ -89,6 +100,16 @@ function checkEnvironment(failures: string[], manifest: UnknownRecord): void {
     if (names.has(name)) failures.push(`environment.${name}: duplicate entry`);
     names.add(name);
 
+    if (!MANIFEST_ENV_NAMES.has(name)) {
+      failures.push(`environment.${name}: unexpected staging web variable`);
+    }
+    if (EXPECTED_PLATFORM_ENVIRONMENT.has(name)) {
+      failures.push(`environment.${name}: provider identity must not become owner-supplied configuration`);
+    }
+    if (entry.source === 'provider-injected') {
+      failures.push(`environment.${name}: provider identity must not be owner-supplied configuration`);
+    }
+
     if (!Object.prototype.hasOwnProperty.call(entry, 'value')) {
       failures.push(`environment.${name}.value: explicit null/value required`);
       continue;
@@ -106,8 +127,56 @@ function checkEnvironment(failures: string[], manifest: UnknownRecord): void {
     }
   }
 
-  for (const requiredName of REQUIRED_ENV_NAMES) {
+  for (const requiredName of new Set([...REQUIRED_ENV_NAMES, ...EXPECTED_ENV_VALUES.keys()])) {
     if (!names.has(requiredName)) failures.push(`environment: missing ${requiredName}`);
+  }
+}
+
+function checkPlatformEnvironment(
+  failures: string[],
+  manifest: UnknownRecord,
+  repoRoot: string,
+): void {
+  const entries = manifest.platformEnvironment;
+  if (!Array.isArray(entries)) {
+    failures.push('platformEnvironment: expected provider identity inventory');
+    return;
+  }
+
+  const names = new Set<string>();
+  for (const entry of entries) {
+    if (!isRecord(entry) || typeof entry.name !== 'string') {
+      failures.push('platformEnvironment: every entry needs a name');
+      continue;
+    }
+
+    const name = entry.name;
+    if (names.has(name) || !EXPECTED_PLATFORM_ENVIRONMENT.has(name)) {
+      failures.push(`platformEnvironment.${name}: unexpected/duplicate identity`);
+    }
+    names.add(name);
+
+    if (!Object.prototype.hasOwnProperty.call(entry, 'value') || entry.value !== null) {
+      failures.push(`platformEnvironment.${name}.value: must remain null`);
+    }
+    if (entry.required !== true || entry.source !== 'provider-injected') {
+      failures.push(`platformEnvironment.${name}: must remain required provider-injected without a stored value`);
+    }
+
+    const consumer = EXPECTED_PLATFORM_ENVIRONMENT.get(name);
+    if (!consumer) continue;
+    const consumerPath = path.join(repoRoot, consumer);
+    if (entry.consumer !== consumer || !fs.existsSync(consumerPath)) {
+      failures.push(`platformEnvironment.${name}: current consumer must be documented`);
+      continue;
+    }
+    if (!fs.readFileSync(consumerPath, 'utf8').includes(name)) {
+      failures.push(`platformEnvironment.${name}: current consumer does not read this variable`);
+    }
+  }
+
+  for (const name of EXPECTED_PLATFORM_ENVIRONMENT.keys()) {
+    if (!names.has(name)) failures.push(`platformEnvironment: missing ${name}`);
   }
 }
 export function verifyDeploymentManifest(
@@ -171,6 +240,7 @@ export function verifyDeploymentManifest(
   }
 
   checkEnvironment(failures, manifest);
+  checkPlatformEnvironment(failures, manifest, repoRoot);
   return failures;
 }
 

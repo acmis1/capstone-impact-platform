@@ -2,7 +2,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 import PublicFeedHistoryPage from './page';
 import * as publicFeedRepo from '../../../projects/publicFeedHistoryRepository';
 import * as requireAdminModule from '../../../auth/requireAdmin';
@@ -52,7 +55,10 @@ function blockingOperation(
 const BASE_VIEW: publicFeedRepo.PublicFeedHistoryView = {
   active: true,
   rollbackEnabled: false,
+  verifiedStagingRollbackEnabled: false,
   currentVersionNumber: 10,
+  currentFeedHash: 'a'.repeat(64),
+  currentRecordCount: 5,
   generation: 10,
   page: 1,
   pageSize: 50,
@@ -507,6 +513,46 @@ describe('PublicFeedHistoryPage', () => {
       expect(table.getByRole('columnheader', { name: 'Project ID' })).toBeTruthy();
       expect(table.getByText('Changes requested')).toBeTruthy();
       expect(table.queryByText('changes requested')).toBeNull();
+    });
+  });
+
+  describe('verified staging rollback capability', () => {
+    function mockStaging(view: publicFeedRepo.PublicFeedHistoryView) {
+      mockPage(view);
+      vi.mocked(envModule.getServerEnv).mockReturnValue({
+        ...MOCK_ENV,
+        supabaseUrl: 'https://synthetic-a06-staging.supabase.co',
+      });
+      vi.stubEnv('CAPSTONE_RUNTIME_ENV', 'staging');
+      vi.stubEnv('CAPSTONE_EXPECTED_SUPABASE_HOST', 'synthetic-a06-staging.supabase.co');
+      vi.stubEnv('CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED', 'true');
+    }
+
+    it('does not treat an inherited raw head bit as verified staging authority', async () => {
+      mockStaging({
+        ...BASE_VIEW,
+        rollbackEnabled: true,
+        verifiedStagingRollbackEnabled: false,
+      });
+      await renderPage();
+
+      expect(screen.getByText('Verified staging disabled')).toBeTruthy();
+      screen.getByText('Advanced rollback capability (verified staging)').closest('details')!.open = true;
+      expect(screen.getByRole('button', { name: 'Enable staging rollback' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Disable staging rollback' })).toBeNull();
+    });
+
+    it('shows staging enabled only for an exact current-head enable event', async () => {
+      mockStaging({
+        ...BASE_VIEW,
+        rollbackEnabled: true,
+        verifiedStagingRollbackEnabled: true,
+      });
+      await renderPage();
+
+      expect(screen.getByText('Verified staging enabled')).toBeTruthy();
+      screen.getByText('Advanced rollback capability (verified staging)').closest('details')!.open = true;
+      expect(screen.getByRole('button', { name: 'Disable staging rollback' })).toBeTruthy();
     });
   });
 });

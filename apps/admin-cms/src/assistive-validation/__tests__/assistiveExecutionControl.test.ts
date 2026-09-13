@@ -501,6 +501,8 @@ describe('staff-facing availability', () => {
     CAPSTONE_EXPECTED_SUPABASE_HOST: 'staging-project.supabase.co',
     CAPSTONE_ASSISTIVE_EXPECTED_WORKER_DEPLOYMENT_VERSION: COMMIT,
     CAPSTONE_ASSISTIVE_EXPECTED_WORKER_IMAGE_DIGEST: DIGEST,
+    RENDER: 'true',
+    RENDER_GIT_COMMIT: COMMIT,
   };
   const url = 'https://staging-project.supabase.co';
 
@@ -552,7 +554,7 @@ describe('staff-facing availability', () => {
     );
     expect(availability.state).toBe('BUDGET_REACHED');
     expect(availability.canEnqueue).toBe(false);
-    expect(availability.message).toMatch(/continue reviewing and editing project information manually/);
+    expect(availability.message).toMatch(/requesting corrected project-team packages through the normal workflow/);
   });
 
   it.each([

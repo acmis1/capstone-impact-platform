@@ -74,22 +74,22 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
 
   if (status === 'draft' || status === 'changes_requested') {
     const summary = status === 'changes_requested'
-      ? 'A reviewer asked for changes. The project is back with staff for correction before it returns to review.'
+      ? 'A reviewer asked for changes. Staff must obtain and accept a corrected project-team package before the project returns to review.'
       : 'This project is being prepared. It is private and has not been sent for review.';
 
     let decision: string;
     if (!input.canEditMetadata) {
       decision = hasReviewActions
         ? 'Your role can inspect the corrected project and use the available Approve review control below.'
-        : 'Your role can read this project but cannot edit it, submit it for review, or record a review decision.';
+        : 'Your role can read this project but cannot manage correction packages, submit it for review, or record a review decision.';
     } else if (input.submitForReviewUnavailable) {
       decision = 'Submission readiness could not be verified, so submit for review stays unavailable until it can be checked again.';
     } else if (input.submitForReview === null) {
       decision = 'Submit for review is not offered for this project, because it has no completed import batch to submit from.';
     } else if (submitBlocked) {
-      decision = 'Fix the listed blocking issues before this project can be submitted for review.';
+      decision = 'Resolve the listed blocking issues through the supported source-package workflow before this project can be submitted for review.';
     } else {
-      decision = 'Project information can be edited, and the project can be submitted for review.';
+      decision = 'Project information is ready, and the project can be submitted for review.';
     }
 
     if (status === 'changes_requested' && input.canEditMetadata && hasReviewActions) {
@@ -102,7 +102,7 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
   if (status === 'submitted' || status === 'in_review') {
     return {
       stageLabel,
-      summary: 'This project is waiting on a review decision. Staff editing is closed while it is under review.',
+      summary: 'This project is waiting on a review decision. Correction-package acceptance is closed while it is under review.',
       decision: hasReviewActions
         ? 'Read the project information and media, then approve it or request changes.'
         : 'Your role can read this project but cannot record a review decision.',

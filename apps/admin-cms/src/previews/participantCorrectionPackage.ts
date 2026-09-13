@@ -7,6 +7,7 @@ import { MAX_GALLERY_IMAGES } from '../import/galleryConvention';
 import { validateMediaAssetBytes } from '../storage/mediaValidationCore';
 import { passedPackageRules, type PassedPackageRule } from './correctionValidation';
 import { assertCorrectionWorkbookBounds } from './correctionWorkbookBounds';
+import type { SnapshotImageContentKind } from '../domain/galleryTextEquivalent';
 
 export const CORRECTION_PACKAGE_LIMITS = {
   bodyBytes: 33 * 1024 * 1024,
@@ -30,6 +31,12 @@ export interface CorrectionFileEvidence {
   bytes: number;
   sha256: string;
   altText: string | null;
+  /**
+   * Declared text-equivalent contract for a snapshot image, taken from the same workbook entry as
+   * the alt text and bound into the package hash with it. Null for the workbook, poster and PDF.
+   */
+  contentKind: SnapshotImageContentKind | null;
+  fullText: string | null;
 }
 export interface CorrectionPackage {
   metadata: ImportPackageManifest;
@@ -140,7 +147,7 @@ export async function parseParticipantCorrectionPackage(form: FormData, publicId
       throw new CorrectionPackageError(field, 'The file content does not match a supported image or PDF.');
     }
     const position = field.startsWith('snapshot') ? Number(field.slice(8)) : null;
-    files.push({ role: isWorkbook ? 'workbook' : isPdf ? 'poster_pdf' : field === 'poster' ? 'poster_image' : 'snapshot_image', position, fileName: value.name, mimeType, bytes: content.length, sha256: correctionDigest(content), altText: null, content });
+    files.push({ role: isWorkbook ? 'workbook' : isPdf ? 'poster_pdf' : field === 'poster' ? 'poster_image' : 'snapshot_image', position, fileName: value.name, mimeType, bytes: content.length, sha256: correctionDigest(content), altText: null, contentKind: null, fullText: null, content });
   }
   let parsed;
   try { parsed = await parseProjectDetailsWorkbook(files[0].content); } catch { throw new CorrectionPackageError('workbook', 'The workbook must contain one complete project row, including the required poster text and accessibility description.'); }
@@ -150,9 +157,14 @@ export async function parseParticipantCorrectionPackage(form: FormData, publicId
   const validation = validateImportPackage({ manifest: metadata, posterImage: asPackageFile(files[1]), posterPdf: asPackageFile(files[2]), galleryImages: gallery, snapshot1: gallery.find((f) => f.position === 1)?.file ?? null }, { metadataSource: 'xlsx' });
   if (!validation.valid) throw new CorrectionPackageError('workbook', 'Check all required project fields and the description for each supporting image in your workbook.');
   for (const file of files) {
-    if (file.role === 'snapshot_image') file.altText = metadata.galleryAltTexts?.find((a) => a.position === file.position)?.altText ?? (file.position === 1 ? metadata.snapshotAltText ?? null : null);
+    if (file.role !== 'snapshot_image') continue;
+    const entry = metadata.galleryAltTexts?.find((a) => a.position === file.position);
+    file.altText = entry?.altText ?? (file.position === 1 ? metadata.snapshotAltText ?? null : null);
+    // validateImportPackage above already proved every supplied image is declared and coherent.
+    file.contentKind = entry?.contentKind ?? null;
+    file.fullText = entry?.fullText ?? null;
   }
-  const evidence = files.map(({ role, position, fileName, mimeType, bytes, sha256, altText }) => ({ role, position, fileName, mimeType, bytes, sha256, altText }));
+  const evidence = files.map(({ role, position, fileName, mimeType, bytes, sha256, altText, contentKind, fullText }) => ({ role, position, fileName, mimeType, bytes, sha256, altText, contentKind, fullText }));
   const validationChecks = passedPackageRules(validation);
   return { metadata, files, validationChecks, warnings: [...parsed.warnings.map((w) => w.message), ...validation.warnings.map((w) => w.message)], hash: correctionDigest(JSON.stringify({ metadata, files: evidence, validationChecks })), totalBytes };
 }

@@ -4,6 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import {
   dockerProxyCustomHeaders,
   startDockerLoopbackProxy,
@@ -25,6 +26,7 @@ import { cleanupDisposableLedgerRuntime } from './disposableLedgerCleanup';
 interface RuntimeScript {
   file: string;
   environment?: Record<string, string>;
+  timeoutMs?: number;
 }
 
 const RUNTIME_SCRIPTS: Record<string, RuntimeScript> = {
@@ -35,7 +37,11 @@ const RUNTIME_SCRIPTS: Record<string, RuntimeScript> = {
   },
   publication: { file: 'verifyControlledPublicationRuntime.ts' },
   'annual-publication': { file: 'verifyAnnualPublicationEvidenceRuntime.ts' },
+  'integrated-cohort': { file: 'verifyIntegratedCohortRuntime.ts', timeoutMs: 1_200_000 },
   removal: { file: 'verifyControlledPublicRemovalRuntime.ts' },
+  'preview-access': { file: 'verifyParticipantPreviewAccessRuntime.ts' },
+  'browser-media': { file: 'verifyBrowserImportMediaStageRuntime.ts' },
+  'worker-heartbeat': { file: 'verifyAssistiveWorkerHeartbeatRuntime.ts' },
 };
 const DEFAULT_RUNTIME_NAMES = ['ledger', 'publication', 'removal'];
 const DOCKER_COMMAND_TIMEOUT_MS = 30_000;
@@ -49,10 +55,14 @@ const RUNTIME_TIMEOUT_MS = 600_000;
 const CORRECTION_MIGRATIONS = [
   '20260906120000_public_removal_completion_reconciliation.sql',
   '20260909120000_staff_lifecycle_readiness.sql',
+  '20260910120000_public_feed_rollback_capability.sql',
+  '20260910120100_participant_preview_access_observations.sql',
+  '20260910120200_assistive_worker_production_identity.sql',
+  '20260911120000_gallery_full_text_equivalents.sql',
 ];
 
 const PRE_CORRECTION_MIGRATION_COUNT = 51;
-const CURRENT_MAIN_MIGRATION_COUNT = 53;
+const CURRENT_MAIN_MIGRATION_COUNT = 57;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -85,6 +95,28 @@ function configurePorts(config: string): string {
     updated = updated.replace(pattern, `${key} = ${port}`);
   }
   return `${updated}\n[analytics]\nenabled = true\nport = ${portBase + 7}\n`;
+}
+
+async function assertPortBlockAvailable(): Promise<void> {
+  const listeners: net.Server[] = [];
+  try {
+    for (let port = portBase; port < portBase + 8; port += 1) {
+      const listener = net.createServer();
+      listeners.push(listener);
+      await new Promise<void>((resolve, reject) => {
+        listener.once('error', reject);
+        listener.listen({ host: '127.0.0.1', port, exclusive: true }, resolve);
+      });
+    }
+  } catch {
+    throw new Error(`Disposable runtime port block ${portBase}-${portBase + 7} is unavailable.`);
+  } finally {
+    await Promise.all(listeners.map((listener) => new Promise<void>((resolve) => {
+      if (!listener.listening) resolve();
+      else listener.close(() => resolve());
+    })));
+  }
+  console.log(`PASS: disposable loopback port block ${portBase}-${portBase + 7} is available`);
 }
 
 function createWorkdir(
@@ -332,6 +364,22 @@ function verifyCorrectionUpgrade(workdir: string): void {
     psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260909120000';"),
     '1',
   );
+  assert.equal(
+    psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260910120000';"),
+    '1',
+  );
+  assert.equal(
+    psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260910120100';"),
+    '1',
+  );
+  assert.equal(
+    psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260910120200';"),
+    '1',
+  );
+  assert.equal(
+    psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260911120000';"),
+    '1',
+  );
   assert.equal(psql('SELECT public.get_release_capability_sentinel();'), RELEASE_CAPABILITY_SENTINEL);
   const completionDefinition = routineDefinition('complete_public_feed_operation');
   assert.ok(completionDefinition.includes("v_project.status <> 'archived'"));
@@ -413,12 +461,12 @@ function runSupabase(command: 'start' | 'stop' | 'migrate', workdir: string, net
   }
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const upgradeRequested = selected.includes(UPGRADE_MODE);
   const scriptModes = selected.filter((name) => name !== UPGRADE_MODE);
-  const annualPublicationRequested = scriptModes.includes('annual-publication');
-  if (annualPublicationRequested && scriptModes.length !== 1) {
-    console.error('The annual publication run needs its own empty disposable stack; run it as a separate invocation.');
+  const emptyPublicationUniverseRequested = scriptModes.includes('annual-publication') || scriptModes.includes('integrated-cohort');
+  if (emptyPublicationUniverseRequested && scriptModes.length !== 1) {
+    console.error('The annual/integrated publication run needs its own empty disposable stack; run it as a separate invocation.');
     process.exitCode = 1;
     return;
   }
@@ -427,11 +475,12 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
+  await assertPortBlockAvailable();
   // An upgrade run must start from the exact pre-correction migration database; a script run starts
   // from a fresh full install. Provisioning one stack per invocation keeps both baselines exact.
   const workdir = createWorkdir(
     upgradeRequested ? CORRECTION_MIGRATIONS : [],
-    annualPublicationRequested,
+    emptyPublicationUniverseRequested,
   );
   let networkId = '';
   let networkCreateAttempted = false;
@@ -449,12 +498,20 @@ function main(): void {
     for (const name of scriptModes) {
       const script = RUNTIME_SCRIPTS[name];
       if (!script) throw new Error(`Unknown disposable runtime "${name}".`);
-      const runtime = spawnSync(process.execPath, [
-        path.join(repositoryRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
-        path.join(__dirname, script.file),
-      ], {
+      if (name === 'browser-media') {
+        psql(`INSERT INTO public.admin_users (id, email, full_name)
+          VALUES ('57b00000-0000-4000-8000-000000000001', 'browser-media-runtime@example.invalid', 'Browser Media Runtime')
+          ON CONFLICT (id) DO NOTHING;
+          INSERT INTO public.user_roles (user_id, role)
+          VALUES ('57b00000-0000-4000-8000-000000000001', 'admin')
+          ON CONFLICT DO NOTHING;`);
+      }
+      const runtimeArguments = name === 'integrated-cohort'
+        ? ['--conditions=react-server', '--import', 'tsx', path.join(__dirname, script.file)]
+        : [path.join(repositoryRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'), path.join(__dirname, script.file)];
+      const runtime = spawnSync(process.execPath, runtimeArguments, {
         cwd: path.join(repositoryRoot, 'apps', 'admin-cms'), stdio: 'inherit',
-        timeout: RUNTIME_TIMEOUT_MS,
+        timeout: script.timeoutMs ?? RUNTIME_TIMEOUT_MS,
         killSignal: 'SIGTERM',
         env: {
           ...process.env,
@@ -496,4 +553,4 @@ function main(): void {
   process.exitCode = exitCode;
 }
 
-main();
+void main();

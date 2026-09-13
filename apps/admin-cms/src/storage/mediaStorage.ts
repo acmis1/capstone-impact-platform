@@ -1,3 +1,4 @@
+import { isSnapshotImageContentKind } from '../domain/galleryTextEquivalent';
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { getStagingBuckets } from '../lib/supabase/buckets';
 import { MediaAsset, MediaAssetType } from '../domain/mediaAsset';
@@ -162,6 +163,8 @@ export async function uploadDraftMediaAsset(params: {
     fileSizeBytes: dbAsset.file_size_bytes ? parseInt(dbAsset.file_size_bytes, 10) : undefined,
     isPublicApproved: dbAsset.is_public_approved,
     altTextPublic: dbAsset.alt_text_public ?? null,
+    imageContentKind: isSnapshotImageContentKind(dbAsset.image_content_kind) ? dbAsset.image_content_kind : null,
+    fullTextPublic: dbAsset.full_text_public ?? null,
     createdAt: dbAsset.created_at
   };
 }
@@ -266,6 +269,8 @@ export async function promoteDraftMediaAssetToPublic(assetId: string): Promise<M
     fileSizeBytes: updatedAsset.file_size_bytes ? parseInt(updatedAsset.file_size_bytes, 10) : undefined,
     isPublicApproved: updatedAsset.is_public_approved,
     altTextPublic: updatedAsset.alt_text_public ?? null,
+    imageContentKind: isSnapshotImageContentKind(updatedAsset.image_content_kind) ? updatedAsset.image_content_kind : null,
+    fullTextPublic: updatedAsset.full_text_public ?? null,
     createdAt: updatedAsset.created_at
   };
 }

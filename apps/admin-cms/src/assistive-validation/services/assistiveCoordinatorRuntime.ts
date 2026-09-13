@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 
+import type { AssistiveWorkerEnvironment } from '../domain/workerHeartbeatContract';
 import { SupabaseAssistiveInputRepository } from '../repositories/assistiveInputRepository';
 import { SupabaseAssistiveJobRepository } from '../repositories/assistiveJobRepository';
 import { SupabaseAssistiveWorkerHeartbeatRepository } from '../repositories/assistiveWorkerHeartbeatRepository';
@@ -19,6 +20,7 @@ interface AssistiveCoordinatorRuntimeConfig {
   languageToolArchive?: string;
   languageToolJar?: string;
   heartbeatIdentity?: {
+    environment: AssistiveWorkerEnvironment;
     workerInstanceId: string;
     deploymentVersion: string;
   };
@@ -54,7 +56,10 @@ export function createAssistiveCoordinatorRuntime(config: AssistiveCoordinatorRu
   );
   const heartbeat = config.heartbeatIdentity
     ? new AssistiveWorkerHeartbeatPublisher(
-        new SupabaseAssistiveWorkerHeartbeatRepository(client, config.heartbeatIdentity.deploymentVersion),
+        new SupabaseAssistiveWorkerHeartbeatRepository(client, {
+          environment: config.heartbeatIdentity.environment,
+          deploymentVersion: config.heartbeatIdentity.deploymentVersion,
+        }),
         config.heartbeatIdentity.workerInstanceId,
         config.heartbeatIdentity.deploymentVersion,
       )

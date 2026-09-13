@@ -118,6 +118,10 @@ describe('parseProjectDetailsWorkbook', () => {
       'Snapshot image alt text',
       'Snapshot 2 alt text',
       'Snapshot 3 alt text',
+      'Snapshot 1 content type',
+      'Snapshot 2 content type',
+      'Snapshot 2 full text',
+      'Snapshot 3 content type',
     ];
 
     const data = [
@@ -125,6 +129,10 @@ describe('parseProjectDetailsWorkbook', () => {
       'Overview of the project interface.',
       'Dashboard showing project results.',
       'Mobile view of the participant workflow.',
+      'Ordinary image',
+      'Text-bearing image',
+      'Results dashboard. Accuracy 94.2%. Latency 120 ms.',
+      'Ordinary image',
     ];
 
     const buf = await createWorkbookBuffer({
@@ -142,14 +150,20 @@ describe('parseProjectDetailsWorkbook', () => {
       {
         position: 1,
         altText: 'Overview of the project interface.',
+        contentKind: 'ordinary',
+        fullText: '',
       },
       {
         position: 2,
         altText: 'Dashboard showing project results.',
+        contentKind: 'text_bearing',
+        fullText: 'Results dashboard. Accuracy 94.2%. Latency 120 ms.',
       },
       {
         position: 3,
         altText: 'Mobile view of the participant workflow.',
+        contentKind: 'ordinary',
+        fullText: '',
       },
     ]);
 
@@ -166,16 +180,84 @@ describe('parseProjectDetailsWorkbook', () => {
       {
         position: 1,
         altText: 'Overview of the project interface.',
+        contentKind: 'ordinary',
+        fullText: null,
       },
       {
         position: 2,
         altText: 'Dashboard showing project results.',
+        contentKind: 'text_bearing',
+        fullText: 'Results dashboard. Accuracy 94.2%. Latency 120 ms.',
       },
       {
         position: 3,
         altText: 'Mobile view of the participant workflow.',
+        contentKind: 'ordinary',
+        fullText: null,
       },
     ]);
+  });
+
+  it('1c. binds classification and full text to every gallery position from 1 through 10', async () => {
+    const galleryHeaders: string[] = [];
+    const galleryValues: string[] = [];
+    for (let position = 1; position <= 10; position += 1) {
+      galleryHeaders.push(position === 1 ? 'Snapshot image alt text' : `Snapshot ${position} alt text`);
+      galleryValues.push(`Description for gallery image ${position}.`);
+      galleryHeaders.push(`Snapshot ${position} content type`);
+      galleryValues.push(position % 2 === 0 ? 'Text-bearing image' : 'Ordinary image');
+      galleryHeaders.push(`Snapshot ${position} full text`);
+      galleryValues.push(position % 2 === 0 ? `Complete text for gallery image ${position}.` : '');
+    }
+
+    const result = await parseProjectDetailsWorkbook(await createWorkbookBuffer({
+      headers: [...defaultCanonicalHeaders, ...galleryHeaders],
+      dataRows: [[...defaultCanonicalData, ...galleryValues]],
+    }));
+
+    expect(result.metadata.galleryAltTexts).toHaveLength(10);
+    expect(result.metadata.galleryAltTexts?.map((item) => item.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(result.metadata.galleryAltTexts?.[0]).toMatchObject({ contentKind: 'ordinary', fullText: '' });
+    expect(result.metadata.galleryAltTexts?.[9]).toMatchObject({
+      contentKind: 'text_bearing',
+      fullText: 'Complete text for gallery image 10.',
+    });
+  });
+
+  it('1d. rejects an unrecognized gallery classification without guessing', async () => {
+    const buffer = await createWorkbookBuffer({
+      headers: [...defaultCanonicalHeaders, 'Snapshot image alt text', 'Snapshot 1 content type'],
+      dataRows: [[...defaultCanonicalData, 'Synthetic image description.', 'Probably informational']],
+    });
+
+    await expect(parseProjectDetailsWorkbook(buffer)).rejects.toMatchObject({
+      errors: [expect.objectContaining({
+        code: 'WORKBOOK_INVALID_SNAPSHOT_CONTENT_TYPE',
+        fieldName: 'snapshot1ContentKind',
+      })],
+    });
+  });
+
+  it('1e. accepts the exact full-text ceiling and rejects one character beyond it', async () => {
+    const parseFullText = async (fullText: string) => parseProjectDetailsWorkbook(await createWorkbookBuffer({
+      headers: [
+        ...defaultCanonicalHeaders,
+        'Snapshot image alt text',
+        'Snapshot 1 content type',
+        'Snapshot 1 full text',
+      ],
+      dataRows: [[...defaultCanonicalData, 'Synthetic dashboard.', 'Text-bearing image', fullText]],
+    }));
+
+    await expect(parseFullText('x'.repeat(ACCESSIBLE_CONTENT_LIMITS.snapshotFullText))).resolves.toMatchObject({
+      metadata: { galleryAltTexts: [expect.objectContaining({ contentKind: 'text_bearing' })] },
+    });
+    await expect(parseFullText('x'.repeat(ACCESSIBLE_CONTENT_LIMITS.snapshotFullText + 1))).rejects.toMatchObject({
+      errors: [expect.objectContaining({
+        code: 'WORKBOOK_VALUE_TOO_LONG',
+        fieldName: 'snapshot1FullText',
+      })],
+    });
   });
 
   // 2. Valid workbook using technical aliases

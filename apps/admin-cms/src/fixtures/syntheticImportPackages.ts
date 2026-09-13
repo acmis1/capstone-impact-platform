@@ -156,6 +156,8 @@ function getWorkbookValues(project: Project): SyntheticWorkbookValues {
     posterText: project.posterText,
     accessibilityText: project.accessibilityText,
     snapshotAltText: getSnapshotAltText(project),
+    snapshot1ContentKind: 'Ordinary image',
+    snapshot1FullText: '',
   };
 }
 
@@ -180,6 +182,7 @@ function getVariantWorkbookValues(
       return values;
     case 'optional-files-absent':
       values.snapshotAltText = '';
+      values.snapshot1ContentKind = '';
       return values;
     case 'fully-valid':
     case 'unsupported-media-type':

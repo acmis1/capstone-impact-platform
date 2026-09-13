@@ -24,5 +24,13 @@ export interface ProjectMediaPreviewItem extends MediaPreviewItem {
    */
   galleryPosition: number | null;
 
+  /**
+   * Declared text-equivalent contract for a snapshot image, read verbatim from the media row.
+   * `contentKind` is absent when the project team has not declared one (legacy media) and the
+   * review surface says so; `fullText` is present only for a text-bearing image.
+   */
+  contentKind?: 'ordinary' | 'text_bearing';
+  fullText?: string;
+
   previewSource: 'private-signed' | 'public' | 'unavailable';
 }

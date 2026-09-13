@@ -257,6 +257,62 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
     expect(res.errors).toHaveLength(0);
   });
 
+  it.each([
+    ['ordinary', { contentKind: 'ordinary', fullText: null }],
+    ['text-bearing', { contentKind: 'text_bearing', fullText: 'Chart: 42 accepted, 3 pending, 0 rejected.' }],
+  ])('validates a current %s snapshot declaration', (_label, declaration) => {
+    const url = 'https://cdn.example.com/project-public-assets/2026/proj/snap.png';
+    const res = validatePublicFeed([publishedRecord({
+      snapshots: [url],
+      snapshotMedia: [{
+        url,
+        altText: 'Synthetic results image.',
+        galleryPosition: 1,
+        ...declaration,
+      }],
+    })]);
+
+    expect(res.valid).toBe(true);
+    expect(res.errors).toEqual([]);
+    expect(res.warnings.join(' ')).not.toContain('predates the gallery text-equivalent contract');
+  });
+
+  it('keeps an already-published legacy snapshot readable but explicitly transitional', () => {
+    const url = 'https://cdn.example.com/project-public-assets/2026/proj/legacy.png';
+    const res = validatePublicFeed([publishedRecord({
+      snapshots: [url],
+      snapshotMedia: [{ url, altText: 'Legacy synthetic image.', galleryPosition: 1 }],
+    })]);
+
+    expect(res.valid).toBe(true);
+    expect(res.errors).toEqual([]);
+    expect(res.warnings.join(' ')).toContain('predates the gallery text-equivalent contract');
+  });
+
+  it.each([
+    ['one missing key', { contentKind: 'ordinary' }],
+    ['unknown kind', { contentKind: 'diagram', fullText: null }],
+    ['ordinary contradiction', { contentKind: 'ordinary', fullText: 'Unexpected.' }],
+    ['missing text-bearing full text', { contentKind: 'text_bearing', fullText: null }],
+    ['blank text-bearing full text', { contentKind: 'text_bearing', fullText: '   ' }],
+    ['oversized text-bearing full text', { contentKind: 'text_bearing', fullText: 'x'.repeat(5001) }],
+    ['untrimmed text-bearing full text', { contentKind: 'text_bearing', fullText: ' padded ' }],
+  ])('rejects the impossible public state: %s', (_label, declaration) => {
+    const url = 'https://cdn.example.com/project-public-assets/2026/proj/snap.png';
+    const res = validatePublicFeed([publishedRecord({
+      snapshots: [url],
+      snapshotMedia: [{
+        url,
+        altText: 'Synthetic results image.',
+        galleryPosition: 1,
+        ...declaration,
+      }],
+    })]);
+
+    expect(res.valid).toBe(false);
+    expect(res.errors.length).toBeGreaterThan(0);
+  });
+
   it('validates exact 2,000-character altText', () => {
     const url = 'https://cdn.example.com/project-public-assets/2026/proj/snap.png';
     const rec = publishedRecord({

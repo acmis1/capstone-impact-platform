@@ -44,6 +44,8 @@ function source(
     fileSizeBytes: 100,
     isPublicApproved: false,
     altTextPublic,
+    imageContentKind: assetType === 'snapshot_image' ? 'ordinary' : null,
+    fullTextPublic: null,
   };
 }
 
@@ -155,22 +157,79 @@ describe('publication artifact and media promotion planning', () => {
         url: snapshotPromotions[0].publicUrl,
         altText: 'Snapshot one.',
         galleryPosition: 1,
+        contentKind: 'ordinary',
+        fullText: null,
       },
       {
         url: snapshotPromotions[1].publicUrl,
         altText: 'Snapshot two.',
         galleryPosition: 2,
+        contentKind: 'ordinary',
+        fullText: null,
       },
       {
         url: snapshotPromotions[2].publicUrl,
         altText: 'Snapshot three.',
         galleryPosition: 3,
+        contentKind: 'ordinary',
+        fullText: null,
       },
     ]);
 
     expect(record?.snapshots).toEqual(
       snapshotPromotions.map((item) => item.publicUrl),
     );
+  });
+
+  it('publishes the approved full text for a text-bearing snapshot and no private source values', () => {
+    const snapshot = {
+      ...source(2, 'snapshot_image', 'snapshot-1.png', 'image/png', 'Synthetic results dashboard.', 1),
+      imageContentKind: 'text_bearing' as const,
+      fullTextPublic: 'Accepted: 42. Pending: 3. Rejected: 0.',
+    };
+    const plan = planPublicationArtifact({
+      projects: [createMockProject({
+        publicId: 'target', status: 'approved', poster: '', posterPdf: '', snapshots: [], snapshotMedia: [],
+      })],
+      targetPublicId: 'target',
+      mediaAssets: [
+        source(0, 'poster_image', 'poster.png', 'image/png'),
+        source(1, 'poster_pdf', 'poster.pdf', 'application/pdf'),
+        snapshot,
+      ],
+      privateBucket: 'project-drafts-private',
+      publicBucket: 'project-public-assets',
+      getPublicUrl: publicUrl,
+    });
+
+    expect(plan.feed[0].snapshotMedia).toEqual([expect.objectContaining({
+      contentKind: 'text_bearing',
+      fullText: snapshot.fullTextPublic,
+    })]);
+    expect(plan.content).toContain(snapshot.fullTextPublic);
+    expect(plan.content).not.toContain(snapshot.storagePath);
+    expect(plan.content).not.toContain(snapshot.storageBucket);
+  });
+
+  it.each([
+    ['missing classification', { imageContentKind: null, fullTextPublic: null }],
+    ['missing text-bearing full text', { imageContentKind: 'text_bearing' as const, fullTextPublic: null }],
+    ['ordinary image with full text', { imageContentKind: 'ordinary' as const, fullTextPublic: 'Contradictory.' }],
+  ])('refuses publication for a snapshot with %s', (_label, fields) => {
+    expect(() => planPublicationArtifact({
+      projects: [createMockProject({
+        publicId: 'target', status: 'approved', poster: '', posterPdf: '', snapshots: [], snapshotMedia: [],
+      })],
+      targetPublicId: 'target',
+      mediaAssets: [
+        source(0, 'poster_image', 'poster.png', 'image/png'),
+        source(1, 'poster_pdf', 'poster.pdf', 'application/pdf'),
+        { ...source(2, 'snapshot_image', 'snapshot-1.png', 'image/png'), ...fields },
+      ],
+      privateBucket: 'project-drafts-private',
+      publicBucket: 'project-public-assets',
+      getPublicUrl: publicUrl,
+    })).toThrow('Publication snapshot media is missing its declared text equivalent.');
   });
 
   it('supports legitimate legacy public URLs when no private promotion is needed', () => {

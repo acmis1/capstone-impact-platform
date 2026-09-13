@@ -6,6 +6,11 @@ import {
   getAccessibleContentProblem,
   getSnapshotAltTextProblem,
 } from '../domain/accessibleContent';
+import {
+  describeSnapshotTextEquivalentProblem,
+  getSnapshotTextEquivalentProblem,
+  isSnapshotImageContentKind,
+} from '../domain/galleryTextEquivalent';
 
 export interface ImportBatchReviewMediaAssetInput {
   assetType: string;
@@ -13,6 +18,11 @@ export interface ImportBatchReviewMediaAssetInput {
   publicUrl: string | null;
   /** Stored text alternative for this asset; null when none is recorded. */
   altText: string | null;
+  /** Authoritative gallery position for a snapshot, so a blocker can name the exact image. */
+  galleryPosition?: number | null;
+  /** Declared classification and full text; null/absent means "not yet declared". */
+  imageContentKind?: string | null;
+  fullTextPublic?: string | null;
 }
 
 export interface ImportBatchReviewValidationFlagInput {
@@ -164,6 +174,20 @@ export function computeProjectReviewReadiness(input: ImportBatchReviewProjectInp
     }
   }
 
+  // Text-equivalent contract. Mirrors MISSING_SNAPSHOT_CONTENT_TYPE / MISSING_SNAPSHOT_FULL_TEXT /
+  // SNAPSHOT_FULL_TEXT_TOO_LONG / UNEXPECTED_SNAPSHOT_FULL_TEXT in submit_import_projects_for_review.
+  // Each blocker names its gallery position: the remedy is a corrected source package from the
+  // project team, so staff must be able to say exactly which image needs what.
+  for (const snapshotAsset of snapshotAssets) {
+    const problem = getSnapshotTextEquivalentProblem({
+      contentKind: isSnapshotImageContentKind(snapshotAsset.imageContentKind) ? snapshotAsset.imageContentKind : null,
+      fullText: snapshotAsset.fullTextPublic ?? null,
+    });
+    if (!problem) continue;
+    const reason = describeSnapshotTextEquivalentProblem(problem, snapshotAsset.galleryPosition ?? null);
+    if (!blockingReasons.includes(reason)) blockingReasons.push(reason);
+  }
+
   if (snapshotAssets.length === 0) {
     warnings.push('Snapshot gallery is empty.');
   }
@@ -217,6 +241,9 @@ export function computeReadinessForImportBatchRow(row: ImportBatchReviewProjectR
       isPublicApproved: asset.is_public_approved,
       publicUrl: asset.public_url,
       altText: asset.alt_text_public,
+      galleryPosition: asset.gallery_position ?? null,
+      imageContentKind: asset.image_content_kind ?? null,
+      fullTextPublic: asset.full_text_public ?? null,
     })),
   });
 }

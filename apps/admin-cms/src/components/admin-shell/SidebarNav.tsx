@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FolderKanban, FileSpreadsheet, History, Users } from 'lucide-react';
+import { FolderKanban, FileSpreadsheet, History, Tags, Users } from 'lucide-react';
 import { NavigationItem, getNavigationItems, getRouteDescriptor } from './navigation';
 import { cn } from '../../lib/utils';
 import { AppMark } from '../ui/app-mark';
@@ -12,6 +12,7 @@ interface SidebarProps {
   onNavClick?: () => void;
   className?: string;
   canManageStaff?: boolean;
+  canManageTaxonomy?: boolean;
 }
 
 function getNavIcon(href: string) {
@@ -21,16 +22,19 @@ function getNavIcon(href: string) {
   if (href.startsWith('/admin/staff')) {
     return Users;
   }
+  if (href.startsWith('/admin/taxonomy')) {
+    return Tags;
+  }
   if (href.startsWith('/admin/public-feed')) {
     return History;
   }
   return FolderKanban;
 }
 
-export function SidebarNav({ onNavClick, className, canManageStaff = false }: SidebarProps) {
+export function SidebarNav({ onNavClick, className, canManageStaff = false, canManageTaxonomy = false }: SidebarProps) {
   const pathname = usePathname() || '/admin';
   const activeHref = getRouteDescriptor(pathname).activeHref;
-  const navigationItems = getNavigationItems(canManageStaff);
+  const navigationItems = getNavigationItems(canManageStaff, canManageTaxonomy);
 
   return (
     <div className={cn('flex flex-col h-full bg-sidebar border-r border-sidebar-border', className)}>

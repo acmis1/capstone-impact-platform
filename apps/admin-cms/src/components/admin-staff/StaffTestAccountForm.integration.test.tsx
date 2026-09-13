@@ -64,7 +64,7 @@ describe('StaffTestAccountForm rendered boundary', () => {
 
     const descriptions = {
       Reviewer: 'Can read projects and complete review decisions.',
-      Editor: 'Can read and edit project metadata and import projects.',
+      Editor: 'Can import projects and submit eligible projects for review.',
     };
 
     for (const [role, description] of Object.entries(descriptions)) {

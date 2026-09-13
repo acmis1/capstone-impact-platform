@@ -136,7 +136,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
     const invalidPrivateApprovalMedia = {
       posterImage: { rowCount: 1, validPrivateCount: 0 },
       posterPdf: { rowCount: 1, validPrivateCount: 0 },
-      snapshotMedia: [{ galleryPosition: 1, validPrivate: false, altText: 'Snapshot 1' }],
+      snapshotMedia: [{ galleryPosition: 1, validPrivate: false, altText: 'Snapshot 1', imageContentKind: 'ordinary' as const, fullTextPublic: null }],
     };
 
     it('renders blocking errors and compliance warnings without emoji', () => {

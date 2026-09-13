@@ -41,7 +41,7 @@ If metadata staging succeeds but media staging fails, keep the recorded batch/pr
 
 The application deliberately blocks progression when authoritative evidence is incomplete or inconsistent. Common blockers include required metadata, invalid identifiers or workbook structure, private poster/media requirements, required reviewed text/alternatives, unresolved participant corrections, stale preview evidence, or permission/state mismatches.
 
-- Correct source data through the supported import or metadata controls, then rerun the normal readiness action.
+- Ask the project team to correct its source files and supply a complete replacement package. Upload, compare, and explicitly accept the exact package through the supported correction workflow, then rerun the normal readiness action. Staff must not silently rewrite participant-owned public content.
 - Treat warnings as review decisions, not errors to ignore. Record why an acknowledged warning is acceptable.
 - Treat a stale/version-changed result as a request to refresh and reassess, not a reason to retry with an old page.
 - Do not ask a developer to disable a gate or manually update status fields.
@@ -72,7 +72,7 @@ The application deliberately blocks progression when authoritative evidence is i
 2. Review the exact preview content before generating or sending a link.
 3. Choose the supported preview action. Email delivery, if available, is separately configured and may be disabled.
 4. The participant either confirms that exact preview or submits a correction request; these outcomes are mutually exclusive.
-5. If a correction is requested, an authorized staff member starts controlled resolution, edits through supported controls, obtains reapproval, and issues a new preview. Do not reuse or reconstruct an old preview link.
+5. If a correction is requested, an authorized staff member starts controlled resolution, asks the project team/participant for a complete corrected package, compares and accepts the exact revision, obtains reapproval, and issues a new preview. Do not rewrite the participant-owned content or reuse/reconstruct an old preview link.
 6. Confirmation becomes stale when authoritative participant-facing content changes. Generate a fresh preview through the normal lifecycle.
 7. Schedule/cancel reminders only when the feature is enabled and the exact preview remains eligible.
 
@@ -101,7 +101,20 @@ Archiving changes the project lifecycle. Removing a project from the deployed fe
 4. Confirm the resulting lifecycle, public-feed membership, audit, and publishing history.
 5. Do not delete public or private media manually. Retention/deletion is an institutional policy decision.
 
-Hosted rollback of application/database/Storage is not the **Publishing** restore control. Disposable-Local feed restoration only creates a new exact feed version and does not reverse project lifecycle or audit records.
+For a bounded bulk archive, use **Projects** and select only the current page. A batch accepts at
+most 50 selected rows. Review the displayed Local, Staging, or Production target and the exact
+count/list, enter one required reason, acknowledge feed removal, and confirm once. Qualified
+Published rows are sent sequentially through the same per-project archive control; this is not an
+atomic all-or-nothing change. Keep completed and already-completed/no-change results with any
+ineligible, denied, failed, unknown, and not-attempted rows. Stop on recovery, writer conflict,
+feed divergence, target/auth loss, or an ambiguous timeout/network result and inspect current
+state before explicitly selecting and confirming any retry. The batch never resumes itself. A
+120-project cohort therefore requires three separately authorized batches of 50, 50, and 20.
+Original assets remain stored. Production is unavailable until separate institutional enablement
+and exact runtime identity checks pass; an enabled production removal changes the live feed, while
+verification of the Duda presentation remains a separate operator step.
+
+Hosted application/database/Storage rollback is not the **Publishing** restore control. Historical-feed restoration is implemented only for explicitly enabled disposable Local or verified staging with the required database capability and exact-head evidence. It creates a new exact feed version and does not reverse project lifecycle or audit records. Production/Duda rollback remains unavailable.
 
 ## Assistive Checks
 
@@ -113,7 +126,7 @@ They are **suggestions only**. They cannot approve a project, publish anything, 
 information on their own. You decide what to accept. The platform works completely without them.
 
 - Open a project and select **Run checks**. Results appear on the same page when processing finishes.
-- Review each finding and either apply it, dismiss it, or leave it. Your decision is recorded.
+- Review each finding and mark it reviewed or dismissed as appropriate. When content needs correction, request a corrected project-team package; assistive suggestions do not directly rewrite participant-owned content.
 - Earlier results stay readable at all times, including while checks are unavailable.
 
 Sometimes the control is disabled and the page explains why:
@@ -123,7 +136,7 @@ Sometimes the control is disabled and the page explains why:
 | Assistive checks are temporarily unavailable because the processing worker is not ready | Processing is not currently available | Continue reviewing and editing normally. Try again later. Tell the technical maintainer if it lasts more than a working day |
 | Assistive checks have reached their processing limit for now | The platform runs assistive processing a fixed number of times each month to stay within its free allowance | Continue reviewing and editing normally. Tell the technical maintainer if this happens regularly, because the limit may need reviewing |
 
-Neither message blocks any part of your work. You can still import, edit, validate, review, preview,
+Neither message blocks any part of your work. You can still import, validate, review, request/accept corrected packages, preview,
 approve, and publish. **Never wait for assistive checks before approving a project** — deterministic
 validation and your own review are the authority.
 

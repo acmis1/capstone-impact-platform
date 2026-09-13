@@ -9,7 +9,13 @@ INSERT INTO public.programs (id, name) VALUES
   ('a0000000-0000-0000-0000-000000000001', 'Bachelor of Software Engineering'),
   ('a0000000-0000-0000-0000-000000000002', 'Bachelor of Engineering'),
   ('a0000000-0000-0000-0000-000000000003', 'Bachelor of IT'),
-  ('a0000000-0000-0000-0000-000000000004', 'Bachelor of Digital Media')
+  ('a0000000-0000-0000-0000-000000000004', 'Bachelor of Digital Media'),
+  -- Project Brief family labels below are synthetic local evidence only, not official School degree names.
+  ('a0000000-0000-0000-0000-000000000005', 'IT'),
+  ('a0000000-0000-0000-0000-000000000006', 'Engineering'),
+  ('a0000000-0000-0000-0000-000000000007', 'Aviation'),
+  ('a0000000-0000-0000-0000-000000000008', 'Food Tech'),
+  ('a0000000-0000-0000-0000-000000000009', 'Future Program (synthetic evidence)')
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO public.disciplines (id, name) VALUES
@@ -20,18 +26,24 @@ INSERT INTO public.disciplines (id, name) VALUES
   ('b0000000-0000-0000-0000-000000000005', 'IoT Systems'),
   ('b0000000-0000-0000-0000-000000000006', 'Agriculture'),
   ('b0000000-0000-0000-0000-000000000007', 'Virtual Reality'),
-  ('b0000000-0000-0000-0000-000000000008', 'Digital Media')
+  ('b0000000-0000-0000-0000-000000000008', 'Digital Media'),
+  ('b0000000-0000-0000-0000-000000000009', 'Engineering'),
+  ('b0000000-0000-0000-0000-000000000010', 'Food Tech'),
+  ('b0000000-0000-0000-0000-000000000011', 'Future Program (synthetic evidence)')
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO public.industry_categories (id, name) VALUES
   ('c0000000-0000-0000-0000-000000000001', 'Technology'),
   ('c0000000-0000-0000-0000-000000000002', 'Healthcare'),
-  ('c0000000-0000-0000-0000-000000000003', 'Agriculture')
+  ('c0000000-0000-0000-0000-000000000003', 'Agriculture'),
+  ('c0000000-0000-0000-0000-000000000004', 'Aviation'),
+  ('c0000000-0000-0000-0000-000000000005', 'Food Tech'),
+  ('c0000000-0000-0000-0000-000000000006', 'Future Program (synthetic evidence)')
 ON CONFLICT (name) DO NOTHING;
 
 -- 2. Import Batches
 INSERT INTO public.import_batches (id, batch_name, mode, source_folder, status, total_projects, warning_count, error_count) VALUES
-  ('d0000000-0000-0000-0000-000000000001', 'local-seed-batch-2026', 'batch', 'capstone-batch-demo', 'completed', 4, 1, 0)
+  ('d0000000-0000-0000-0000-000000000001', 'local-seed-batch-2026', 'batch', 'capstone-batch-demo', 'completed', 9, 1, 0)
 ON CONFLICT (id) DO NOTHING;
 
 -- 3. Synthetic Projects
@@ -212,20 +224,44 @@ INSERT INTO public.projects (
   )
 ON CONFLICT (id) DO NOTHING;
 
+-- MG-03 synthetic local evidence: these Project Brief family labels are not official School
+-- degree names. They prove the existing catalogue → project relation/scalar → admin filter path
+-- can accommodate named and later-added programmes before publication.
+INSERT INTO public.projects (
+  id, public_id, title, summary, background, solution, year, program_id, program_name, study_program,
+  discipline, industry, group_name, team_members, status, import_batch_id, source_folder
+) VALUES
+  ('e0000000-0000-0000-0000-000000000005', 'mg03-it-synthetic', 'MG-03 IT synthetic evidence', 'Synthetic local taxonomy evidence.', 'Synthetic brief-family fixture.', 'Synthetic fixture only.', 2026, 'a0000000-0000-0000-0000-000000000005', 'IT', 'IT', 'IT', 'Technology', 'MG-03 IT synthetic team', ARRAY['Synthetic MG-03 IT'], 'approved', 'd0000000-0000-0000-0000-000000000001', 'mg03-it-synthetic'),
+  ('e0000000-0000-0000-0000-000000000006', 'mg03-engineering-synthetic', 'MG-03 Engineering synthetic evidence', 'Synthetic local taxonomy evidence.', 'Synthetic brief-family fixture.', 'Synthetic fixture only.', 2026, 'a0000000-0000-0000-0000-000000000006', 'Engineering', 'Engineering', 'Engineering', 'Technology', 'MG-03 Engineering synthetic team', ARRAY['Synthetic MG-03 Engineering'], 'approved', 'd0000000-0000-0000-0000-000000000001', 'mg03-engineering-synthetic'),
+  ('e0000000-0000-0000-0000-000000000007', 'mg03-aviation-synthetic', 'MG-03 Aviation synthetic evidence', 'Synthetic local taxonomy evidence.', 'Synthetic brief-family fixture.', 'Synthetic fixture only.', 2026, 'a0000000-0000-0000-0000-000000000007', 'Aviation', 'Aviation', 'Aviation', 'Aviation', 'MG-03 Aviation synthetic team', ARRAY['Synthetic MG-03 Aviation'], 'approved', 'd0000000-0000-0000-0000-000000000001', 'mg03-aviation-synthetic'),
+  ('e0000000-0000-0000-0000-000000000008', 'mg03-food-tech-synthetic', 'MG-03 Food Tech synthetic evidence', 'Synthetic local taxonomy evidence.', 'Synthetic brief-family fixture.', 'Synthetic fixture only.', 2026, 'a0000000-0000-0000-0000-000000000008', 'Food Tech', 'Food Tech', 'Food Tech', 'Food Tech', 'MG-03 Food Tech synthetic team', ARRAY['Synthetic MG-03 Food Tech'], 'approved', 'd0000000-0000-0000-0000-000000000001', 'mg03-food-tech-synthetic'),
+  ('e0000000-0000-0000-0000-000000000009', 'mg03-future-program-synthetic', 'MG-03 future programme synthetic evidence', 'Synthetic local taxonomy evidence.', 'Synthetic brief-family fixture.', 'Synthetic fixture only.', 2026, 'a0000000-0000-0000-0000-000000000009', 'Future Program (synthetic evidence)', 'Future Program (synthetic evidence)', 'Future Program (synthetic evidence)', 'Future Program (synthetic evidence)', 'MG-03 future programme synthetic team', ARRAY['Synthetic MG-03 Future Program'], 'approved', 'd0000000-0000-0000-0000-000000000001', 'mg03-future-program-synthetic')
+ON CONFLICT (id) DO NOTHING;
+
 -- 4. Project Mapping Tables
 INSERT INTO public.project_disciplines (project_id, discipline_id) VALUES
   ('e0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001'),
   ('e0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002'),
   ('e0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000003'),
   ('e0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000005'),
-  ('e0000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000007')
+  ('e0000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000007'),
+  ('e0000000-0000-0000-0000-000000000005', 'b0000000-0000-0000-0000-000000000002'),
+  ('e0000000-0000-0000-0000-000000000006', 'b0000000-0000-0000-0000-000000000009'),
+  ('e0000000-0000-0000-0000-000000000007', 'b0000000-0000-0000-0000-000000000004'),
+  ('e0000000-0000-0000-0000-000000000008', 'b0000000-0000-0000-0000-000000000010'),
+  ('e0000000-0000-0000-0000-000000000009', 'b0000000-0000-0000-0000-000000000011')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.project_industry_categories (project_id, industry_category_id) VALUES
   ('e0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001'),
   ('e0000000-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-000000000002'),
   ('e0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000003'),
-  ('e0000000-0000-0000-0000-000000000004', 'c0000000-0000-0000-0000-000000000002')
+  ('e0000000-0000-0000-0000-000000000004', 'c0000000-0000-0000-0000-000000000002'),
+  ('e0000000-0000-0000-0000-000000000005', 'c0000000-0000-0000-0000-000000000001'),
+  ('e0000000-0000-0000-0000-000000000006', 'c0000000-0000-0000-0000-000000000001'),
+  ('e0000000-0000-0000-0000-000000000007', 'c0000000-0000-0000-0000-000000000004'),
+  ('e0000000-0000-0000-0000-000000000008', 'c0000000-0000-0000-0000-000000000005'),
+  ('e0000000-0000-0000-0000-000000000009', 'c0000000-0000-0000-0000-000000000006')
 ON CONFLICT DO NOTHING;
 
 -- 5. Media Assets Metadata
@@ -273,7 +309,7 @@ ON CONFLICT (id) DO NOTHING;
 -- The published project's projects.snapshots array already advertised a public snapshot URL with no
 -- backing media_assets row, which is not a state controlled publication can produce: it writes the
 -- projects.snapshots array and the corresponding media_assets public columns in one transaction.
--- This row makes the seed represent that real shape, and carries the staff-authored text
+-- This row makes the seed represent that real shape, and carries the project-team-authored text
 -- alternative the public feed now pairs with the URL.
 --
 -- Poster rows deliberately keep a NULL alt_text_public: the poster's text alternative is the
@@ -284,21 +320,48 @@ ON CONFLICT (id) DO NOTHING;
 -- integer position 1..10. Without it the row is skipped and the published project advertises a
 -- snapshot URL with no text alternative, which the feed contract rejects. This project has a
 -- single snapshot, so its authoritative position is 1.
-INSERT INTO public.media_assets (id, project_id, asset_type, file_name, storage_bucket, storage_path, public_url, mime_type, file_size_bytes, is_public_approved, alt_text_public, gallery_position) VALUES
-  (
-    'f0000000-0000-0000-0000-000000000003',
-    'e0000000-0000-0000-0000-000000000001',
-    'snapshot_image',
-    'snapshot1.png',
-    'project-public-assets',
-    '2026/traffic-engine/snapshot1.png',
-    'http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/traffic-engine/snapshot1.png',
-    'image/png',
-    524288,
-    true,
-    'Synthetic simulation dashboard comparing queue lengths at a four-way intersection before and after adaptive signal timing.',
-    1
-  )
-ON CONFLICT (id) DO NOTHING;
+--
+-- The image is a dashboard, i.e. a text-bearing image under Migration 0057: the project team
+-- declares it text_bearing and supplies the searchable full text the public feed publishes with
+-- it. An ordinary photograph would be declared ordinary with a NULL full text instead. The
+-- conditional update keeps this seed compatible with the disposable pre-0057 upgrade baseline;
+-- a row that existed before 0057 deliberately remains undeclared when that migration is applied.
+DO $seed_gallery$
+DECLARE
+  v_inserted integer;
+BEGIN
+  INSERT INTO public.media_assets (id, project_id, asset_type, file_name, storage_bucket, storage_path, public_url, mime_type, file_size_bytes, is_public_approved, alt_text_public, gallery_position) VALUES
+    (
+      'f0000000-0000-0000-0000-000000000003',
+      'e0000000-0000-0000-0000-000000000001',
+      'snapshot_image',
+      'snapshot1.png',
+      'project-public-assets',
+      '2026/traffic-engine/snapshot1.png',
+      'http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/traffic-engine/snapshot1.png',
+      'image/png',
+      524288,
+      true,
+      'Synthetic simulation dashboard comparing queue lengths at a four-way intersection before and after adaptive signal timing.',
+      1
+    )
+  ON CONFLICT (id) DO NOTHING;
+  GET DIAGNOSTICS v_inserted = ROW_COUNT;
+
+  IF v_inserted = 1 AND EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute
+    WHERE attrelid = 'public.media_assets'::pg_catalog.regclass
+      AND attname = 'image_content_kind'
+      AND NOT attisdropped
+  ) THEN
+    EXECUTE 'UPDATE public.media_assets SET image_content_kind = $1, full_text_public = $2 WHERE id = $3'
+      USING
+        'text_bearing',
+        'Adaptive signal timing — synthetic simulation dashboard. Intersection: Synthetic Avenue / Sample Street. Before: average queue 18 vehicles, average wait 74 s. After: average queue 7 vehicles, average wait 29 s. Peak-hour throughput +23%. Data: 30 synthetic simulation runs.',
+        'f0000000-0000-0000-0000-000000000003'::uuid;
+  END IF;
+END
+$seed_gallery$;
 
 COMMIT;

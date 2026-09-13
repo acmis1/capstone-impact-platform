@@ -4,9 +4,14 @@ set -eu
 umask 077
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd -P)
-compose_file="$script_dir/compose.yaml"
 mode=${1:-config}
 env_file=${2:-}
+profile=${3:-staging}
+case "$profile" in
+  staging) compose_file="$script_dir/compose.yaml" ;;
+  production) compose_file="$script_dir/compose.production.yaml" ;;
+  *) printf 'Profile B verification failed: profile must be staging or production\n' >&2; exit 1 ;;
+esac
 acceptance_file=""
 acceptance_temp=""
 config_output=""
@@ -61,6 +66,22 @@ assert_secret_context_protections() {
     || fail "hosted Dockerfile does not use the reviewed explicit runtime copy"
   grep -Fxq 'USER node' "$repo_root/apps/assistive-worker/Dockerfile.hosted" \
     || fail "hosted Dockerfile does not select the unprivileged runtime user"
+}
+
+assert_compose_profile() {
+  file=$1
+  identity=$2
+  grep -Fq "CAPSTONE_RUNTIME_ENV: $identity" "$file" \
+    || fail "$identity Compose profile does not pin its runtime identity"
+  grep -Fq 'CAPSTONE_ASSISTIVE_EXECUTION_MODE: CONTINUOUS' "$file" \
+    || fail "$identity Compose profile is not continuous-only"
+  grep -Fq 'pull_policy: never' "$file" || fail "$identity Compose profile permits registry pulls"
+  grep -Fq 'user: "1000:1000"' "$file" || fail "$identity Compose profile is not unprivileged"
+  grep -Fq 'stop_grace_period: 10m' "$file" || fail "$identity Compose profile lost graceful stop"
+  grep -Fq 'scale: 1' "$file" || fail "$identity Compose profile is not scale one"
+  if grep -Eq '^[[:space:]]+ports:' "$file"; then
+    fail "$identity Compose profile publishes ports"
+  fi
 }
 
 assert_immutable_identity() {
@@ -140,6 +161,14 @@ self_test() {
   fi
 
   assert_secret_context_protections "$repo_root/.dockerignore"
+  assert_compose_profile "$script_dir/compose.yaml" staging
+  assert_compose_profile "$script_dir/compose.production.yaml" production
+  grep -Fq 'CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED: ${CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED:?' \
+    "$script_dir/compose.production.yaml" \
+    || fail "production Compose profile does not require the production capability"
+  if grep -Fq 'CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED' "$script_dir/compose.yaml"; then
+    fail "staging Compose profile was broadened with the production capability"
+  fi
   printf 'Profile B verifier self-test passed.\n'
 }
 
@@ -149,7 +178,7 @@ case "$mode" in
     exit 0
     ;;
   config|image|running) ;;
-  *) fail "usage: sh verify.sh self-test | sh verify.sh [config|image|running] /absolute/path/to/worker.env" ;;
+  *) fail "usage: sh verify.sh self-test | sh verify.sh [config|image|running] /absolute/path/to/worker.env [staging|production]" ;;
 esac
 
 [ -n "$env_file" ] || fail "an external worker environment file path is required"
@@ -167,6 +196,11 @@ supabase_url=$(env_value CAPSTONE_ASSISTIVE_SUPABASE_URL)
 secret_key=$(env_value SUPABASE_SECRET_KEY)
 worker_id=$(env_value CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID)
 deployment_version=$(env_value CAPSTONE_DEPLOYMENT_VERSION)
+if [ "$profile" = production ]; then
+  production_capability=$(env_value CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED)
+  [ "$production_capability" = true ] \
+    || fail "CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED must be exactly true for the production profile"
+fi
 
 case "$expected_host" in
   *[!A-Za-z0-9.-]*|.*|*.) fail "CAPSTONE_EXPECTED_SUPABASE_HOST is not a canonical hostname" ;;
@@ -217,6 +251,11 @@ grep -Eq '^[[:space:]]+pull_policy: never$' "$config_output" || fail "registry p
 grep -Eq '^[[:space:]]+user: 1000:1000$' "$config_output" || fail "worker runtime is not pinned to the unprivileged user"
 grep -Eq '^[[:space:]]+scale: 1$' "$config_output" || fail "worker scale is not exactly one"
 grep -Fq 'CAPSTONE_ASSISTIVE_EXECUTION_MODE: CONTINUOUS' "$config_output" || fail "continuous execution mode is missing"
+grep -Fq "CAPSTONE_RUNTIME_ENV: $profile" "$config_output" || fail "runtime identity differs from the selected profile"
+if [ "$profile" = production ]; then
+  grep -Fq 'CAPSTONE_PRODUCTION_ASSISTIVE_ENABLED: "true"' "$config_output" \
+    || fail "production capability is not exactly true"
+fi
 
 image="capstone-assistive-worker:$deployment_version"
 if [ "$mode" = image ]; then
@@ -259,5 +298,5 @@ if [ "$mode" = image ]; then
   printf 'Accepted immutable image ID recorded beside the external environment file.\n'
 fi
 if [ "$mode" = running ]; then
-  printf 'Container image ID matches acceptance; readiness still requires a fresh compatible staging heartbeat.\n'
+  printf 'Container image ID matches acceptance; readiness still requires a fresh compatible %s heartbeat.\n' "$profile"
 fi

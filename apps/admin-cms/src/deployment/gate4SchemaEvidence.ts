@@ -871,6 +871,8 @@ export function validateCurrentRepositoryGate4Contract(
     ['projects', 'accessibility_text_public'],
     ['projects', 'participant_contact_email'],
     ['media_assets', 'alt_text_public'],
+    ['media_assets', 'image_content_kind'],
+    ['media_assets', 'full_text_public'],
     ['admin_users', 'auth_user_id'],
     ['admin_users', 'lifecycle_status'],
     ['admin_users', 'lifecycle_version'],

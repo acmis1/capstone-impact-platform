@@ -62,6 +62,11 @@ function historyStub(blockingOperation?: Row): SupabaseClient {
   return createSupabaseStub({
     public_feed_head: [{ singleton: true, current_version_id: 'v125', generation: 125, rollback_enabled: true }],
     public_feed_versions: versions,
+    public_feed_rollback_capability_events: [{
+      id: 'capability-event', sequence: 1, enabled: true,
+      head_version_id: 'v125', head_version_number: 125, head_generation: 125,
+      head_feed_hash: (125).toString(16).padStart(64, '0'), head_record_count: 1,
+    }],
     public_feed_version_members: versions.map((version) => ({
       version_id: version.id, ordinal: 0, public_id: 'synthetic-project',
     })),
@@ -82,6 +87,7 @@ describe('public feed history pagination', () => {
     expect(first.versions.at(-1)?.versionNumber).toBe(76);
     expect(first.hasNewer).toBe(false);
     expect(first.hasOlder).toBe(true);
+    expect(first.verifiedStagingRollbackEnabled).toBe(true);
     expect(second.versions.map((version) => version.versionNumber)).toEqual(
       Array.from({ length: 50 }, (_, index) => 75 - index),
     );

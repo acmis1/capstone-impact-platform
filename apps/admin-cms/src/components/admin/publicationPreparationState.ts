@@ -15,7 +15,7 @@ export interface PublicationSuccessEvidence {
   feedPublicUrl: string;
 }
 
-export type PublicationExecutionTarget = 'local' | 'staging';
+export type PublicationExecutionTarget = 'local' | 'staging' | 'production';
 
 export interface PublicationPreparationState {
   operation: 'idle' | 'planning' | 'executing';

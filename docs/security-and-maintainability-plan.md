@@ -24,7 +24,7 @@ Ensure that administrative workflows, participant project data, and public showc
 
 | Security Control | Scope / Description | Status |
 | :--- | :--- | :--- |
-| **Auth and schema migrations** | 53 append-only versioned repository-candidate migrations through `20260909120000_staff_lifecycle_readiness`; latest hosted evidence remains 52 | `REPOSITORY_VERIFIED`; Migration 0053 has no hosted evidence in this patch |
+| **Auth and schema migrations** | 57 append-only versioned repository-candidate migrations through `20260911120000_gallery_full_text_equivalents`; latest hosted evidence remains 52 | `REPOSITORY_VERIFIED`; Migrations 0053–0057 have no hosted evidence in this patch |
 | **Claims/Session Authorization Helper** | Verification of admin roles and permission checks via `requireAdmin` helper | `IMPLEMENTED_AND_TESTED` |
 | **Protected Layout & Route guards** | Protected admin layout and API route session validation guards | `IMPLEMENTED_AND_TESTED` |
 | **Live Session Verification** | Initial administrator activation is historical evidence; current staging-v2 is a separate target | `HISTORICAL_EVIDENCE` |
@@ -47,7 +47,7 @@ Ensure that administrative workflows, participant project data, and public showc
 *   **CMS Authentication**: Initial administrator authentication in `capstone-admin-cms-staging-2026` is historical evidence, not a current staging-v2 acceptance claim. Automated disposable-Local acceptance verifies real Admin/Reviewer/Editor sign-in, exact role and multi-role permission unions, RLS/Data API denial, service-only RPC denial, 3600-second issued-session timing, sign-out browser-session removal, CSRF mutation boundaries, and server-derived audit attribution. Human reviewer/editor UAT, hosted multi-role acceptance, institutional provisioning, and staff handover remain pending.
 *   **Environment Lock**: The active Admin/CMS staging stack uses Render service `capstone-admin-cms-staging-v2` with the active Supabase staging-v2 project `capstone-admin-cms-staging-v2-2026`; the old `capstone-admin-cms-staging-2026` activation is historical. The Prototype recovery project **must not be used** for Admin/CMS authentication.
 *   **Least Privilege Credentials**: Supabase `service_role` keys are backend-only and their usage is isolated in server-only modules (`import 'server-only'`). Static client bundle scanning confirmed zero service-role keys or secret names exist in frontend assets.
-*   **Migration Contract**: The repository candidate contains 53 versioned migrations. Active staging-v2 and its independent Gate 4 evidence remain at the prior 52-migration contract until separately authorized application and fresh evidence. This does not authorize routine migration repair, `db push`, reset, or hosted mutation; repair requires a proven history mismatch and separate authorization.
+*   **Migration Contract**: The repository candidate contains 57 versioned migrations. Active staging-v2 and its independent Gate 4 evidence remain at the prior 52-migration contract until separately authorized application and fresh evidence. This does not authorize routine migration repair, `db push`, reset, or hosted mutation; repair requires a proven history mismatch and separate authorization.
 
 ---
 

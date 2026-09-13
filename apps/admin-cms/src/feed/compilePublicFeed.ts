@@ -1,5 +1,6 @@
 import { Project } from '../domain/project';
 import { PublicFeedRecord } from '../domain/publicFeed';
+import { isSnapshotImageContentKind } from '../domain/galleryTextEquivalent';
 
 /**
  * Compiles internal database records into the sanitized public showcase feed.
@@ -42,12 +43,17 @@ export function toPublicFeedRecord(p: Project): PublicFeedRecord {
         accessibilityText: p.accessibilityText || '',
         snapshots: Array.isArray(p.snapshots) ? p.snapshots : [],
         // Copied element-wise rather than by reference so the compiled record can never be mutated
-        // through the source project, and normalised to the exact three-key public shape.
+        // through the source project, and normalised to the exact public shape: the three
+        // pairing keys, plus the declared text-equivalent keys when the image has been classified
+        // (both keys absent only on a legacy record published before Migration 0057).
         snapshotMedia: Array.isArray(p.snapshotMedia)
           ? p.snapshotMedia.map((item) => ({
               url: item.url,
               altText: item.altText,
               galleryPosition: item.galleryPosition,
+              ...(isSnapshotImageContentKind(item.contentKind)
+                ? { contentKind: item.contentKind, fullText: item.fullText ?? null }
+                : {}),
             }))
           : [],
         // Include optional fields conditionally if defined

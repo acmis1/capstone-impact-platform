@@ -103,8 +103,8 @@ export function parseProjectDetailsJson(
   const posterText = getString('posterText');
   const accessibilityText = getString('accessibilityText');
   // Legacy JSON manifests predate the snapshot-alt contract, so an absent value is not an error
-  // here — a legacy package may still be staged into private draft media, and staff supply the alt
-  // text through the project media surface before the project can progress any further. A value
+  // here — a legacy package may still be staged into private draft media, and an accepted corrected
+  // package must supply the alt text before the project can progress any further. A value
   // that IS supplied must be usable, so an oversized one is rejected outright rather than
   // truncated: nothing in this codebase invents or shortens accessibility text.
   const snapshotAltText = getString('snapshotAltText');

@@ -35,6 +35,7 @@ export const CLEARED_FILTER_PREFERENCES = {
   year: '',
   program: '',
   discipline: '',
+  industry: '',
 } as const;
 
 /**
@@ -52,5 +53,6 @@ export function buildClearFiltersQueryString(
     year: null,
     program: null,
     discipline: null,
+    industry: null,
   });
 }

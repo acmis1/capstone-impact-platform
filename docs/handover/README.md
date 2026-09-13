@@ -2,7 +2,7 @@
 
 **STATUS:** Current — handover entry point
 **PURPOSE:** Operations
-**LAST VERIFIED:** 2026-08-28
+**LAST VERIFIED:** 2026-09-10
 
 If you have just been given responsibility for the Capstone Impact Platform, start here. This page
 is the map: it tells you what the system is, which document answers which question, and what still
@@ -59,7 +59,9 @@ Read in this order:
 4. **[M6 Operational Readiness and Recovery](../m6-operational-readiness.md)** — backup and restore
    scope, recovery evidence, monitoring, incident handling, deployment and rollback.
 5. **[Environment Matrix](environment-matrix.md)** — which environment may do what.
-6. **[Tan — Poster PDF and Controlled Project Links Integration Record](tan-poster-pdf-controlled-links-integration.md)** —
+6. **[Runtime Configuration Contract](runtime-configuration-contract.md)** — source-backed variable
+   ownership, defaults, parsing, process boundaries, provider identity and enablement state.
+7. **[Tan — Poster PDF and Controlled Project Links Integration Record](tan-poster-pdf-controlled-links-integration.md)** —
    contribution provenance for PR #255, every integration/hardening change applied through PR #262,
    final migration lineage, verification, and guidance for continuing the work from current `main`.
 
@@ -125,7 +127,7 @@ npm run verify:all         # the full quality gate
 Then confirm you can:
 
 - sign in with a synthetic local account;
-- verify the 51-file repository migration manifest (`npm run onboarding:check`), then verify applied history separately through Gate 3 of the staging reconciliation runbook;
+- verify the 57-file repository migration manifest (`npm run onboarding:check`), then verify applied history separately through Gate 3 of the staging reconciliation runbook;
 - build the assistive worker image (`docker build -f apps/assistive-worker/Dockerfile.hosted .`);
 - run the worker locally and watch it process a queued project;
 - read current executor readiness and remaining launch capacity;
@@ -180,3 +182,7 @@ Code cannot complete these. Each needs a person with institutional authority.
 
 **Until these are done, this is a handover package, not a completed handover.** Nothing in this
 repository claims otherwise, and nothing should be marked complete without evidence.
+
+For the exact runtime contract, use [Runtime Configuration Contract](runtime-configuration-contract.md).
+A manifest or environment example documents intended configuration only; neither proves that a
+running process adopted it nor supplies deployment or institutional authorization.

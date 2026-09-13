@@ -213,6 +213,26 @@ describe('POST /api/projects/[publicId]/participant-preview Route Handler Tests'
     expect(json.code).toBe('AMBIGUOUS_CORRECTION_REQUEST');
   });
 
+  it('9a. Directs missing gallery accessibility content to the correction-package workflow', async () => {
+    vi.mocked(requireAdmin).mockResolvedValue({
+      adminUserId: mockAdminId,
+      permissions: ['projects.review'],
+    } as never);
+
+    vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'generatePreview').mockRejectedValue(
+      new ParticipantPreviewExecutionError('MEDIA_ACCESSIBILITY_REQUIRED')
+    );
+
+    const res = await previewPOST(createRequest(), { params: Promise.resolve({ publicId: mockPublicId }) });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      success: false,
+      code: 'MEDIA_ACCESSIBILITY_REQUIRED',
+      error: 'The snapshot image needs project-team-authored alt text before a participant preview can be generated. Request changes, obtain and accept a complete corrected package, then approve again.',
+    });
+  });
+
   it('10. Uses the canonical public origin instead of the internal request origin', async () => {
     vi.mocked(resolveCanonicalPublicOrigin).mockReturnValue('https://capstone-admin-cms-staging-v2.onrender.com');
     vi.mocked(requireAdmin).mockResolvedValue({

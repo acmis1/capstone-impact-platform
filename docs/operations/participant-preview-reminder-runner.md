@@ -8,10 +8,10 @@ runner. It does not approve an SMTP provider, a sender domain, a production targ
 
 ## Root cause closed by this mechanism
 
-The reminder schedule, notification ledger, and email lifecycle already existed and were tested. The
-only repository command that claimed due reminders was deliberately local-only: it loaded the Local
-Supabase CLI environment and refused every non-loopback URL. An SMTP arrangement by itself therefore
-could not make reminders run after handover because no hosted process was claiming due schedules.
+The reminder schedule, notification ledger, and email lifecycle already existed and were tested.
+The original command was local-only, and the later hosted runner remained staging-only. An SMTP
+arrangement by itself therefore could not make production reminders run after handover because no
+production-qualified process could claim due schedules.
 
 This change adds the missing execution plumbing without changing the schedule schema, preview token
 handling, notification ledger, message content, or delivery state machine.
@@ -65,6 +65,20 @@ The runner is send-capable only when all of the following are true:
   implicit TLS, while `false` is accepted only with Nodemailer `requireTLS` STARTTLS enforcement
   (ordinary institutional port 587 remains supported).
 
+Those bullets remain the unchanged staging profile. Production uses the additive
+`compose.production.yaml` and `participant-reminders.production.env.example`, with:
+
+- `CAPSTONE_RUNTIME_ENV=production` and the same canonical actual-URL-to-expected-host checks;
+- an independent exact 20-letter `CAPSTONE_EXPECTED_SUPABASE_PROJECT_REF` matching that host;
+- `CAPSTONE_PRODUCTION_REMINDERS_ENABLED=true` exactly, in addition to the existing reminder and
+  email flags; and
+- a valid bounded `CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT` label instead of the staging
+  mutation confirmation.
+
+The production capability and acknowledgement are injected independently by its Compose profile.
+Missing, false, padded, or case-varied capability values fail closed. A staging flag or staging
+acknowledgement cannot authorize production, and the production values do not authorize staging.
+
 The optional `PARTICIPANT_PREVIEW_REMINDERS_POLL_INTERVAL_MS` is bounded to 5,000–900,000 ms. The
 optional `PARTICIPANT_PREVIEW_REMINDERS_BATCH_LIMIT` is bounded to 1–50 and defaults to 20. The
 runner claims one item at a time inside that total batch bound, preserving the existing short
@@ -113,6 +127,10 @@ npm run test:run --workspace=apps/admin-cms -- src/reminders/hostedParticipantPr
 npm run build:participant-preview-reminder-runner
 ```
 
+The production Compose candidate must be selected explicitly and supplied all three independent
+host guards. Repository checks use synthetic values only. No Docker start, real SMTP delivery,
+hosted target access, or production activation is part of code qualification.
+
 The Local SMTP sink runtime remains the test boundary for actual message composition and delivery
 outcomes. It must be used instead of a real SMTP server for repository verification.
 
@@ -139,8 +157,9 @@ operation can settle truthfully.
 
 ## What this proves and what remains blocked
 
-This work proves that a provider-neutral, locally buildable, zero-recurring-service-cost runner
-mechanism exists and that its hosted process boundary is fail-closed and testable. It does not prove
-production email delivery, SMTP reachability, sender-domain approval, institutional policy, human
-UAT, uptime, monitoring, backups, or institutional ownership. Those remain external acceptance and
-handover blockers until the School supplies and records them through its approved process.
+This work proves that provider-neutral staging and disabled-by-default production runner profiles
+exist and that their hosted process boundaries are fail-closed and testable. Neither profile grants
+publication, database migration, or historical rollback authority. It does not prove production
+email delivery, SMTP reachability, sender-domain approval, institutional policy, human UAT, uptime,
+monitoring, backups, or institutional ownership. Those remain external acceptance and handover
+blockers until the School supplies and records them through its approved process.

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { readGitMigrationObjects } from '../test-support/gitBatchParser';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -33,9 +33,10 @@ describe('Migration 0019 controlled publication execution security contract', ()
     const files = fs.readdirSync(migrationDir).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toContain(migration);
     expect(files[18]).toBe(migration);
-    for (const file of files.slice(0, 18)) {
+    const inheritedObjects = readGitMigrationObjects(root, files.slice(0, 18).map(file => `83e8fbcda747cf57a8ac45c53f540a59a16fb814:infra/supabase/migrations/${file}`));
+    for (const [index, file] of files.slice(0, 18).entries()) {
       const local = fs.readFileSync(path.join(migrationDir, file), 'utf8').replace(/\r\n/g, '\n');
-      const inherited = execFileSync('git', ['show', `83e8fbcda747cf57a8ac45c53f540a59a16fb814:infra/supabase/migrations/${file}`], { cwd: root, encoding: 'utf8' }).replace(/\r\n/g, '\n');
+      const inherited = inheritedObjects[index].toString('utf8').replace(/\r\n/g, '\n');
       expect(crypto.createHash('sha256').update(local).digest('hex')).toBe(crypto.createHash('sha256').update(inherited).digest('hex'));
     }
   });

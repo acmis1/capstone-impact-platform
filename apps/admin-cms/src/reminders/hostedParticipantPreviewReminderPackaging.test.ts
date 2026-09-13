@@ -36,4 +36,25 @@ describe('participant preview reminder hosted packaging', () => {
     expect(example).not.toContain('https://');
     expect(example).not.toContain('@');
   });
+
+  it('provides a separate fail-closed production profile without changing staging guards', () => {
+    const staging = fs.readFileSync(path.join(packagingRoot, 'compose.yaml'), 'utf8');
+    const production = fs.readFileSync(path.join(packagingRoot, 'compose.production.yaml'), 'utf8');
+    const example = fs.readFileSync(
+      path.join(packagingRoot, 'participant-reminders.production.env.example'),
+      'utf8',
+    );
+
+    expect(staging).toContain('CAPSTONE_STAGING_MUTATION_CONFIRMATION');
+    expect(staging).not.toContain('CAPSTONE_PRODUCTION_REMINDERS_ENABLED');
+    expect(production).toContain('CAPSTONE_RUNTIME_ENV: production');
+    expect(production).toContain('CAPSTONE_PRODUCTION_REMINDERS_ENABLED: ${CAPSTONE_PRODUCTION_REMINDERS_ENABLED-}');
+    expect(production).toContain('CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT: ${CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT-}');
+    expect(production).not.toContain('CAPSTONE_STAGING_MUTATION_CONFIRMATION');
+    expect(production).not.toMatch(/^\s*ports:\s*$/im);
+    expect(production).not.toMatch(/^\s*deploy:\s*$/im);
+    expect(production).toContain('restart: on-failure');
+    expect(example.split(/\r?\n/).filter((line) => line && !line.startsWith('#'))
+      .every((line) => /^[A-Z][A-Z0-9_]*=$/.test(line))).toBe(true);
+  });
 });

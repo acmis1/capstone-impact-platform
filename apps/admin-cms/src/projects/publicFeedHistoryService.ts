@@ -7,6 +7,10 @@ import { compilePublicFeed, toPublicFeedRecord } from '../feed/compilePublicFeed
 import { createPublicFeedArtifact, verifyPublicFeedArtifact } from '../feed/publicFeedArtifact';
 import { SupabasePublicFeedLedgerRepositoryCore } from '../repositories/SupabasePublicFeedLedgerRepositoryCore';
 import { isLocalPublicFeedRollbackAvailable } from './localPublicationExecution';
+import {
+  assertPublicFeedRollbackEnvironmentAvailable,
+  type PublicFeedRollbackExecutionTarget,
+} from './publicFeedRollbackPolicy';
 import type { PublicationMediaBinding } from './publicationArtifact';
 import { executePublicFeedWriter, inspectPublicFeedHead } from './publicFeedWriterCoordinator';
 
@@ -27,6 +31,19 @@ export interface PublicFeedHistoryServiceDependencies {
   promoteBoundPublicMedia?(manifest: PublicationMediaBinding[]): Promise<void>;
 }
 
+function rollbackExecutionTarget(
+  dependencies: PublicFeedHistoryServiceDependencies,
+): PublicFeedRollbackExecutionTarget | null {
+  try {
+    return assertPublicFeedRollbackEnvironmentAvailable(
+      dependencies.supabaseUrl,
+      dependencies.environment,
+    );
+  } catch {
+    return null;
+  }
+}
+
 export type PublicFeedRecoveryResult =
   | { resultCode: 'COMPLETED'; versionNumber: number | null; feedHash: string; recordCount: number }
   | { resultCode: 'RELEASED' | 'PERMISSION_DENIED' | 'RECOVERY_REQUIRED' | 'PUBLICATION_IN_PROGRESS' | 'NO_RECOVERY_REQUIRED' }
@@ -37,17 +54,33 @@ export async function recoverPublicFeedOperation(
   dependencies: PublicFeedHistoryServiceDependencies,
 ): Promise<PublicFeedRecoveryResult> {
   if (!canPreparePublication(dependencies.permissions)) return { resultCode: 'PERMISSION_DENIED' };
-  try { dependencies.assertActivationEnvironment(); }
-  catch { return { resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' }; }
 
   try {
+    // A request needs a verified forward OR independent rollback capability before ledger access.
+    // The durable operation kind then chooses exactly one path; a rollback window never grants
+    // publication/removal recovery, and production publication never grants historical rollback.
+    let forwardRecoveryAllowed = false;
+    try { dependencies.assertActivationEnvironment(); forwardRecoveryAllowed = true; } catch { /* denied */ }
+    const allowedRollbackTarget = rollbackExecutionTarget(dependencies);
+    if (!forwardRecoveryAllowed && !allowedRollbackTarget) {
+      return { resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' };
+    }
     const ledger = new SupabasePublicFeedLedgerRepositoryCore(dependencies.supabase);
     const operation = await ledger.getBlockingOperation();
     if (!operation) return { resultCode: 'NO_RECOVERY_REQUIRED' };
-    if (operation.kind === 'rollback' && !isLocalPublicFeedRollbackAvailable(
-      dependencies.supabaseUrl, dependencies.environment,
-    )) {
-      return { resultCode: 'RECOVERY_REQUIRED' };
+    if (operation.kind === 'rollback') {
+      const target = rollbackExecutionTarget(dependencies);
+      if (!target) return { resultCode: 'RECOVERY_REQUIRED' };
+      if (target === 'staging') {
+        if (!await ledger.isVerifiedStagingRollbackOperationAuthorized(operation)) {
+          return { resultCode: 'RECOVERY_REQUIRED' };
+        }
+      } else {
+        const head = await ledger.getHead();
+        if (!head?.rollbackEnabled) return { resultCode: 'RECOVERY_REQUIRED' };
+      }
+    } else if (!forwardRecoveryAllowed) {
+      return { resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' };
     }
     if (operation.storageBucket !== dependencies.feedBucket
         || operation.storagePath !== dependencies.feedPath) {
@@ -103,8 +136,26 @@ export async function recoverPublicFeedOperation(
               throw new Error('LIFECYCLE_STORAGE_MISMATCH');
             }
           }
-        : undefined,
+        : operation.kind === 'rollback'
+          ? async () => {
+              const target = rollbackExecutionTarget(dependencies);
+              if (!target) {
+                throw new Error('ROLLBACK_UNAVAILABLE');
+              }
+              const currentHead = await ledger.getHead();
+              if (!currentHead?.rollbackEnabled) throw new Error('ROLLBACK_UNAVAILABLE');
+              if (target === 'staging'
+                  && !await ledger.isVerifiedStagingRollbackOperationAuthorized(operation)) {
+                throw new Error('ROLLBACK_UNAVAILABLE');
+              }
+              if (currentHead.currentVersion.id !== operation.baselineVersionId) {
+                throw new Error('STALE_PREPARATION');
+              }
+            }
+          : undefined,
       afterWriteIntent: dependencies.promoteBoundPublicMedia,
+      verifiedStagingRollback: operation.kind === 'rollback'
+        && rollbackExecutionTarget(dependencies) === 'staging',
     });
     if (writer.resultCode === 'COMPLETED' || writer.resultCode === 'ALREADY_COMPLETED') {
       return {
@@ -207,14 +258,92 @@ export type RollbackPreparationResult =
   | { resultCode: 'PERMISSION_DENIED' | 'ROLLBACK_UNAVAILABLE' | 'VERSION_NOT_FOUND' | 'ALREADY_CURRENT' | 'ROLLBACK_TARGET_UNAVAILABLE' | 'PUBLICATION_IN_PROGRESS' | 'STALE_BASELINE' }
   | { resultCode: 'EXECUTION_FAILED'; failureCode: string };
 
+export interface PublicFeedRollbackHeadEvidence {
+  versionNumber: number;
+  generation: number;
+  feedHash: string;
+  recordCount: number;
+}
+
+export function requiredPublicFeedRollbackCapabilityConfirmation(
+  enabled: boolean,
+  evidence: PublicFeedRollbackHeadEvidence,
+): string {
+  return `${enabled ? 'ENABLE' : 'DISABLE'} PUBLIC FEED ROLLBACK FOR VERSION ${evidence.versionNumber}`
+    + ` GENERATION ${evidence.generation} HASH ${evidence.feedHash} COUNT ${evidence.recordCount}`;
+}
+
+export type PublicFeedRollbackCapabilityResult =
+  | (PublicFeedRollbackHeadEvidence & {
+      resultCode: 'CAPABILITY_UPDATED';
+      eventId: string;
+      createdAt: string;
+      previousEnabled: boolean;
+      rollbackEnabled: boolean;
+    })
+  | (PublicFeedRollbackHeadEvidence & {
+      resultCode: 'NO_CHANGE';
+      rollbackEnabled: boolean;
+    })
+  | { resultCode: 'PERMISSION_DENIED' | 'ROLLBACK_UNAVAILABLE' | 'HISTORY_NOT_ACTIVE' | 'STALE_HEAD' | 'CONFIRMATION_MISMATCH' | 'PUBLICATION_IN_PROGRESS' | 'RECOVERY_REQUIRED' }
+  | { resultCode: 'EXECUTION_FAILED'; failureCode: string };
+
+/** Explicit operator transition; no startup path invokes this function. */
+export async function transitionPublicFeedRollbackCapability(
+  dependencies: PublicFeedHistoryServiceDependencies,
+  enabled: boolean,
+  expected: PublicFeedRollbackHeadEvidence,
+  confirmation: string,
+): Promise<PublicFeedRollbackCapabilityResult> {
+  if (!canPreparePublication(dependencies.permissions)) return { resultCode: 'PERMISSION_DENIED' };
+  const target = rollbackExecutionTarget(dependencies);
+  if (!target) return { resultCode: 'ROLLBACK_UNAVAILABLE' };
+
+  try {
+    const inspected = await inspectPublicFeedHead(
+      dependencies.supabase, dependencies.feedBucket, dependencies.feedPath,
+    );
+    if (!inspected.head || !inspected.artifact) return { resultCode: 'HISTORY_NOT_ACTIVE' };
+    const actual: PublicFeedRollbackHeadEvidence = {
+      versionNumber: inspected.head.currentVersion.versionNumber,
+      generation: inspected.head.generation,
+      feedHash: inspected.artifact.feedHash,
+      recordCount: inspected.artifact.recordCount,
+    };
+    if (actual.versionNumber !== expected.versionNumber
+        || actual.generation !== expected.generation
+        || actual.feedHash !== expected.feedHash
+        || actual.recordCount !== expected.recordCount) {
+      return { resultCode: 'STALE_HEAD' };
+    }
+    if (confirmation !== requiredPublicFeedRollbackCapabilityConfirmation(enabled, actual)) {
+      return { resultCode: 'CONFIRMATION_MISMATCH' };
+    }
+    return await new SupabasePublicFeedLedgerRepositoryCore(dependencies.supabase)
+      .transitionRollbackCapability({
+        adminId: dependencies.adminId,
+        enabled,
+        requireExactHeadEvent: target === 'staging',
+        expectedVersionNumber: actual.versionNumber,
+        expectedGeneration: actual.generation,
+        expectedFeedHash: actual.feedHash,
+        expectedRecordCount: actual.recordCount,
+        confirmation,
+      }) as PublicFeedRollbackCapabilityResult;
+  } catch (error) {
+    const code = error instanceof Error && /^[A-Z0-9_]{1,64}$/.test(error.message)
+      ? error.message : 'ROLLBACK_CAPABILITY_TRANSITION_FAILED';
+    return { resultCode: 'EXECUTION_FAILED', failureCode: code };
+  }
+}
+
 export async function preparePublicFeedRollback(
   dependencies: PublicFeedHistoryServiceDependencies,
   targetVersionNumber: number,
 ): Promise<RollbackPreparationResult> {
   if (!canPreparePublication(dependencies.permissions)) return { resultCode: 'PERMISSION_DENIED' };
-  if (!isLocalPublicFeedRollbackAvailable(
-    dependencies.supabaseUrl, dependencies.environment,
-  )) return { resultCode: 'ROLLBACK_UNAVAILABLE' };
+  const executionTarget = rollbackExecutionTarget(dependencies);
+  if (!executionTarget) return { resultCode: 'ROLLBACK_UNAVAILABLE' };
   if (!Number.isSafeInteger(targetVersionNumber) || targetVersionNumber <= 0) {
     return { resultCode: 'VERSION_NOT_FOUND' };
   }
@@ -224,6 +353,10 @@ export async function preparePublicFeedRollback(
       dependencies.supabase, dependencies.feedBucket, dependencies.feedPath,
     );
     if (!inspected.head || !inspected.artifact) throw new Error('HISTORY_NOT_ACTIVE');
+    const rollbackEnabled = executionTarget === 'staging'
+      ? await ledger.isCurrentVerifiedStagingRollbackCapabilityEnabled()
+      : inspected.head.rollbackEnabled;
+    if (!rollbackEnabled) return { resultCode: 'ROLLBACK_UNAVAILABLE' };
     const targetVersion = await ledger.getVersionByNumber(targetVersionNumber);
     if (!targetVersion) return { resultCode: 'VERSION_NOT_FOUND' };
     const target = verifyPublicFeedArtifact(targetVersion.artifactContent);
@@ -247,7 +380,10 @@ export async function preparePublicFeedRollback(
       if (JSON.stringify(currentRecord) !== JSON.stringify(targetRecord)) changedPublicIds.push(targetRecord.publicId);
     }
     if (missingPublicIds.length > 0) return { resultCode: 'ROLLBACK_TARGET_UNAVAILABLE' };
-    const result = await ledger.prepareRollback(
+    const prepare = executionTarget === 'staging'
+      ? ledger.prepareVerifiedStagingRollback.bind(ledger)
+      : ledger.prepareRollback.bind(ledger);
+    const result = await prepare(
       dependencies.adminId, targetVersionNumber, inspected.artifact.feedHash,
       inspected.artifact.recordCount, { archivedPublicIds, changedPublicIds },
     );
@@ -270,11 +406,14 @@ export async function executePublicFeedRollback(
   acknowledgement: string,
 ): Promise<PublicFeedRollbackResult> {
   if (!canPreparePublication(dependencies.permissions)) return { resultCode: 'PERMISSION_DENIED' };
-  if (!isLocalPublicFeedRollbackAvailable(
-    dependencies.supabaseUrl, dependencies.environment,
-  )) return { resultCode: 'ROLLBACK_UNAVAILABLE' };
+  const executionTarget = rollbackExecutionTarget(dependencies);
+  if (!executionTarget) return { resultCode: 'ROLLBACK_UNAVAILABLE' };
   try {
     const ledger = new SupabasePublicFeedLedgerRepositoryCore(dependencies.supabase);
+    if (executionTarget === 'local') {
+      const head = await ledger.getHead();
+      if (!head?.rollbackEnabled) return { resultCode: 'ROLLBACK_UNAVAILABLE' };
+    }
     const preparation = await ledger.getRollbackPreparation(preparationHandle);
     const acknowledgementDigest = createHash('sha256').update(acknowledgement, 'utf8').digest('hex');
     if (!preparation || preparation.actorId !== dependencies.adminId
@@ -330,13 +469,36 @@ export async function executePublicFeedRollback(
         feedHash: completedVersion.feedHash, recordCount: completedVersion.recordCount,
       };
     };
+    if (executionTarget === 'staging') {
+      const stagingCapabilityValid = boundOperation
+        ? await ledger.isVerifiedStagingRollbackOperationAuthorized(boundOperation)
+        : await ledger.isCurrentVerifiedStagingRollbackCapabilityEnabled();
+      if (!stagingCapabilityValid) return { resultCode: 'ROLLBACK_UNAVAILABLE' };
+    }
     if (boundOperation?.state === 'COMPLETED') return completedEvidence(boundOperation.id);
     const writer = await executePublicFeedWriter({
       supabase: dependencies.supabase, adminId: dependencies.adminId, kind: 'rollback',
       rollbackPreparationHandle: preparationHandle, rollbackAcknowledgement: acknowledgement,
       feedBucket: dependencies.feedBucket, feedPath: dependencies.feedPath,
+      verifiedStagingRollback: executionTarget === 'staging',
       recoveryOperationId: boundOperation?.id,
       prepareCandidate: async () => ({ artifact: target }),
+      validateBeforeWriteIntent: async () => {
+        if (!rollbackExecutionTarget(dependencies)) {
+          throw new Error('ROLLBACK_UNAVAILABLE');
+        }
+        const currentHead = await ledger.getHead();
+        if (!currentHead?.rollbackEnabled) throw new Error('ROLLBACK_UNAVAILABLE');
+        if (executionTarget === 'staging') {
+          const stagingCapabilityValid = boundOperation
+            ? await ledger.isVerifiedStagingRollbackOperationAuthorized(boundOperation)
+            : await ledger.isCurrentVerifiedStagingRollbackCapabilityEnabled();
+          if (!stagingCapabilityValid) throw new Error('ROLLBACK_UNAVAILABLE');
+        }
+        if (currentHead.currentVersion.id !== preparation.baselineVersionId) {
+          throw new Error('STALE_PREPARATION');
+        }
+      },
     });
     if (writer.resultCode === 'COMPLETED' || writer.resultCode === 'ALREADY_COMPLETED') {
       return {
@@ -349,9 +511,18 @@ export async function executePublicFeedRollback(
       if (reloaded?.state === 'COMPLETED') return completedEvidence(boundOperation.id);
     }
     if (writer.resultCode === 'PERMISSION_DENIED') return { resultCode: 'PERMISSION_DENIED' };
+    if (writer.resultCode === 'ROLLBACK_UNAVAILABLE') return { resultCode: 'ROLLBACK_UNAVAILABLE' };
     if (writer.resultCode === 'STALE_PREPARATION') return { resultCode: 'STALE_PREPARATION' };
     if (writer.resultCode === 'PUBLICATION_IN_PROGRESS') return { resultCode: 'PUBLICATION_IN_PROGRESS' };
     if (writer.resultCode === 'RECOVERY_REQUIRED') return { resultCode: 'RECOVERY_REQUIRED' };
+    if (writer.resultCode === 'EXECUTION_FAILED'
+        && writer.failureCode === 'ROLLBACK_UNAVAILABLE') {
+      return { resultCode: 'ROLLBACK_UNAVAILABLE' };
+    }
+    if (writer.resultCode === 'EXECUTION_FAILED'
+        && writer.failureCode === 'STALE_PREPARATION') {
+      return { resultCode: 'STALE_PREPARATION' };
+    }
     return writer.resultCode === 'EXECUTION_FAILED'
       ? writer
       : { resultCode: 'EXECUTION_FAILED', failureCode: writer.resultCode };

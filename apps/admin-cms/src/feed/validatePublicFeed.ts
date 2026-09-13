@@ -1,5 +1,10 @@
 import { PublicFeedRecord } from '../domain/publicFeed';
 import { ACCESSIBLE_CONTENT_LIMITS, getAccessibleContentProblem } from '../domain/accessibleContent';
+import {
+  describeSnapshotTextEquivalentProblem,
+  getSnapshotTextEquivalentProblem,
+  isSnapshotImageContentKind,
+} from '../domain/galleryTextEquivalent';
 import { STORAGE_POLICIES } from '../storage/storageRules';
 
 export interface FeedValidationResult {
@@ -12,6 +17,8 @@ const SNAPSHOT_MEDIA_KEYS = new Set([
   'url',
   'altText',
   'galleryPosition',
+  'contentKind',
+  'fullText',
 ]);
 
 const MAX_POLICY_PATH_DECODE_PASSES = 3;
@@ -251,8 +258,15 @@ function validateActivePublicUrls(record: Record<string, unknown>, prefix: strin
  * 6. snapshotMedia[i].url must equal snapshots[i].
  * 7. Every snapshot URL is claimed by exactly one snapshotMedia entry.
  * 8. Every altText is non-blank and within the accessibility safety limit.
+ * 9. Text-equivalent contract: `contentKind` and `fullText` are either both present or both
+ *    absent. When present, `contentKind` is a declared kind, an `ordinary` image carries
+ *    `fullText: null`, and a `text_bearing` image carries a non-blank `fullText` within the
+ *    safety limit — a text-bearing image with no full equivalent is an impossible public record.
+ *    Both absent is the legacy shape of a record published before Migration 0057: it stays
+ *    valid so the already-deployed feed remains readable and recompilable, and is reported as a
+ *    warning; new publication of such media is refused by the planner and the database gates.
  */
-function validateSnapshotMedia(record: Record<string, unknown>, prefix: string, errors: string[]): void {
+function validateSnapshotMedia(record: Record<string, unknown>, prefix: string, errors: string[], warnings: string[]): void {
   const snapshotMedia = record.snapshotMedia;
   const snapshots = record.snapshots;
 
@@ -381,11 +395,55 @@ function validateSnapshotMedia(record: Record<string, unknown>, prefix: string, 
         `${itemPrefix} "altText" exceeds the ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText.toLocaleString('en-US')} character safety limit.`,
       );
     }
+
+    validateSnapshotTextEquivalent(item, itemPrefix, errors, warnings);
   });
 
   unclaimedSnapshotUrls.forEach((url) => {
     errors.push(`${prefix} Snapshot image is published without a text alternative: "${url}".`);
   });
+}
+
+/** Rule 9 of the snapshot media contract (see validateSnapshotMedia). */
+function validateSnapshotTextEquivalent(
+  item: Record<string, unknown>,
+  itemPrefix: string,
+  errors: string[],
+  warnings: string[],
+): void {
+  const hasKind = 'contentKind' in item;
+  const hasFullText = 'fullText' in item;
+
+  if (!hasKind && !hasFullText) {
+    warnings.push(
+      `${itemPrefix} predates the gallery text-equivalent contract (no "contentKind"); it must be re-declared by the project team before it can be published again.`,
+    );
+    return;
+  }
+
+  if (!hasKind || !hasFullText) {
+    errors.push(`${itemPrefix} must carry both "contentKind" and "fullText" or neither.`);
+    return;
+  }
+
+  if (!isSnapshotImageContentKind(item.contentKind)) {
+    errors.push(`${itemPrefix} "contentKind" must be "ordinary" or "text_bearing".`);
+    return;
+  }
+
+  if (item.fullText !== null && typeof item.fullText !== 'string') {
+    errors.push(`${itemPrefix} "fullText" must be a string or null.`);
+    return;
+  }
+
+  const textProblem = getSnapshotTextEquivalentProblem({ contentKind: item.contentKind, fullText: item.fullText });
+  if (textProblem) {
+    errors.push(`${itemPrefix} ${describeSnapshotTextEquivalentProblem(textProblem, null)}`);
+  } else if (item.contentKind === 'ordinary' && item.fullText !== null) {
+    errors.push(`${itemPrefix} an "ordinary" image must carry "fullText": null.`);
+  } else if (typeof item.fullText === 'string' && item.fullText !== item.fullText.trim()) {
+    errors.push(`${itemPrefix} "fullText" must be trimmed.`);
+  }
 }
 
 /**
@@ -503,7 +561,7 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
     // paired with a usable text alternative, and the pairing must be exact — an image described by
     // the wrong entry is no better than an undescribed one, so URL correspondence is verified
     // rather than assumed from array order.
-    validateSnapshotMedia(record, prefix, errors);
+    validateSnapshotMedia(record, prefix, errors, warnings);
 
     // 4. Recommend Fields for Accessibility & Indexing (Non-blocking warnings)
     const recommendedFields = [

@@ -10,6 +10,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     clearMocks: true,
+    maxWorkers: process.platform === 'win32' ? 2 : undefined,
     include: [
       'src/**/*.test.ts',
       'src/**/*.test.tsx',

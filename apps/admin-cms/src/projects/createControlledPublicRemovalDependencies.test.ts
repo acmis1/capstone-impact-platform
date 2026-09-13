@@ -6,7 +6,7 @@ const STAGING_HOST = 'synthetic-pp1-staging.supabase.co';
 const STAGING_URL = `https://${STAGING_HOST}`;
 
 function dependencies(
-  executionTarget: 'local' | 'staging',
+  executionTarget: 'local' | 'staging' | 'production',
   supabaseUrl: string,
   executionEnvironment?: Record<string, string | undefined>,
 ) {
@@ -64,5 +64,20 @@ describe('controlled public removal dependency execution target', () => {
     expect(() => dependencies('staging', 'https://production.supabase.co').assertExecutionEnvironment()).toThrow();
     vi.stubEnv('CAPSTONE_RUNTIME_ENV', 'production');
     expect(() => dependencies('staging', STAGING_URL).assertExecutionEnvironment()).toThrow();
+  });
+
+  it('accepts only the distinct enabled production target and preserves its policy snapshot', () => {
+    const productionUrl = 'https://synthetic-pp1-production.supabase.co';
+    const executionEnvironment = {
+      CAPSTONE_RUNTIME_ENV: 'production',
+      CAPSTONE_EXPECTED_SUPABASE_HOST: 'synthetic-pp1-production.supabase.co',
+      CAPSTONE_PRODUCTION_PUBLICATION_ENABLED: 'true',
+      NEXT_PUBLIC_SUPABASE_URL: productionUrl,
+    };
+    const resolved = dependencies('production', productionUrl, executionEnvironment);
+    vi.stubEnv('CAPSTONE_RUNTIME_ENV', 'staging');
+    vi.stubEnv('CAPSTONE_STAGING_PUBLICATION_ENABLED', 'true');
+    expect(() => resolved.assertExecutionEnvironment()).not.toThrow();
+    expect(() => dependencies('staging', productionUrl, executionEnvironment).assertExecutionEnvironment()).toThrow();
   });
 });

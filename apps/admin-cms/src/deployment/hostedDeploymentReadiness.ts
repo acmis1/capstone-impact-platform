@@ -5,7 +5,7 @@
  * deployment readiness separately executes one immutable, read-only capability sentinel.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 53;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 57;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -61,10 +61,14 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260903130000_participant_owned_corrections.sql',
   '20260906120000_public_removal_completion_reconciliation.sql',
   '20260909120000_staff_lifecycle_readiness.sql',
+  '20260910120000_public_feed_rollback_capability.sql',
+  '20260910120100_participant_preview_access_observations.sql',
+  '20260910120200_assistive_worker_production_identity.sql',
+  '20260911120000_gallery_full_text_equivalents.sql',
 ] as const;
 
 export const RELEASE_CAPABILITY_SENTINEL =
-  '20260909120000_staff_lifecycle_readiness|active_staff_catalog_rls_v1|staff_lifecycle_v1';
+  '20260911120000_gallery_full_text_equivalents|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1';
 
 export const REQUIRED_CORE_TABLES = [
   'programs',
@@ -90,6 +94,7 @@ export const REQUIRED_IMPORT_LEDGER_TABLES = [
 export const REQUIRED_PREVIEW_TABLES = [
   'participant_previews',
   'participant_preview_confirmations',
+  'participant_preview_access_observations',
   'participant_preview_correction_requests',
   'participant_correction_submissions',
   'participant_correction_prior_revisions',
@@ -106,6 +111,8 @@ export const REQUIRED_PUBLICATION_TABLES = [
   'public_feed_head',
   'feed_rollback_preparations',
   'public_feed_operation_events',
+  'public_feed_rollback_capability_events',
+  'public_feed_rollback_preparation_capabilities',
   'public_feed_activation_authority',
   'public_feed_project_projection_authority',
   'public_feed_discipline_projection_authority',
@@ -175,6 +182,7 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('generate_participant_preview', ['p_public_id', 'p_admin_id', 'p_token_hash', 'p_expires_in_seconds', 'p_private_bucket', 'p_is_correction_reissue'], ['text', 'uuid', 'text', 'integer', 'text', 'boolean']),
   rpc('revoke_participant_preview', ['p_public_id', 'p_admin_id'], ['text', 'uuid']),
   rpc('resolve_participant_preview', ['p_token_hash'], ['text']),
+  rpc('record_participant_preview_response_prepared', ['p_preview_id', 'p_token_hash'], ['uuid', 'text']),
   rpc('confirm_participant_preview', ['p_token_hash'], ['text']),
   rpc('request_participant_preview_correction', ['p_token_hash', 'p_comment'], ['text', 'text']),
   rpc('start_participant_preview_correction_resolution', ['p_public_id', 'p_admin_id'], ['text', 'uuid']),
@@ -255,6 +263,9 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('fail_public_feed_operation', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_actor_id', 'p_failure_code'], ['uuid', 'bigint', 'text', 'uuid', 'text']),
   rpc('require_public_feed_recovery', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_actor_id', 'p_failure_code', 'p_observed_hash', 'p_observed_record_count'], ['uuid', 'bigint', 'text', 'uuid', 'text', 'text', 'integer']),
   rpc('prepare_public_feed_rollback', ['p_admin_id', 'p_target_version_number', 'p_observed_storage_hash', 'p_observed_storage_record_count', 'p_lifecycle_drift'], ['uuid', 'bigint', 'text', 'integer', 'jsonb']),
+  rpc('transition_public_feed_rollback_capability', ['p_admin_id', 'p_enabled', 'p_require_exact_head_event', 'p_expected_version_number', 'p_expected_generation', 'p_expected_feed_hash', 'p_expected_record_count', 'p_confirmation'], ['uuid', 'boolean', 'boolean', 'bigint', 'bigint', 'text', 'integer', 'text']),
+  rpc('prepare_verified_staging_public_feed_rollback', ['p_admin_id', 'p_target_version_number', 'p_observed_storage_hash', 'p_observed_storage_record_count', 'p_lifecycle_drift'], ['uuid', 'bigint', 'text', 'integer', 'jsonb']),
+  rpc('reserve_verified_staging_public_feed_rollback', ['p_admin_id', 'p_owner_token', 'p_rollback_preparation_handle', 'p_rollback_acknowledgement', 'p_storage_bucket', 'p_storage_path'], ['uuid', 'text', 'uuid', 'text', 'text', 'text']),
 ] as const satisfies readonly RequiredRpcSignature[];
 
 export const REQUIRED_RPC_NAMES = [...new Set(REQUIRED_RPC_SIGNATURES.map(({ name }) => name))] as readonly string[];

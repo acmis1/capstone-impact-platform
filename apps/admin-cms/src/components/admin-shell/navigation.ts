@@ -16,14 +16,19 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
 ];
 
 export const STAFF_NAVIGATION_ITEM: NavigationItem = { name: 'Staff access', href: '/admin/staff' };
+export const TAXONOMY_NAVIGATION_ITEM: NavigationItem = { name: 'Project categories', href: '/admin/taxonomy' };
 
 /**
  * Navigation for a staff member's resolved authority. Omitting the staff-access entry is a
  * usability affordance only — `/admin/staff` and `/api/staff/invitations` each re-authorize on
  * the server, so an unauthorized caller gains nothing by navigating there directly.
  */
-export function getNavigationItems(canManageStaff: boolean): NavigationItem[] {
-  return canManageStaff ? [...NAVIGATION_ITEMS, STAFF_NAVIGATION_ITEM] : [...NAVIGATION_ITEMS];
+export function getNavigationItems(canManageStaff: boolean, canManageTaxonomy = false): NavigationItem[] {
+  return [
+    ...NAVIGATION_ITEMS,
+    ...(canManageTaxonomy ? [TAXONOMY_NAVIGATION_ITEM] : []),
+    ...(canManageStaff ? [STAFF_NAVIGATION_ITEM] : []),
+  ];
 }
 
 export function getRouteDescriptor(pathname: string): RouteDescriptor {
@@ -35,6 +40,14 @@ export function getRouteDescriptor(pathname: string): RouteDescriptor {
       title: 'Showcase publishing history',
       breadcrumbs: [{ label: 'Publishing' }],
       activeHref: '/admin/public-feed',
+    };
+  }
+
+  if (cleanPath === '/admin/taxonomy') {
+    return {
+      title: 'Project categories',
+      breadcrumbs: [{ label: 'Project categories' }],
+      activeHref: '/admin/taxonomy',
     };
   }
 

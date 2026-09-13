@@ -15,6 +15,10 @@ import {
 import { validateParticipantContactEmail } from '../domain/participantContactEmail';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 import {
+  parseSnapshotImageContentKind,
+  type SnapshotImageContentKind,
+} from '../domain/galleryTextEquivalent';
+import {
   PROJECT_CONTROLLED_URL_MAX_LENGTH,
   validateProjectControlledUrl,
 } from '../domain/projectControlledUrl';
@@ -458,17 +462,24 @@ export async function parseProjectDetailsWorkbook(
   // the value is required only when snapshot-1.png actually exists. What the parser can decide is
   // enforced here and is unconditional: a formula cell with no usable cached result is unreadable
   // rather than blank, and an oversized value is rejected instead of being silently truncated.
+  //
+  // The same applies to the per-position text-equivalent contract. The content-type cell is the
+  // project team's explicit declaration: a recognised value is carried as-is, blank stays null
+  // ("not declared") and anything else is an error rather than a guessed default. The full-text
+  // cell is bounded exactly like the poster full text. Whether a blank content type or a blank
+  // full text is acceptable depends on which images the package actually contains, so that rule
+  // lives at the package-aware boundary too.
   const galleryAltFields = [
-    { position: 1, fieldName: 'snapshotAltText' },
-    { position: 2, fieldName: 'snapshot2AltText' },
-    { position: 3, fieldName: 'snapshot3AltText' },
-    { position: 4, fieldName: 'snapshot4AltText' },
-    { position: 5, fieldName: 'snapshot5AltText' },
-    { position: 6, fieldName: 'snapshot6AltText' },
-    { position: 7, fieldName: 'snapshot7AltText' },
-    { position: 8, fieldName: 'snapshot8AltText' },
-    { position: 9, fieldName: 'snapshot9AltText' },
-    { position: 10, fieldName: 'snapshot10AltText' },
+    { position: 1, fieldName: 'snapshotAltText', kindField: 'snapshot1ContentKind', fullTextField: 'snapshot1FullText' },
+    { position: 2, fieldName: 'snapshot2AltText', kindField: 'snapshot2ContentKind', fullTextField: 'snapshot2FullText' },
+    { position: 3, fieldName: 'snapshot3AltText', kindField: 'snapshot3ContentKind', fullTextField: 'snapshot3FullText' },
+    { position: 4, fieldName: 'snapshot4AltText', kindField: 'snapshot4ContentKind', fullTextField: 'snapshot4FullText' },
+    { position: 5, fieldName: 'snapshot5AltText', kindField: 'snapshot5ContentKind', fullTextField: 'snapshot5FullText' },
+    { position: 6, fieldName: 'snapshot6AltText', kindField: 'snapshot6ContentKind', fullTextField: 'snapshot6FullText' },
+    { position: 7, fieldName: 'snapshot7AltText', kindField: 'snapshot7ContentKind', fullTextField: 'snapshot7FullText' },
+    { position: 8, fieldName: 'snapshot8AltText', kindField: 'snapshot8ContentKind', fullTextField: 'snapshot8FullText' },
+    { position: 9, fieldName: 'snapshot9AltText', kindField: 'snapshot9ContentKind', fullTextField: 'snapshot9FullText' },
+    { position: 10, fieldName: 'snapshot10AltText', kindField: 'snapshot10ContentKind', fullTextField: 'snapshot10FullText' },
   ] as const;
 
   let snapshotAltText = '';
@@ -476,50 +487,93 @@ export async function parseProjectDetailsWorkbook(
   const galleryAltTexts: {
     position: number;
     altText: string;
+    contentKind: SnapshotImageContentKind | null;
+    fullText: string;
   }[] = [];
 
-  for (const { position, fieldName } of galleryAltFields) {
-    const altCell = extractFieldValue(fieldName);
+  /** Reads one bounded free-text gallery cell; returns null when the cell produced an error. */
+  const readBoundedGalleryCell = (
+    fieldName: WorkbookInternalField,
+    maximumLength: number,
+  ): string | null => {
+    const cell = extractFieldValue(fieldName);
 
-    if (altCell.isFormula && !altCell.hasUsableResult) {
+    if (cell.isFormula && !cell.hasUsableResult) {
       errors.push({
         code: 'WORKBOOK_UNUSABLE_FORMULA',
         message: 'Formula cell does not contain a usable cached result.',
         severity: 'error',
         fieldName,
-        columnName: altCell.colInfo?.rawHeader,
+        columnName: cell.colInfo?.rawHeader,
         rowNumber: projectRowObj.rowNumber,
       });
-
-      continue;
+      return null;
     }
 
-    if (
-      altCell.rawString.length >
-      ACCESSIBLE_CONTENT_LIMITS.snapshotAltText
-    ) {
+    if (cell.rawString.length > maximumLength) {
       errors.push({
         code: 'WORKBOOK_VALUE_TOO_LONG',
-        message: `Required field exceeds the maximum of ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText} characters.`,
+        message: `Required field exceeds the maximum of ${maximumLength} characters.`,
         severity: 'error',
         fieldName,
-        columnName: altCell.colInfo?.rawHeader,
+        columnName: cell.colInfo?.rawHeader,
         rowNumber: projectRowObj.rowNumber,
       });
-
-      continue;
+      return null;
     }
 
-    const altText = altCell.rawString.trim();
+    return cell.rawString.trim();
+  };
+
+  for (const { position, fieldName, kindField, fullTextField } of galleryAltFields) {
+    const altText = readBoundedGalleryCell(fieldName, ACCESSIBLE_CONTENT_LIMITS.snapshotAltText);
+    const fullText = readBoundedGalleryCell(fullTextField, ACCESSIBLE_CONTENT_LIMITS.snapshotFullText);
+
+    const kindCell = extractFieldValue(kindField);
+    let contentKind: SnapshotImageContentKind | null = null;
+    let kindUsable = true;
+
+    if (kindCell.isFormula && !kindCell.hasUsableResult) {
+      errors.push({
+        code: 'WORKBOOK_UNUSABLE_FORMULA',
+        message: 'Formula cell does not contain a usable cached result.',
+        severity: 'error',
+        fieldName: kindField,
+        columnName: kindCell.colInfo?.rawHeader,
+        rowNumber: projectRowObj.rowNumber,
+      });
+      kindUsable = false;
+    } else {
+      const parsedKind = parseSnapshotImageContentKind(kindCell.rawString);
+      if (parsedKind.status === 'unrecognized') {
+        errors.push({
+          code: 'WORKBOOK_INVALID_SNAPSHOT_CONTENT_TYPE',
+          message: 'Snapshot content type must be "Ordinary image" or "Text-bearing image".',
+          severity: 'error',
+          fieldName: kindField,
+          columnName: kindCell.colInfo?.rawHeader,
+          rowNumber: projectRowObj.rowNumber,
+        });
+        kindUsable = false;
+      } else if (parsedKind.status === 'parsed') {
+        contentKind = parsedKind.contentKind;
+      }
+    }
+
+    if (altText === null || fullText === null || !kindUsable) {
+      continue;
+    }
 
     if (position === 1) {
       snapshotAltText = altText;
     }
 
-    if (altText !== '') {
+    if (altText !== '' || contentKind !== null || fullText !== '') {
       galleryAltTexts.push({
         position,
         altText,
+        contentKind,
+        fullText,
       });
     }
   }

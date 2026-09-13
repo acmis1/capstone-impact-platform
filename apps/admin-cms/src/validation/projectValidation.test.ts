@@ -185,6 +185,8 @@ describe('projectValidation', () => {
             galleryPosition: 1,
             validPrivate: true,
             altText: 'A described snapshot.',
+            imageContentKind: 'ordinary',
+            fullTextPublic: null,
           },
         ],
       }).valid).toBe(true);
@@ -196,6 +198,8 @@ describe('projectValidation', () => {
             galleryPosition: 1,
             validPrivate: true,
             altText: '   ',
+            imageContentKind: 'ordinary',
+            fullTextPublic: null,
           },
         ]
       });

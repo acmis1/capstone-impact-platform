@@ -87,7 +87,7 @@ export function metadataResultMessage(code: ProjectMetadataErrorCode): string {
   switch (code) {
     case 'STALE_VERSION':
       return 'This project changed after you opened it. Refresh and review the latest values before saving again.';
-    case 'APPROVAL_REOPEN_REQUIRED': return 'This project is approved. Request changes before editing metadata.';
+    case 'APPROVAL_REOPEN_REQUIRED': return 'This project is approved. Request changes and obtain a complete corrected project-team package.';
     case 'PUBLISHED_PROJECT_LOCKED': return 'Published project metadata is locked until a controlled revision workflow is available.';
     case 'PROJECT_NOT_FOUND':
       return 'This project is no longer available.';

@@ -11,6 +11,7 @@ export interface ProjectListQuery {
   year?: string;
   program?: string;
   discipline?: string;
+  industry?: string;
   sort?: AllowedSortField;
   direction?: SortDirection;
   page?: number;
@@ -36,6 +37,7 @@ export interface ProjectFilterOptions {
   years: string[];
   programs: string[];
   disciplines: string[];
+  industries: string[];
 }
 
 /**
@@ -95,6 +97,9 @@ export function parseProjectListQuery(rawParams: Record<string, string | string[
   const rawDiscipline = getSingleString('discipline');
   const discipline = rawDiscipline && rawDiscipline.trim() ? rawDiscipline.trim().slice(0, 100) : undefined;
 
+  const rawIndustry = getSingleString('industry');
+  const industry = rawIndustry && rawIndustry.trim() ? rawIndustry.trim().slice(0, 100) : undefined;
+
   const rawSort = getSingleString('sort');
   const validSortFields: AllowedSortField[] = ['created_at', 'updated_at', 'title', 'year', 'status'];
   const sort: AllowedSortField = validSortFields.includes(rawSort as AllowedSortField)
@@ -128,6 +133,7 @@ export function parseProjectListQuery(rawParams: Record<string, string | string[
     year,
     program,
     discipline,
+    industry,
     sort,
     direction,
     page,

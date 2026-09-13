@@ -11,7 +11,8 @@ export async function correctionWorkbook(overrides: Record<string, unknown> = {}
     program: 'Information Technology', discipline: 'Software Engineering', industry: '',
     studyProgram: 'Information Technology', groupName: 'Synthetic team', teamMembers: 'Participant One; Participant Two',
     posterText: 'Complete meaningful poster text.', accessibilityText: 'Diagram of a synthetic workflow.',
-    snapshotAltText: 'Prototype on a bench.', participantContactEmail: '', academicSupervisor: '', industryPartner: '',
+    snapshotAltText: 'Prototype on a bench.', snapshot1ContentKind: 'Ordinary image', snapshot1FullText: '',
+    participantContactEmail: '', academicSupervisor: '', industryPartner: '',
     videoUrl: 'https://example.com/video', demoUrl: 'https://example.com/demo', repositoryUrl: 'https://example.com/code',
     templateId: 'Poster showcase', featuredMedia: 'Poster', ...overrides,
   };

@@ -99,7 +99,106 @@ function createSequentialMockSupabaseClient(responses: Array<{ data: unknown[]; 
   };
 }
 
+function createTaxonomyAwareMockSupabaseClient(rows: DatabaseProjectRow[]) {
+  const executionLogs: QueryExecutionLog[] = [];
+
+  const client = {
+    from: vi.fn().mockImplementation((table: string) => {
+      const currentLog: QueryExecutionLog = { table, orders: [], ranges: [] };
+      executionLogs.push(currentLog);
+      const eqFilters: Record<string, unknown> = {};
+      const builder: Record<string, unknown> = {
+        select: vi.fn().mockImplementation((fields, opts) => {
+          currentLog.selectFields = fields;
+          currentLog.selectOpts = opts;
+          return builder;
+        }),
+        is: vi.fn().mockImplementation((column, value) => {
+          currentLog.isCol = column;
+          currentLog.isVal = value;
+          return builder;
+        }),
+        eq: vi.fn().mockImplementation((column, value) => {
+          eqFilters[column] = value;
+          currentLog.eqFilters = eqFilters;
+          return builder;
+        }),
+        order: vi.fn().mockImplementation((column, options) => {
+          currentLog.orders.push({ column, options });
+          return builder;
+        }),
+        range: vi.fn().mockImplementation((from, to) => {
+          currentLog.ranges.push({ from, to });
+          return builder;
+        }),
+        then: vi.fn().mockImplementation((resolve) => {
+          const matchingRows = rows.filter((row) => Object.entries(eqFilters).every(([column, value]) => {
+            if (column === 'discipline_filter.disciplines.name') {
+              return row.project_disciplines?.some((mapping) => mapping.disciplines?.name === value);
+            }
+            if (column === 'industry_filter.industry_categories.name') {
+              return row.project_industry_categories?.some((mapping) => mapping.industry_categories?.name === value);
+            }
+            return (row as unknown as Record<string, unknown>)[column] === value;
+          }));
+          const orderedRows = [...matchingRows].sort((left, right) => left.public_id.localeCompare(right.public_id));
+          const range = currentLog.ranges[0];
+          const data = range ? orderedRows.slice(range.from, range.to + 1) : orderedRows;
+          resolve({ data, count: orderedRows.length, error: null });
+        }),
+      };
+      return builder;
+    }),
+    _executionLogs: executionLogs,
+  };
+
+  return client as unknown as import('@supabase/supabase-js').SupabaseClient & {
+    _executionLogs: QueryExecutionLog[];
+  };
+}
+
 describe('SupabaseProjectRepositoryCore query operations', () => {
+  it('keeps 120 parent projects unique across secondary discipline, industry, and intersection filters', async () => {
+    const rows: DatabaseProjectRow[] = Array.from({ length: 120 }, (_, index) => ({
+      id: `uuid-${index + 1}`,
+      public_id: `2026-project-${String(index + 1).padStart(3, '0')}`,
+      title: `Synthetic project ${index + 1}`,
+      year: 2026,
+      program_name: 'Synthetic Program',
+      discipline: 'Primary discipline',
+      industry: 'Legacy scalar industry',
+      project_disciplines: [
+        { disciplines: { name: 'Primary discipline' } },
+        ...(index === 0 || index === 60 ? [{ disciplines: { name: 'Artificial Intelligence' } }] : []),
+      ],
+      project_industry_categories: [
+        { industry_categories: { name: index % 2 === 0 ? 'Technology' : 'Healthcare' } },
+        ...(index === 0 ? [{ industry_categories: { name: 'Healthcare' } }] : []),
+      ],
+    }));
+    const mockClient = createTaxonomyAwareMockSupabaseClient(rows);
+    const repo = new SupabaseProjectRepositoryCore(mockClient);
+
+    const allProjects = await repo.listProjectsPage({ page: 1, pageSize: 50 });
+    const technology = await repo.listProjectsPage({ page: 2, pageSize: 25, industry: 'Technology' });
+    const secondaryDiscipline = await repo.listProjectsPage({ page: 1, pageSize: 10, discipline: 'Artificial Intelligence' });
+    const intersection = await repo.listProjectsPage({ page: 1, pageSize: 10, discipline: 'Artificial Intelligence', industry: 'Healthcare' });
+
+    expect(allProjects).toMatchObject({ total: 120, page: 1, pageSize: 50, pageCount: 3 });
+    expect(allProjects.projects).toHaveLength(50);
+    expect(technology).toMatchObject({ total: 60, page: 2, pageSize: 25, pageCount: 3 });
+    expect(technology.projects).toHaveLength(25);
+    expect(secondaryDiscipline).toMatchObject({ total: 2, pageCount: 1 });
+    expect(secondaryDiscipline.projects.map((project) => project.publicId)).toEqual([
+      '2026-project-001',
+      '2026-project-061',
+    ]);
+    expect(intersection).toMatchObject({ total: 1, pageCount: 1 });
+    expect(intersection.projects.map((project) => project.publicId)).toEqual(['2026-project-001']);
+    expect(intersection.projects[0].disciplines).toEqual(['Primary discipline', 'Artificial Intelligence']);
+    expect(new Set(technology.projects.map((project) => project.publicId)).size).toBe(25);
+  });
+
   it('lists lifecycle projects with the unique public ID as a deterministic timestamp tie-breaker', async () => {
     const mockClient = createSequentialMockSupabaseClient([{ data: [], count: 0 }]);
     const repo = new SupabaseProjectRepositoryCore(mockClient);
@@ -149,6 +248,39 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
       { column: 'year', options: { ascending: true } },
       { column: 'public_id', options: { ascending: true } },
     ]);
+  });
+
+  it('filters discipline and industry through inner taxonomy relationships while retaining complete discipline mappings', async () => {
+    const mockClient = createSequentialMockSupabaseClient([
+      {
+        data: [{
+          id: 'uuid-1',
+          public_id: '2026-proj1',
+          discipline: 'Software Engineering',
+          project_disciplines: [
+            { disciplines: { name: 'Software Engineering' } },
+            { disciplines: { name: 'Artificial Intelligence' } },
+          ],
+        }],
+        count: 1,
+      },
+    ]);
+
+    const repo = new SupabaseProjectRepositoryCore(mockClient);
+    const result = await repo.listProjectsPage({
+      page: 1,
+      pageSize: 10,
+      discipline: 'Artificial Intelligence',
+      industry: 'Technology',
+    });
+
+    const log = mockClient._executionLogs[0];
+    expect(log.selectFields).toContain('project_disciplines(disciplines(name))');
+    expect(log.selectFields).toContain('discipline_filter:project_disciplines!inner(disciplines!inner(name))');
+    expect(log.selectFields).toContain('industry_filter:project_industry_categories!inner(industry_categories!inner(name))');
+    expect(log.eqFilters?.['discipline_filter.disciplines.name']).toBe('Artificial Intelligence');
+    expect(log.eqFilters?.['industry_filter.industry_categories.name']).toBe('Technology');
+    expect(result.projects[0].disciplines).toEqual(['Software Engineering', 'Artificial Intelligence']);
   });
 
   it('clamps out-of-range requested page to final page with proper sequential re-query and identical ordering', async () => {
@@ -338,9 +470,9 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
     const mockClient = createSequentialMockSupabaseClient([
       {
         data: [
-          { year: 2026, program_name: 'CS', discipline: 'AI' },
-          { year: 2025, program_name: 'SE', discipline: 'AI' },
-          { year: 2026, program_name: 'CS', discipline: 'Cloud' },
+          { year: 2026, program_name: 'CS', project_disciplines: [{ disciplines: { name: 'AI' } }, { disciplines: { name: 'Artificial Intelligence' } }], project_industry_categories: [{ industry_categories: { name: 'Technology' } }, { industry_categories: { name: 'Healthcare' } }] },
+          { year: 2025, program_name: 'SE', project_disciplines: [{ disciplines: { name: 'AI' } }], project_industry_categories: [{ industry_categories: { name: 'Healthcare' } }] },
+          { year: 2026, program_name: 'CS', project_disciplines: [{ disciplines: { name: 'Cloud' } }], project_industry_categories: [{ industry_categories: { name: 'Technology' } }] },
         ],
       },
     ]);
@@ -352,14 +484,15 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
 
     const log = mockClient._executionLogs[0];
     expect(log.table).toBe('projects');
-    expect(log.selectFields).toBe('year, program_name, discipline');
+    expect(log.selectFields).toBe('year, program_name, project_disciplines(disciplines(name)), project_industry_categories(industry_categories(name))');
     expect(log.isCol).toBe('deleted_at');
     expect(log.isVal).toBeNull();
     expect(log.ranges[0]).toEqual({ from: 0, to: 499 });
 
     expect(options.years).toEqual(['2026', '2025']);
     expect(options.programs).toEqual(['CS', 'SE']);
-    expect(options.disciplines).toEqual(['AI', 'Cloud']);
+    expect(options.disciplines).toEqual(['AI', 'Artificial Intelligence', 'Cloud']);
+    expect(options.industries).toEqual(['Healthcare', 'Technology']);
   });
 
   it('performs two queries when first chunk is exactly 500 rows and second is partial', async () => {
@@ -367,13 +500,14 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
     const firstChunk = Array.from({ length: 500 }, () => ({
       year: 2024,
       program_name: 'CS',
-      discipline: 'AI',
+      project_disciplines: [{ disciplines: { name: 'AI' } }],
+      project_industry_categories: [{ industry_categories: { name: 'Technology' } }],
     }));
     // Second chunk: 3 rows (new values)
     const secondChunk = [
-      { year: 2025, program_name: 'SE', discipline: 'Cloud' },
-      { year: 2026, program_name: 'ME', discipline: 'IoT' },
-      { year: 2024, program_name: 'CS', discipline: 'AI' }, // duplicate — must be deduplicated
+      { year: 2025, program_name: 'SE', project_disciplines: [{ disciplines: { name: 'Cloud' } }], project_industry_categories: [{ industry_categories: { name: 'Healthcare' } }] },
+      { year: 2026, program_name: 'ME', project_disciplines: [{ disciplines: { name: 'IoT' } }], project_industry_categories: [{ industry_categories: { name: 'Agriculture' } }] },
+      { year: 2024, program_name: 'CS', project_disciplines: [{ disciplines: { name: 'AI' } }], project_industry_categories: [{ industry_categories: { name: 'Technology' } }] }, // duplicate — must be deduplicated
     ];
 
     const mockClient = createSequentialMockSupabaseClient([
@@ -391,9 +525,9 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
     // Second chunk range: 500–999
     expect(mockClient._executionLogs[1].ranges[0]).toEqual({ from: 500, to: 999 });
 
-    // Both chunks must select only the three lightweight columns
+    // Both chunks must select only lightweight project and taxonomy fields
     for (const log of mockClient._executionLogs) {
-      expect(log.selectFields).toBe('year, program_name, discipline');
+      expect(log.selectFields).toBe('year, program_name, project_disciplines(disciplines(name)), project_industry_categories(industry_categories(name))');
       expect(log.isCol).toBe('deleted_at');
       expect(log.isVal).toBeNull();
     }
@@ -402,11 +536,12 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
     expect(options.years).toEqual(['2026', '2025', '2024']); // descending
     expect(options.programs).toEqual(['CS', 'ME', 'SE']);    // alphabetical
     expect(options.disciplines).toEqual(['AI', 'Cloud', 'IoT']); // alphabetical
+    expect(options.industries).toEqual(['Agriculture', 'Healthcare', 'Technology']); // alphabetical
   });
 
   it('excludes soft-deleted rows from every filter-options chunk query', async () => {
     const mockClient = createSequentialMockSupabaseClient([
-      { data: [{ year: 2026, program_name: 'CS', discipline: 'AI' }] },
+      { data: [{ year: 2026, program_name: 'CS', project_disciplines: [{ disciplines: { name: 'AI' } }], project_industry_categories: [{ industry_categories: { name: 'Technology' } }] }] },
     ]);
 
     const repo = new SupabaseProjectRepositoryCore(mockClient);

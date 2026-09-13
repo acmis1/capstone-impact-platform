@@ -12,7 +12,7 @@ import { GET, HEAD } from './route';
 
 const VALID_COMMIT = 'A75F4D8861CE693DDD264F9797D8AF656911154F';
 const RELEASE_CAPABILITY_SENTINEL =
-  '20260909120000_staff_lifecycle_readiness|active_staff_catalog_rls_v1|staff_lifecycle_v1';
+  '20260911120000_gallery_full_text_equivalents|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1';
 const VALID_ENV = {
   NEXT_PUBLIC_SUPABASE_URL: 'https://synthetic-readiness.supabase.co',
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_public-test-value',
@@ -147,10 +147,27 @@ describe('GET/HEAD /api/readiness', () => {
       databaseCapability: 'current',
       deploymentCommit: { state: 'valid', value: VALID_COMMIT.toLowerCase() },
       expectedMigrations: {
-        count: 53,
-        latest: '20260909120000_staff_lifecycle_readiness',
+        count: 57,
+        latest: '20260911120000_gallery_full_text_equivalents',
       },
     });
+  });
+
+  it('accepts the same exact-host readiness contract under the production runtime identity', async () => {
+    const fetchMock = successfulFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    process.env.CAPSTONE_RUNTIME_ENV = 'production';
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    expect(await json(response)).toMatchObject({
+      readiness: 'ready',
+      classification: 'READY',
+      configuration: 'configured',
+      dependency: 'reachable',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it('rejects a modern secret key in the public slot before the dependency probe', async () => {

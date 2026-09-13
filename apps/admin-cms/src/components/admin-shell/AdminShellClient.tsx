@@ -10,6 +10,8 @@ export interface AdminShellClientProps {
   email?: string | null;
   roles?: string[];
   canManageStaff?: boolean;
+  canManageTaxonomy?: boolean;
+  environment?: 'staging' | 'production';
   logoutAction: () => Promise<void>;
   children: React.ReactNode;
 }
@@ -19,6 +21,8 @@ export function AdminShellClient({
   email,
   roles = [],
   canManageStaff = false,
+  canManageTaxonomy = false,
+  environment = 'staging',
   logoutAction,
   children,
 }: AdminShellClientProps) {
@@ -43,7 +47,7 @@ export function AdminShellClient({
       <div className="flex flex-1 min-h-screen">
         {/* Desktop Persistent Sidebar */}
         <aside className="hidden lg:block w-64 shrink-0">
-          <SidebarNav className="h-full sticky top-0" canManageStaff={canManageStaff} />
+          <SidebarNav className="h-full sticky top-0" canManageStaff={canManageStaff} canManageTaxonomy={canManageTaxonomy} />
         </aside>
 
         {/* Main Content Area */}
@@ -53,10 +57,12 @@ export function AdminShellClient({
             email={email}
             roles={roles}
             canManageStaff={canManageStaff}
+            canManageTaxonomy={canManageTaxonomy}
+            environment={environment}
             logoutAction={logoutAction}
           />
 
-          <EnvironmentNotice />
+          <EnvironmentNotice environment={environment} />
 
           <main
             id="admin-main-content"

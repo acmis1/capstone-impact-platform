@@ -4,7 +4,15 @@ import { requireAdmin } from '../../../auth/requireAdmin';
 import { canPreparePublication } from '../../../auth/permissions';
 import { getServerEnv } from '../../../lib/env';
 import { createSupabaseAdminClient } from '../../../lib/supabase/admin';
-import { isLocalPublicFeedRollbackAvailable } from '../../../projects/localPublicationExecution';
+import {
+  assertPublicFeedRollbackEnvironmentAvailable,
+  type PublicFeedRollbackExecutionTarget,
+} from '../../../projects/publicFeedRollbackPolicy';
+import { resolvePublicationExecutionTarget } from '../../../projects/publicationExecutionPolicy';
+import {
+  isProductionRuntimeEnvironment,
+  isStagingRuntimeEnvironment,
+} from '../../../security/stagingRuntimeIdentity';
 import { readPublicFeedHistory, type PublicFeedHistoryView } from '../../../projects/publicFeedHistoryRepository';
 import { PublicFeedHistoryControls } from '../../../components/admin/PublicFeedHistoryControls';
 import { PublicFeedHistoryPagination } from '../../../components/admin/PublicFeedHistoryPagination';
@@ -89,8 +97,38 @@ export default async function PublicFeedHistoryPage({
 
   const env = getServerEnv();
   const canPublish = canPreparePublication(admin.permissions);
-  const rollbackAvailable = view.rollbackEnabled
-    && isLocalPublicFeedRollbackAvailable(env.supabaseUrl, process.env);
+  let rollbackExecutionTarget: PublicFeedRollbackExecutionTarget | null = null;
+  try {
+    rollbackExecutionTarget = assertPublicFeedRollbackEnvironmentAvailable(
+      env.supabaseUrl, process.env,
+    );
+  } catch { /* capability controls remain absent outside verified Local/staging */ }
+  const rollbackEnabled = rollbackExecutionTarget === 'staging'
+    ? view.verifiedStagingRollbackEnabled
+    : view.rollbackEnabled;
+  const rollbackAvailable = rollbackEnabled && rollbackExecutionTarget !== null;
+  const rollbackHeadEvidence = view.currentVersionNumber !== null && view.generation !== null
+      && view.currentFeedHash !== null && view.currentRecordCount !== null
+    ? {
+        versionNumber: view.currentVersionNumber,
+        generation: view.generation,
+        feedHash: view.currentFeedHash,
+        recordCount: view.currentRecordCount,
+      }
+    : null;
+  const rollbackCapabilityLabel = rollbackExecutionTarget === 'staging'
+    ? `Verified staging ${rollbackEnabled ? 'enabled' : 'disabled'}`
+    : rollbackExecutionTarget === 'local'
+      ? `Disposable Local ${rollbackEnabled ? 'enabled' : 'disabled'}`
+      : 'Unavailable outside verified staging or disposable Local';
+  const runtimeEnvironment = isProductionRuntimeEnvironment()
+    ? 'production' as const
+    : isStagingRuntimeEnvironment()
+      ? 'staging' as const
+      : 'local' as const;
+  const executionTarget = resolvePublicationExecutionTarget(env.supabaseUrl);
+  const productionExecutionUnavailable = runtimeEnvironment === 'production'
+    && executionTarget !== 'production';
 
   const projectsPublishedCount = view.deploymentStatuses.filter((s) => s.deployed).length;
   const divergedProjectsCount = view.deploymentStatuses.filter((s) => s.lifecycleStatus === 'published' && !s.deployed).length;
@@ -101,7 +139,9 @@ export default async function PublicFeedHistoryPage({
     divergedProjectsCount,
     now: new Date(),
   });
-  const repairUnavailableReason = publishingHealth.activity === 'IN_PROGRESS'
+  const repairUnavailableReason = productionExecutionUnavailable
+    ? 'Production publication is disabled or the verified production target identity is unavailable.'
+    : publishingHealth.activity === 'IN_PROGRESS'
     ? 'Wait for the current publishing action to finish, then refresh before repairing.'
     : publishingHealth.activity === 'RECOVERY_AVAILABLE'
       ? 'Recover publishing status before repairing.'
@@ -137,7 +177,9 @@ export default async function PublicFeedHistoryPage({
         <section aria-labelledby="publishing-attention-status" className="rounded-xl border border-warning/40 bg-warning/5 p-5 shadow-xs">
           <h2 id="publishing-attention-status" className="font-semibold text-foreground">Publishing needs attention</h2>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            {publishingHealth.recoveryAvailable
+            {runtimeEnvironment === 'production' && view.blockingOperation.kind === 'rollback'
+              ? 'Historical public-feed rollback and recovery of rollback operations are unavailable in production. Do not attempt another feed mutation; escalate for an independently reviewed forward-recovery decision.'
+              : publishingHealth.recoveryAvailable
               ? 'An earlier publishing action stopped after its safety window expired. Recover publishing status to complete its durable intent safely or clear an abandoned pre-write action.'
               : publishingHealth.attentionReason === 'SAFETY_WINDOW_ACTIVE'
                 ? `Publishing recovery cannot start while the current lease or Storage safety window is active.${publishingHealth.retryAt ? ` Wait until after ${formatTimestamp(publishingHealth.retryAt)}, then refresh.` : ' Wait, then refresh.'}`
@@ -207,15 +249,20 @@ export default async function PublicFeedHistoryPage({
           </div>
           <div>
             <dt className="text-xs font-medium text-muted-foreground">Rollback capability</dt>
-            <dd className="mt-0.5 text-sm text-foreground">{rollbackAvailable ? 'Disposable Local enabled' : 'Unavailable in hosted staging'}</dd>
+            <dd className="mt-0.5 text-sm text-foreground">{rollbackCapabilityLabel}</dd>
           </div>
         </dl>
       </details>
 
       <PublicFeedHistoryControls
         canPublish={canPublish} historyActive={view.active} rollbackAvailable={rollbackAvailable}
+        rollbackExecutionTarget={rollbackExecutionTarget} rollbackEnabled={rollbackEnabled}
+        rollbackHeadEvidence={rollbackHeadEvidence}
         targetVersionNumber={view.detail?.versionNumber ?? null} targetIsCurrent={view.detail?.current ?? false}
         publishingActivity={publishingHealth.activity}
+        environment={runtimeEnvironment}
+        executionAvailable={!productionExecutionUnavailable}
+        recoveryOperationKind={view.blockingOperation?.kind ?? null}
       />
 
       {/* Publishing Activity Table */}

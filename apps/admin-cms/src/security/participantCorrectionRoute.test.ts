@@ -15,6 +15,7 @@ vi.mock('../repositories/SupabaseParticipantPreviewRepository', () => ({ Supabas
     industry: null, industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [], posterText: 'Full text', accessibilityText: 'Description', citations: [], externalLinks: [], industryCategories: [],
   } }; }
   async getResponseState() { return { type: 'correction_requested', requestedAt: '2026-09-03T00:00:00Z', comment: 'Synthetic correction comment' }; }
+  async recordResponsePrepared() { return true; }
 } }));
 const token = 'a'.repeat(64);
 const url = `http://localhost:3000/participant-preview/${token}`;

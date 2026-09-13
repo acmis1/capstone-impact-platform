@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { SupabasePublicFeedLedgerRepositoryCore } from '../repositories/SupabasePublicFeedLedgerRepositoryCore';
 
 export interface PublicFeedHistoryListItem {
   versionNumber: number;
@@ -37,7 +38,10 @@ export interface PublicFeedDeploymentStatus {
 export interface PublicFeedHistoryView {
   active: boolean;
   rollbackEnabled: boolean;
+  verifiedStagingRollbackEnabled: boolean;
   currentVersionNumber: number | null;
+  currentFeedHash: string | null;
+  currentRecordCount: number | null;
   generation: number | null;
   page: number;
   pageSize: number;
@@ -109,7 +113,7 @@ export async function readPublicFeedHistory(
   ]).filter(Boolean).map(String).concat(currentVersionId ? [currentVersionId] : []))];
   const referenceResult = referencedVersionIds.length === 0
     ? { data: [], error: null }
-    : await supabase.from('public_feed_versions').select('id,version_number').in('id', referencedVersionIds);
+    : await supabase.from('public_feed_versions').select('id,version_number,feed_hash,record_count').in('id', referencedVersionIds);
   if (referenceResult.error) throw new Error('PUBLIC_FEED_HISTORY_REFERENCE_READ_FAILED');
 
   const actorIds = [...new Set(displayRows.flatMap((row) => [
@@ -125,6 +129,10 @@ export async function readPublicFeedHistory(
     [...displayRows, ...(referenceResult.data ?? [])]
       .map((row) => [String(row.id), Number(row.version_number)]),
   );
+  const currentVersion = currentVersionId
+    ? [...displayRows, ...(referenceResult.data ?? [])]
+      .find((row) => String(row.id) === currentVersionId)
+    : undefined;
 
   const toListItem = (row: VersionRow): PublicFeedHistoryListItem => {
     const publicId = row.affected_public_id === null ? null : String(row.affected_public_id);
@@ -187,10 +195,24 @@ export async function readPublicFeedHistory(
       deployed: deployed.has(String(row.public_id)),
     }))
     .sort((a, b) => a.publicId.localeCompare(b.publicId));
+  const verifiedStagingRollbackEnabled = currentVersionId
+    ? await new SupabasePublicFeedLedgerRepositoryCore(supabase)
+      .isVerifiedStagingRollbackCapabilityEnabledForHead({
+        rollbackEnabled: headResult.data?.rollback_enabled === true,
+        versionId: currentVersionId,
+        versionNumber: Number(currentVersion?.version_number),
+        generation: Number(headResult.data?.generation),
+        feedHash: String(currentVersion?.feed_hash),
+        recordCount: Number(currentVersion?.record_count),
+      })
+    : false;
 
   return {
     active: Boolean(headResult.data), rollbackEnabled: headResult.data?.rollback_enabled === true,
+    verifiedStagingRollbackEnabled,
     currentVersionNumber: currentVersionId ? versionNumberById.get(currentVersionId) ?? null : null,
+    currentFeedHash: currentVersion ? String(currentVersion.feed_hash) : null,
+    currentRecordCount: currentVersion ? Number(currentVersion.record_count) : null,
     generation: headResult.data ? Number(headResult.data.generation) : null,
     page, pageSize: PUBLIC_FEED_HISTORY_PAGE_SIZE, hasNewer: page > 1,
     hasOlder: pageRows.length > PUBLIC_FEED_HISTORY_PAGE_SIZE,

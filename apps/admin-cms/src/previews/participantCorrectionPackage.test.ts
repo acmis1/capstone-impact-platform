@@ -16,9 +16,30 @@ describe('participant correction package boundary', () => {
     expect(first.metadata.demoUrl).toBe('https://example.com/demo');
     expect(first.files.map((f) => f.role)).toEqual(['workbook', 'poster_image', 'poster_pdf', 'snapshot_image']);
     expect(first.files[3].altText).toBe('Prototype on a bench.');
+    expect(first.files[3]).toMatchObject({ contentKind: 'ordinary', fullText: null });
     expect(first.hash).toBe(replay.hash);
     form.set('pdf', new File([Buffer.concat([PDF, Buffer.from('\n% corrected')])], 'poster.pdf', { type: 'application/pdf' }));
     expect((await parseParticipantCorrectionPackage(form, '2026-bound-project')).hash).not.toBe(first.hash);
+  });
+
+  it('binds the exact project-team gallery declaration into the correction hash', async () => {
+    const ordinary = await parseParticipantCorrectionPackage(await correctionForm(), '2026-bound-project');
+    const textBearingForm = await correctionForm();
+    textBearingForm.set('workbook', new File(
+      [new Uint8Array(await correctionWorkbook({
+        snapshot1ContentKind: 'Text-bearing image',
+        snapshot1FullText: 'Synthetic dashboard: three active feeds, one warning, and no faults.',
+      }))],
+      'project-details.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    ));
+    const textBearing = await parseParticipantCorrectionPackage(textBearingForm, '2026-bound-project');
+
+    expect(textBearing.files[3]).toMatchObject({
+      contentKind: 'text_bearing',
+      fullText: 'Synthetic dashboard: three active feeds, one warning, and no faults.',
+    });
+    expect(textBearing.hash).not.toBe(ordinary.hash);
   });
 
   it.each(['workbook', 'poster', 'pdf'])('rejects missing required %s', async (field) => {

@@ -44,7 +44,7 @@ describe('project workflow orientation context', () => {
     const context = derive({
       submitForReview: { ready: false, blockingReasons: ['Poster full text is required.'] },
     });
-    expect(context.decision).toMatch(/^Fix the listed blocking issues/);
+    expect(context.decision).toMatch(/^Resolve the listed blocking issues/);
   });
 
   it('fails closed when submission readiness could not be verified', () => {
@@ -55,7 +55,7 @@ describe('project workflow orientation context', () => {
 
   it('states the permission limit instead of an action a reader cannot take', () => {
     const context = derive({ canEditMetadata: false, submitForReview: { ready: true, blockingReasons: [] } });
-    expect(context.decision).toMatch(/cannot edit it, submit it for review, or record a review decision/i);
+    expect(context.decision).toMatch(/cannot manage correction packages, submit it for review, or record a review decision/i);
   });
 
   it('explains that no import batch means submission is not offered', () => {
@@ -226,7 +226,7 @@ describe('permission-filtered review actions', () => {
     } else if (canEditMetadata) {
       expect(context.decision).toMatch(/can be submitted for review/i);
     } else {
-      expect(context.decision).toMatch(/cannot edit it, submit it for review, or record a review decision/i);
+      expect(context.decision).toMatch(/cannot manage correction packages, submit it for review, or record a review decision/i);
     }
   });
 

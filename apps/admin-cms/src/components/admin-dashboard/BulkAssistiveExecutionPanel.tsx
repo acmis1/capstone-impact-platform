@@ -14,12 +14,14 @@ interface BulkAssistiveExecutionPanelProps {
   selectedProjects: ProjectIndexRow[];
   canRunAssistive: boolean;
   onBusyChange?: (busy: boolean) => void;
+  sharedBusy?: boolean;
 }
 
 export function BulkAssistiveExecutionPanel({
   selectedProjects,
   canRunAssistive,
   onBusyChange,
+  sharedBusy = false,
 }: BulkAssistiveExecutionPanelProps) {
   const [preflight, setPreflight] = React.useState<BulkAssistivePreflightResponse | null>(null);
   const [execution, setExecution] = React.useState<BulkAssistiveExecutionResponse | null>(null);
@@ -44,7 +46,7 @@ export function BulkAssistiveExecutionPanel({
     status === 403 ? 'You do not have permission to enqueue assistive checks.' : fallback;
 
   const runPreflight = async () => {
-    if (inFlight.current || selectedProjects.length === 0 || !canRunAssistive) return;
+    if (inFlight.current || sharedBusy || selectedProjects.length === 0 || !canRunAssistive) return;
     inFlight.current = true;
     setLoading(true);
     onBusyChange?.(true);
@@ -72,7 +74,7 @@ export function BulkAssistiveExecutionPanel({
   };
 
   const execute = async () => {
-    if (inFlight.current || !preflight) return;
+    if (inFlight.current || sharedBusy || !preflight) return;
     inFlight.current = true;
     setLoading(true);
     onBusyChange?.(true);
@@ -132,7 +134,7 @@ export function BulkAssistiveExecutionPanel({
         <p role="alert" className="text-sm text-destructive">Your role cannot enqueue assistive checks.</p>
       ) : (
         <div className="flex flex-wrap gap-2" aria-label="Bulk assistive actions">
-          <Button type="button" variant="outline" disabled={loading} onClick={runPreflight}>
+          <Button type="button" variant="outline" disabled={loading || sharedBusy} onClick={runPreflight}>
             {loading && !preflight ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
             Check eligibility
           </Button>
@@ -155,11 +157,11 @@ export function BulkAssistiveExecutionPanel({
             Confirming queues the ready projects for assistive processing. A queued result remains evidence for staff review; it never accepts a finding or changes project authority.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" disabled={loading || preflight.summary.eligible === 0} onClick={execute}>
+            <Button type="button" disabled={loading || sharedBusy || preflight.summary.eligible === 0} onClick={execute}>
               {loading ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
               Confirm and enqueue ready projects
             </Button>
-            <Button type="button" variant="ghost" disabled={loading} onClick={() => setPreflight(null)}>
+            <Button type="button" variant="ghost" disabled={loading || sharedBusy} onClick={() => setPreflight(null)}>
               Cancel
             </Button>
           </div>

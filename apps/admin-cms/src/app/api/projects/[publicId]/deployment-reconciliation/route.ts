@@ -4,11 +4,12 @@ import { validateSameOrigin } from '../../../../../auth/csrf';
 import { requireAdmin } from '../../../../../auth/requireAdmin';
 import { canPreparePublication } from '../../../../../auth/permissions';
 import { getServerEnv } from '../../../../../lib/env';
-import { createSupabaseAdminClient } from '../../../../../lib/supabase/admin';
+import { createSupabaseAdminClientForServerEnv } from '../../../../../lib/supabase/admin';
 import { executeControlledPublication } from '../../../../../projects/controlledPublicationService';
 import { createControlledPublicationDependencies } from '../../../../../projects/createControlledPublicationDependencies';
-import { isLocalPublicationExecutionAvailable } from '../../../../../projects/localPublicationExecution';
-import { isStagingPublicationExecutionAvailable } from '../../../../../projects/publicationExecutionPolicy';
+import {
+  resolvePublicationExecutionTarget,
+} from '../../../../../projects/publicationExecutionPolicy';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
@@ -24,13 +25,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, error: 'Access denied.' }, { status: 403, headers: NO_STORE });
     }
     const env = getServerEnv();
-    const executionTarget = isLocalPublicationExecutionAvailable(env.supabaseUrl)
-      ? 'local' as const
-      : isStagingPublicationExecutionAvailable(env.supabaseUrl) ? 'staging' as const : null;
+    const executionEnvironment = Object.freeze({
+      CAPSTONE_RUNTIME_ENV: process.env.CAPSTONE_RUNTIME_ENV,
+      CAPSTONE_EXPECTED_SUPABASE_HOST: process.env.CAPSTONE_EXPECTED_SUPABASE_HOST,
+      CAPSTONE_STAGING_PUBLICATION_ENABLED: process.env.CAPSTONE_STAGING_PUBLICATION_ENABLED,
+      CAPSTONE_PRODUCTION_PUBLICATION_ENABLED: process.env.CAPSTONE_PRODUCTION_PUBLICATION_ENABLED,
+      NEXT_PUBLIC_SUPABASE_URL: env.supabaseUrl,
+    });
+    const executionTarget = resolvePublicationExecutionTarget(env.supabaseUrl, executionEnvironment);
     if (!executionTarget) {
       return NextResponse.json({ success: false, code: 'PUBLICATION_UNAVAILABLE', error: 'Deployment reconciliation is unavailable.' }, { status: 404, headers: NO_STORE });
     }
-    const supabase = createSupabaseAdminClient();
+    const supabase = createSupabaseAdminClientForServerEnv(env);
     const result = await executeControlledPublication({
       permissions: admin.permissions, publicId: publicId.publicId,
       privateBucket: env.SUPABASE_DRAFT_BUCKET, publicAssetsBucket: env.SUPABASE_PUBLIC_ASSETS_BUCKET,
@@ -40,7 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         supabase, supabaseUrl: env.supabaseUrl, publicId: publicId.publicId,
         adminId: admin.adminUserId, privateBucket: env.SUPABASE_DRAFT_BUCKET,
         publicFeedBucket: env.SUPABASE_PUBLIC_FEEDS_BUCKET, publicFeedPath: env.SUPABASE_PUBLIC_FEED_FILE,
-        executionTarget,
+        executionTarget, executionEnvironment,
       }),
     });
     if (result.resultCode === 'COMPLETED' || result.resultCode === 'ALREADY_COMPLETED') {

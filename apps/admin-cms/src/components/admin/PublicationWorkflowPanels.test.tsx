@@ -308,6 +308,44 @@ describe('PublicationPreparationPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Publish to test showcase' }));
     expect(await screen.findByText('Another publication is already in progress.')).toBeTruthy();
   });
+
+  it('uses the distinct production route and requires an explicit live-impact acknowledgement', async () => {
+    const productionSuccess = {
+      ...SUCCESS,
+      feedPublicUrl: 'https://synthetic-pp1-production.supabase.co/storage/v1/object/public/public-feeds/capstones-latest.json',
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, result: PLAN }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, result: productionSuccess }) });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare executionTarget="production" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Review publication/i }));
+    expect(await screen.findByRole('heading', { name: 'Publish to live showcase feed' })).toBeTruthy();
+    expect(screen.queryByText(/live public showcase is not changed/i)).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: /I have institutional publication authority/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish to live showcase feed' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/projects/2026-agri-iot/production-publication',
+      { method: 'POST' },
+    ));
+    expect(await screen.findByText('Published to production feed')).toBeTruthy();
+    expect(screen.getByText(/feed completion alone does not prove Duda visibility/i)).toBeTruthy();
+  });
+
+  it('shows disabled production code availability without a live mutation control', () => {
+    render(<PublicationPreparationPanel
+      publicId={PLAN.publicId}
+      ready
+      canPrepare
+      executionTarget="production-unavailable"
+    />);
+
+    expect(screen.getByText('Live publication unavailable')).toBeTruthy();
+    expect(screen.getByText(/code availability does not authorize a cutover/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Publish to live showcase feed' })).toBeNull();
+  });
 });
 
 describe('LocalArchivePanel', () => {
@@ -404,6 +442,34 @@ describe('LocalArchivePanel', () => {
     expect(screen.getByText(/No removal was attempted/i)).toBeTruthy();
     expect(screen.queryByLabelText(/Reason for removal/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /Remove from test showcase/i })).toBeNull();
+  });
+
+  it('uses the distinct production removal route and states the live effect', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, result: { resultCode: 'COMPLETED' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<LocalArchivePanel publicId={PLAN.publicId} executionTarget="production" />);
+
+    expect(screen.getByRole('heading', { name: 'Remove from live showcase feed' })).toBeTruthy();
+    expect(screen.queryByText(/live public showcase is not affected/i)).toBeNull();
+    fireEvent.change(screen.getByLabelText(/Reason for removal/i), { target: { value: 'Institution-authorized retirement' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /institutional removal authority/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from live showcase feed' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/projects/2026-agri-iot/production-archive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archiveReason: 'Institution-authorized retirement' }),
+    }));
+    expect(await screen.findByText('Removed from production feed')).toBeTruthy();
+  });
+
+  it('shows no production removal mutation when the production gate is unavailable', () => {
+    render(<LocalArchivePanel publicId={PLAN.publicId} executionTarget="production-unavailable" />);
+    expect(screen.getByText(/production runtime identity is unavailable/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Remove from live showcase feed/i })).toBeNull();
   });
 });
 

@@ -34,8 +34,8 @@ export async function stagePrePreviewReplacement(client: SupabaseClient, publicI
 
 async function stageCorrectionPackage(client: SupabaseClient, binding: { p_token_hash: string | null; p_public_id?: string; p_admin_id?: string }, candidate: CorrectionPackage): Promise<'submitted' | 'limit' | 'lookup' | 'failed'> {
   const bucket = PARTICIPANT_CORRECTION_BUCKET;
-  const files = candidate.files.map(({ role, position, fileName, mimeType, bytes, sha256, altText }) => ({
-    role, position, fileName, mimeType, bytes, sha256, altText,
+  const files = candidate.files.map(({ role, position, fileName, mimeType, bytes, sha256, altText, contentKind, fullText }) => ({
+    role, position, fileName, mimeType, bytes, sha256, altText, contentKind, fullText,
     storageName: `${role}${position === null ? '' : `-${position}`}.${fileName.split('.').pop()!.toLowerCase()}`,
   }));
   try {

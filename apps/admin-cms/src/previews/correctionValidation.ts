@@ -17,6 +17,8 @@ const PACKAGE_RULE_FIELDS: Record<string, string | null> = {
   METADATA_EMPTY_GALLERY_ALT_TEXT: 'galleryAltTexts', METADATA_GALLERY_ALT_TEXT_TOO_LONG: 'galleryAltTexts',
   METADATA_UNMATCHED_GALLERY_ALT_TEXT: 'galleryAltTexts', METADATA_MISSING_GALLERY_ALT_TEXT: 'galleryAltTexts',
   METADATA_MISSING_SNAPSHOT_ALT_TEXT: 'snapshotAltText', METADATA_SNAPSHOT_ALT_TEXT_TOO_LONG: 'snapshotAltText',
+  METADATA_MISSING_GALLERY_CONTENT_TYPE: 'galleryAltTexts', METADATA_MISSING_GALLERY_FULL_TEXT: 'galleryAltTexts',
+  METADATA_UNEXPECTED_GALLERY_FULL_TEXT: 'galleryAltTexts', METADATA_GALLERY_FULL_TEXT_TOO_LONG: 'galleryAltTexts',
 };
 
 export interface PassedPackageRule { ruleCode: string; fieldName: string | null }

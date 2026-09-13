@@ -28,7 +28,7 @@ type StaffRuntime = {
 };
 
 const EXPECTED_PERMISSIONS = {
-  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish', 'staff.manage'],
+  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish', 'staff.manage', 'taxonomy.manage'],
   reviewer: ['projects.read', 'projects.review'],
   editor: ['projects.read', 'projects.edit'],
 } as const;
@@ -158,10 +158,11 @@ async function main(): Promise<void> {
       assert.deepEqual(combined.roles, ['reviewer', 'editor']);
       assert.deepEqual(combined.permissions, ['projects.read', 'projects.review', 'projects.edit']);
     });
-    await scenario(10, 'editor+reviewer gains neither publish, archive nor staff management', () => {
+    await scenario(10, 'editor+reviewer gains neither publish, archive, staff nor taxonomy management', () => {
       assert(!hasPermission(combined.permissions, 'projects.publish'));
       assert(!hasPermission(combined.permissions, 'projects.archive'));
       assert(!canManageStaff(combined.permissions));
+      assert(!hasPermission(combined.permissions, 'taxonomy.manage'));
     });
     const removeReviewer = await service.from('user_roles').delete().eq('user_id', editor.adminUserId).eq('role', 'reviewer');
     assert.ifError(removeReviewer.error);

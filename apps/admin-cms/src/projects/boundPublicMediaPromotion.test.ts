@@ -20,7 +20,7 @@ function binding(index: number, overrides: Partial<PublicationMediaBinding> = {}
     fileName: 'poster.png', mimeType: 'image/png', fileSizeBytes: PNG.length,
     sourceBucket: 'private', sourcePath: `drafts/target/${index}/poster.png`,
     publicBucket: 'assets', publicPath: `published/target/${index}/poster.png`,
-    publicUrl: `https://example.com/published/target/${index}/poster.png`, altTextPublic: 'Poster',
+    publicUrl: `https://example.com/published/target/${index}/poster.png`, altTextPublic: 'Poster', imageContentKind: null, fullTextPublic: null,
     preExisting: false, sourceSha256: sha256(PNG), ...overrides,
   };
 }

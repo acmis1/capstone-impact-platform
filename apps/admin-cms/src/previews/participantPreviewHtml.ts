@@ -114,7 +114,33 @@ function renderImageFigure(
   return `<figure class="media-figure media-figure--${kind}" data-media-kind="${kind}">
     <div class="media-frame"><img src="${escapeHtml(media.signedUrl as string)}" alt="${escapeHtml(altText)}" loading="lazy" /></div>
     <figcaption>${caption}</figcaption>
+    ${kind === 'snapshot' ? renderSnapshotTextEquivalent(media, index) : ''}
   </figure>`;
+}
+
+/**
+ * The declared text-equivalent contract for one supporting image, rendered from the immutable
+ * media snapshot so the participant confirms exactly what would be published: the declared
+ * content type, and for a text-bearing image its full text as real, selectable HTML. A snapshot
+ * issued before the contract existed carries no declaration and renders nothing extra here; such
+ * a preview cannot reach publication once the gallery must be declared.
+ */
+function renderSnapshotTextEquivalent(media: ParticipantPreviewMediaViewRef, index: number): string {
+  if (media.contentKind === undefined) return '';
+  if (media.contentKind === 'ordinary') {
+    return `<p class="media-content-kind" data-content-kind="ordinary">Declared as an ordinary image: the description above is its complete text alternative.</p>`;
+  }
+  const fullText = typeof media.fullText === 'string' ? media.fullText.trim() : '';
+  if (fullText === '') {
+    throw new ParticipantPreviewMediaAccessibilityError(
+      'Participant preview text-bearing media is missing its full textual equivalent.',
+    );
+  }
+  return `<div class="media-full-text" data-content-kind="text_bearing">
+    <h4 id="snapshot-full-text-${index + 1}">Full text of supporting image ${index + 1}</h4>
+    <p class="media-full-text__note">Declared as a text-bearing image. This full text version is published alongside the image.</p>
+    <p class="media-full-text__body" aria-labelledby="snapshot-full-text-${index + 1}">${renderLongText(fullText)}</p>
+  </div>`;
 }
 
 function renderMedia(media: ParticipantPreviewMediaViewRef[], accessibilityText: string | null): string {
@@ -463,6 +489,11 @@ const PAGE_STYLE = `
   .media-figure--snapshot .media-frame { aspect-ratio: 16 / 10; }
   .media-figure--snapshot img { width: 100%; height: 100%; object-fit: contain; }
   figcaption { margin-top: 0.55rem; color: var(--color-text-muted); font-size: 0.875rem; font-weight: 650; }
+  .media-content-kind { margin: 0.45rem 0 0; color: var(--color-text-muted); font-size: 0.8125rem; }
+  .media-full-text { margin-top: 0.75rem; padding: 1rem 1.1rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-medium); background: var(--color-inset-surface); }
+  .media-full-text h4 { margin: 0 0 0.35rem; font-size: 0.9375rem; line-height: 1.35; color: var(--color-text-primary); }
+  .media-full-text__note { margin: 0 0 0.75rem; color: var(--color-text-muted); font-size: 0.8125rem; }
+  .media-full-text__body { margin: 0; color: var(--color-text-secondary); font-size: 0.9375rem; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
   .supporting-media, .document-assets { margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--color-border-subtle); }
   .snapshot-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
   .document-assets ul { margin: 0; padding: 0; list-style: none; }

@@ -66,7 +66,7 @@ function mediaBinding(overrides: Partial<PublicationMediaBinding> = {}): Publica
     fileName: 'poster.png', mimeType: 'image/png', fileSizeBytes: 12,
     sourceBucket: 'private', sourcePath: 'drafts/target/poster.png',
     publicBucket: 'assets', publicPath: 'published/target/poster.png',
-    publicUrl: 'https://example.com/published/target/poster.png', altTextPublic: 'Poster',
+    publicUrl: 'https://example.com/published/target/poster.png', altTextPublic: 'Poster', imageContentKind: null, fullTextPublic: null,
     preExisting: false, sourceSha256: 'a'.repeat(64), ...overrides,
   };
 }

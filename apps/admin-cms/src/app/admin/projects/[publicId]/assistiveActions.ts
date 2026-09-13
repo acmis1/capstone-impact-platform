@@ -12,6 +12,7 @@ import {
   SupabaseAssistiveJobRepository,
   SupabaseAssistiveValidationRepository,
   SupabaseAssistiveWorkerHeartbeatRepository,
+  resolveAssistiveWorkerRuntimeIdentity,
   SupabaseAssistiveExecutionControlRepository,
   assistiveInspectionResponseSchema,
   type AssistiveInspectionView,
@@ -73,7 +74,7 @@ export async function runAssistiveChecksAction(publicIdInput: unknown): Promise<
       env.supabaseUrl,
       new SupabaseAssistiveWorkerHeartbeatRepository(
         supabase,
-        process.env.CAPSTONE_DEPLOYMENT_VERSION ?? process.env.RENDER_GIT_COMMIT ?? '',
+        resolveAssistiveWorkerRuntimeIdentity(process.env),
       ),
       new SupabaseAssistiveExecutionControlRepository(supabase),
     );

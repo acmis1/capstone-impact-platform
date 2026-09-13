@@ -1,3 +1,5 @@
+import type { SnapshotImageContentKind } from '../domain/galleryTextEquivalent';
+
 export interface ProjectDetailsWorkbookIssue {
   code: string;
   message: string;
@@ -6,9 +8,20 @@ export interface ProjectDetailsWorkbookIssue {
   columnName?: string;
   rowNumber?: number;
 }
+/**
+ * Everything the project team declares about one gallery position, kept on one object so the
+ * alt description, the explicit content classification and the full textual equivalent can never
+ * drift apart across independent parallel arrays. `altText` may be an empty string when the
+ * classification or full text was supplied without a description; the package-aware boundary
+ * reports that as a missing description rather than the parser silently dropping the position.
+ */
 export interface ProjectDetailsGalleryAltText {
   position: number;
   altText: string;
+  /** Explicit project-team classification; null when the cell is blank. Never inferred. */
+  contentKind: SnapshotImageContentKind | null;
+  /** Full textual equivalent; empty string when the cell is blank. */
+  fullText: string;
 }
 
 export type GalleryAltTextInternalField =
@@ -21,6 +34,29 @@ export type GalleryAltTextInternalField =
   | 'snapshot8AltText'
   | 'snapshot9AltText'
   | 'snapshot10AltText';
+
+/** Per-position "content type" and "full text" columns, positions 1 through 10. */
+export type GalleryTextEquivalentInternalField =
+  | 'snapshot1ContentKind'
+  | 'snapshot2ContentKind'
+  | 'snapshot3ContentKind'
+  | 'snapshot4ContentKind'
+  | 'snapshot5ContentKind'
+  | 'snapshot6ContentKind'
+  | 'snapshot7ContentKind'
+  | 'snapshot8ContentKind'
+  | 'snapshot9ContentKind'
+  | 'snapshot10ContentKind'
+  | 'snapshot1FullText'
+  | 'snapshot2FullText'
+  | 'snapshot3FullText'
+  | 'snapshot4FullText'
+  | 'snapshot5FullText'
+  | 'snapshot6FullText'
+  | 'snapshot7FullText'
+  | 'snapshot8FullText'
+  | 'snapshot9FullText'
+  | 'snapshot10FullText';
 
 export interface ProjectDetailsWorkbookMetadata {
   title: string;
@@ -149,6 +185,7 @@ export interface ColumnDefinition {
   internalField:
     | keyof ProjectDetailsWorkbookMetadata
     | GalleryAltTextInternalField
+    | GalleryTextEquivalentInternalField
     | 'templateId'
     | 'featuredMedia';
   required: boolean;
@@ -367,6 +404,130 @@ export const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     internalField: 'snapshot10AltText',
     required: false,
     aliases: ['snapshot 10 alt text', 'snapshot10 alt text', 'snapshot10alttext']
+  },
+  // Text-equivalent contract per gallery position. Neither column is a required *column*: they
+  // are required exactly when the package contains the image at that position, which only the
+  // package-aware boundary can see. Accepted content-type values are the bounded vocabulary in
+  // domain/galleryTextEquivalent.ts; any other non-blank value is a parse error, never a default.
+  {
+    canonicalName: 'Snapshot 1 content type',
+    internalField: 'snapshot1ContentKind',
+    required: false,
+    aliases: ['snapshot 1 content type', 'snapshot1 content type', 'snapshot1contenttype', 'snapshot image content type', 'snapshot content type', 'snapshotcontenttype', 'snapshot 1 image type', 'snapshot image type']
+  },
+  {
+    canonicalName: 'Snapshot 1 full text',
+    internalField: 'snapshot1FullText',
+    required: false,
+    aliases: ['snapshot 1 full text', 'snapshot1 full text', 'snapshot1fulltext', 'snapshot image full text', 'snapshot full text', 'snapshotfulltext', 'snapshot 1 text equivalent', 'snapshot image text equivalent']
+  },
+  {
+    canonicalName: 'Snapshot 2 content type',
+    internalField: 'snapshot2ContentKind',
+    required: false,
+    aliases: ['snapshot 2 content type', 'snapshot2 content type', 'snapshot2contenttype', 'snapshot 2 image type']
+  },
+  {
+    canonicalName: 'Snapshot 2 full text',
+    internalField: 'snapshot2FullText',
+    required: false,
+    aliases: ['snapshot 2 full text', 'snapshot2 full text', 'snapshot2fulltext', 'snapshot 2 text equivalent']
+  },
+  {
+    canonicalName: 'Snapshot 3 content type',
+    internalField: 'snapshot3ContentKind',
+    required: false,
+    aliases: ['snapshot 3 content type', 'snapshot3 content type', 'snapshot3contenttype', 'snapshot 3 image type']
+  },
+  {
+    canonicalName: 'Snapshot 3 full text',
+    internalField: 'snapshot3FullText',
+    required: false,
+    aliases: ['snapshot 3 full text', 'snapshot3 full text', 'snapshot3fulltext', 'snapshot 3 text equivalent']
+  },
+  {
+    canonicalName: 'Snapshot 4 content type',
+    internalField: 'snapshot4ContentKind',
+    required: false,
+    aliases: ['snapshot 4 content type', 'snapshot4 content type', 'snapshot4contenttype', 'snapshot 4 image type']
+  },
+  {
+    canonicalName: 'Snapshot 4 full text',
+    internalField: 'snapshot4FullText',
+    required: false,
+    aliases: ['snapshot 4 full text', 'snapshot4 full text', 'snapshot4fulltext', 'snapshot 4 text equivalent']
+  },
+  {
+    canonicalName: 'Snapshot 5 content type',
+    internalField: 'snapshot5ContentKind',
+    required: false,
+    aliases: ['snapshot 5 content type', 'snapshot5 content type', 'snapshot5contenttype', 'snapshot 5 image type']
+  },
+  {
+    canonicalName: 'Snapshot 5 full text',
+    internalField: 'snapshot5FullText',
+    required: false,
+    aliases: ['snapshot 5 full text', 'snapshot5 full text', 'snapshot5fulltext', 'snapshot 5 text equivalent']
+  },
+  {
+    canonicalName: 'Snapshot 6 content type',
+    internalField: 'snapshot6ContentKind',
+    required: false,
+    aliases: ['snapshot 6 content type', 'snapshot6 content type', 'snapshot6contenttype', 'snapshot 6 image type']
+  },
+  {
+    canonicalName: 'Snapshot 6 full text',
+    internalField: 'snapshot6FullText',
+    required: false,
+    aliases: ['snapshot 6 full text', 'snapshot6 full text', 'snapshot6fulltext', 'snapshot 6 text equivalent']
+  },
+  {
+    canonicalName: 'Snapshot 7 content type',
+    internalField: 'snapshot7ContentKind',
+    required: false,
+    aliases: ['snapshot 7 content type', 'snapshot7 content type', 'snapshot7contenttype', 'snapshot 7 image type']
+  },
+  {
+    canonicalName: 'Snapshot 7 full text',
+    internalField: 'snapshot7FullText',
+    required: false,
+    aliases: ['snapshot 7 full text', 'snapshot7 full text', 'snapshot7fulltext', 'snapshot 7 text equivalent']
+  },
+  {
+    canonicalName: 'Snapshot 8 content type',
+    internalField: 'snapshot8ContentKind',
+    required: false,
+    aliases: ['snapshot 8 content type', 'snapshot8 content type', 'snapshot8contenttype', 'snapshot 8 image type']
+  },
+  {
+    canonicalName: 'Snapshot 8 full text',
+    internalField: 'snapshot8FullText',
+    required: false,
+    aliases: ['snapshot 8 full text', 'snapshot8 full text', 'snapshot8fulltext', 'snapshot 8 text equivalent']
+  },
+  {
+    canonicalName: 'Snapshot 9 content type',
+    internalField: 'snapshot9ContentKind',
+    required: false,
+    aliases: ['snapshot 9 content type', 'snapshot9 content type', 'snapshot9contenttype', 'snapshot 9 image type']
+  },
+  {
+    canonicalName: 'Snapshot 9 full text',
+    internalField: 'snapshot9FullText',
+    required: false,
+    aliases: ['snapshot 9 full text', 'snapshot9 full text', 'snapshot9fulltext', 'snapshot 9 text equivalent']
+  },
+  {
+    canonicalName: 'Snapshot 10 content type',
+    internalField: 'snapshot10ContentKind',
+    required: false,
+    aliases: ['snapshot 10 content type', 'snapshot10 content type', 'snapshot10contenttype', 'snapshot 10 image type']
+  },
+  {
+    canonicalName: 'Snapshot 10 full text',
+    internalField: 'snapshot10FullText',
+    required: false,
+    aliases: ['snapshot 10 full text', 'snapshot10 full text', 'snapshot10fulltext', 'snapshot 10 text equivalent']
   }
 ];
 

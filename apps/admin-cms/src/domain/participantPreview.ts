@@ -1,3 +1,4 @@
+import type { SnapshotImageContentKind } from './galleryTextEquivalent';
 export interface ParticipantPreviewExternalLink {
   label?: string;
   url: string;
@@ -66,6 +67,17 @@ export interface ParticipantPreviewMediaRef {
    * duplicated onto the media asset.
    */
   altText: string | null;
+  /**
+   * Text-equivalent contract captured at issuance for a `snapshot_image`: the declared
+   * `contentKind` and, for a text-bearing image, the exact `fullText` the participant is asked to
+   * confirm. Optional because previews issued before Migration 0057 carry neither key and stored
+   * snapshots are never rewritten; `undefined` therefore means "this preview predates the
+   * contract". Such a preview can no longer reach publication once the project has snapshot
+   * media, because readiness re-derives the current media snapshot with these keys and reports
+   * the stored evidence as stale. Absent on poster/PDF elements.
+   */
+  contentKind?: SnapshotImageContentKind;
+  fullText?: string | null;
 }
 
 export interface ParticipantPreviewMediaViewRef {
@@ -76,6 +88,9 @@ export interface ParticipantPreviewMediaViewRef {
   mimeType: string | null;
   /** Carried through from the immutable snapshot; never re-read from current media state. */
   altText: string | null;
+  /** Carried through from the immutable snapshot exactly like `altText`. */
+  contentKind?: SnapshotImageContentKind;
+  fullText?: string | null;
   signedUrl: string | null;
 }
 

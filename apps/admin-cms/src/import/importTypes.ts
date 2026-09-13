@@ -1,6 +1,17 @@
+import type { SnapshotImageContentKind } from '../domain/galleryTextEquivalent';
+
+/**
+ * Authoritative project-team accessibility input for one gallery position: the alt description,
+ * the explicit content classification and the full textual equivalent, on one object so they can
+ * never drift apart. The standard workbook always supplies all four properties; a legacy
+ * `project.json` manifest predates the classification and may omit the last two, which every
+ * downstream gate treats as "not yet declared" rather than as an ordinary photograph.
+ */
 export interface ImportPackageGalleryAltText {
   position: number;
   altText: string;
+  contentKind?: SnapshotImageContentKind | null;
+  fullText?: string | null;
 }
 
 export interface ImportPackageGalleryImage<

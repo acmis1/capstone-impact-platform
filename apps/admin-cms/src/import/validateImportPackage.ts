@@ -1,6 +1,10 @@
 import { ImportPackageFileMetadata, ImportPackageParseResult, ImportPackageValidationResult } from './importTypes';
 import { validateMediaAsset } from '../storage/mediaValidationCore';
 import {ACCESSIBLE_CONTENT_LIMITS,} from '../domain/accessibleContent';
+import {
+  describeSnapshotTextEquivalentProblem,
+  getSnapshotTextEquivalentProblem,
+} from '../domain/galleryTextEquivalent';
 import { MAX_GALLERY_IMAGES } from './galleryConvention';
 
 export interface ValidateImportPackageOptions {
@@ -265,11 +269,26 @@ export function validateImportPackage(
         : '';
 
     if (altText === '') {
-      errors.push({
-        ruleCode: 'METADATA_EMPTY_GALLERY_ALT_TEXT',
-        message: `Gallery image alt text at position ${position} is empty.`,
-        fieldName: 'galleryAltTexts',
-      });
+      if (galleryImagePositions.has(position) && position === 1) {
+        errors.push({
+          ruleCode: 'METADATA_MISSING_SNAPSHOT_ALT_TEXT',
+          message:
+            'Required manifest field "snapshotAltText" is missing or empty. A package that includes snapshot-1.png must describe it.',
+          fieldName: 'snapshotAltText',
+        });
+      } else if (galleryImagePositions.has(position)) {
+        errors.push({
+          ruleCode: 'METADATA_MISSING_GALLERY_ALT_TEXT',
+          message: `Gallery image at position ${position} is missing its required alt text.`,
+          fieldName: 'galleryAltTexts',
+        });
+      } else {
+        errors.push({
+          ruleCode: 'METADATA_EMPTY_GALLERY_ALT_TEXT',
+          message: `Gallery image alt text at position ${position} is empty.`,
+          fieldName: 'galleryAltTexts',
+        });
+      }
     } else if (
       altText.length >
       ACCESSIBLE_CONTENT_LIMITS.snapshotAltText
@@ -297,9 +316,34 @@ export function validateImportPackage(
         fieldName: 'galleryAltTexts',
       });
     }
+
+    // Text-equivalent contract. A full text beyond the ceiling, or a full text on an image the
+    // team declared ordinary, is contradictory on any source. A blank classification or a blank
+    // required full text is decided per source below, exactly like a blank alt description.
+    const textProblem = getSnapshotTextEquivalentProblem({
+      contentKind: item.contentKind ?? null,
+      fullText: item.fullText ?? null,
+    });
+    if (textProblem === 'FULL_TEXT_TOO_LONG') {
+      errors.push({
+        ruleCode: 'METADATA_GALLERY_FULL_TEXT_TOO_LONG',
+        message: describeSnapshotTextEquivalentProblem(textProblem, position),
+        fieldName: 'galleryAltTexts',
+      });
+    } else if (textProblem === 'FULL_TEXT_UNEXPECTED') {
+      errors.push({
+        ruleCode: 'METADATA_UNEXPECTED_GALLERY_FULL_TEXT',
+        message: describeSnapshotTextEquivalentProblem(textProblem, position),
+        fieldName: 'galleryAltTexts',
+      });
+    }
   }
 
-  // XLSX packages require one authoritative alt entry for every supplied image.
+  // XLSX packages require one authoritative alt entry for every supplied image, and — because the
+  // standard workbook carries the content-type and full-text columns — an explicit classification
+  // for every supplied image plus a full text for every image declared text-bearing. A legacy
+  // project.json package predates the classification and is held by the later workflow gates
+  // instead, mirroring how its missing alt text is handled.
   if (options.metadataSource === 'xlsx') {
     for (const galleryImage of parsed.galleryImages) {
       const matchingAltTexts = galleryAltTexts.filter(
@@ -322,6 +366,26 @@ export function validateImportPackage(
             fieldName: 'galleryAltTexts',
           });
         }
+      }
+
+      // Exactly one entry per position is enforced above; the first is the authoritative one here.
+      const entry = matchingAltTexts[0];
+      const textProblem = getSnapshotTextEquivalentProblem({
+        contentKind: entry?.contentKind ?? null,
+        fullText: entry?.fullText ?? null,
+      });
+      if (textProblem === 'CONTENT_KIND_MISSING') {
+        errors.push({
+          ruleCode: 'METADATA_MISSING_GALLERY_CONTENT_TYPE',
+          message: `Gallery image "${galleryImage.file.fileName}": ${describeSnapshotTextEquivalentProblem(textProblem, galleryImage.position)}`,
+          fieldName: 'galleryAltTexts',
+        });
+      } else if (textProblem === 'FULL_TEXT_MISSING') {
+        errors.push({
+          ruleCode: 'METADATA_MISSING_GALLERY_FULL_TEXT',
+          message: `Gallery image "${galleryImage.file.fileName}": ${describeSnapshotTextEquivalentProblem(textProblem, galleryImage.position)}`,
+          fieldName: 'galleryAltTexts',
+        });
       }
     }
   }

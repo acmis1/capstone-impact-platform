@@ -563,7 +563,10 @@ function mediaFilesForCase(item: ReleaseEvaluationCase): SyntheticImportMaterial
 
 function workbookOverridesForCase(item: ReleaseEvaluationCase): Record<string, string> {
   const overrides: Record<string, string> = {};
-  if (item.galleryCount === 0) overrides.snapshotAltText = '';
+  if (item.galleryCount === 0) {
+    overrides.snapshotAltText = '';
+    overrides.snapshot1ContentKind = '';
+  }
   switch (item.packageProfile) {
     case 'xlsx-missing-title':
       overrides.title = '';
@@ -596,9 +599,11 @@ function workbookOverridesForCase(item: ReleaseEvaluationCase): Record<string, s
   }
   for (let position = 1; position <= item.galleryCount; position += 1) {
     const fieldName = position === 1 ? 'snapshotAltText' : `snapshot${position}AltText`;
+    const contentKindField = `snapshot${position}ContentKind`;
     if (!Object.prototype.hasOwnProperty.call(overrides, fieldName)) {
       overrides[fieldName] = `Synthetic gallery alt ${item.caseId} position ${position}.`;
     }
+    overrides[contentKindField] = 'Ordinary image';
   }
   return overrides;
 }

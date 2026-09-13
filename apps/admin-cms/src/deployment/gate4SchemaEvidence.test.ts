@@ -32,6 +32,8 @@ function exactEvidence(): Gate4SchemaEvidence {
       { schema: 'public', table: 'admin_users', name: 'id', ordinal: 1, dataType: 'uuid', arrayElementType: null, nullable: false, identity: '', generated: '', defaultExpression: 'gen_random_uuid()' },
       { schema: 'public', table: 'admin_users', name: 'auth_user_id', ordinal: 2, dataType: 'uuid', arrayElementType: null, nullable: true, identity: '', generated: '', defaultExpression: null },
       { schema: 'public', table: 'media_assets', name: 'alt_text_public', ordinal: 1, dataType: 'text', arrayElementType: null, nullable: true, identity: '', generated: '', defaultExpression: null },
+      { schema: 'public', table: 'media_assets', name: 'image_content_kind', ordinal: 2, dataType: 'text', arrayElementType: null, nullable: true, identity: '', generated: '', defaultExpression: null },
+      { schema: 'public', table: 'media_assets', name: 'full_text_public', ordinal: 3, dataType: 'text', arrayElementType: null, nullable: true, identity: '', generated: '', defaultExpression: null },
       { schema: 'public', table: 'projects', name: 'id', ordinal: 1, dataType: 'uuid', arrayElementType: null, nullable: false, identity: '', generated: '', defaultExpression: 'gen_random_uuid()' },
       { schema: 'public', table: 'projects', name: 'year', ordinal: 2, dataType: 'integer', arrayElementType: null, nullable: false, identity: '', generated: '', defaultExpression: '2026' },
       { schema: 'public', table: 'projects', name: 'program_id', ordinal: 3, dataType: 'uuid', arrayElementType: null, nullable: true, identity: '', generated: '', defaultExpression: null },

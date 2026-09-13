@@ -21,6 +21,9 @@ import {
   executePublicFeedRollback,
   preparePublicFeedRollback,
   recoverPublicFeedOperation,
+  requiredPublicFeedRollbackCapabilityConfirmation,
+  transitionPublicFeedRollbackCapability,
+  type PublicFeedRollbackHeadEvidence,
   type PublicFeedHistoryServiceDependencies,
 } from '../projects/publicFeedHistoryService';
 import { executePublicFeedWriter } from '../projects/publicFeedWriterCoordinator';
@@ -56,6 +59,8 @@ const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0
 const PDF_BYTES = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF', 'ascii');
 const CRASH_BOUNDARY_REASON = 'Runtime crash-boundary verification';
 const RESPONSE_LOSS_REASON = 'Committed response-loss verification';
+const STAGING_ROLLBACK_HOST = 'synthetic-a06-staging.supabase.co';
+const STAGING_ROLLBACK_URL = `https://${STAGING_ROLLBACK_HOST}`;
 const DOCKER_COMMAND_TIMEOUT_MS = 30_000;
 const PSQL_COMMAND_TIMEOUT_MS = 45_000;
 const STALE_SNAPSHOT_FAILURE = /could not serialize access due to concurrent update|could not serialize access due to read\/write dependencies/i;
@@ -150,6 +155,20 @@ async function beginSnapshotTransaction(
     }
     throw error;
   }
+}
+
+async function waitForBackendWaitEvent(
+  backendPid: number,
+  expected: RegExp,
+  marker: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const waitEvent = psql(`SELECT COALESCE(wait_event_type, '') || '|' || COALESCE(wait_event, '')
+      FROM pg_catalog.pg_stat_activity WHERE pid=${backendPid};`);
+    if (expected.test(waitEvent)) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.fail(`${marker}: backend ${backendPid} did not reach the expected wait event.`);
 }
 
 function expectActivationGuardRejection(sql: string, marker: string): void {
@@ -370,6 +389,7 @@ async function createReadyPublicationProject(
       mime_type: 'image/png', file_size_bytes: PNG_BYTES.length, is_public_approved: false,
       gallery_position: position,
       alt_text_public: `Synthetic gallery image ${position}.`,
+      image_content_kind: 'ordinary', full_text_public: null,
     });
     assert.equal(media.error, null, media.error?.message);
   }
@@ -422,6 +442,23 @@ function historyDependencies(
     environment: {
       CAPSTONE_RUNTIME_ENV: 'local',
       CAPSTONE_LOCAL_PUBLIC_FEED_ROLLBACK_ENABLED: 'true',
+    },
+  };
+}
+
+/** Uses canonical staging identity policy while every I/O remains on this owned loopback stack. */
+function stagingHistoryDependencies(
+  client: SupabaseClient,
+  projects: ReturnType<typeof project>[],
+  rollbackFlag = 'true',
+): PublicFeedHistoryServiceDependencies {
+  return {
+    ...historyDependencies(client, projects),
+    supabaseUrl: STAGING_ROLLBACK_URL,
+    environment: {
+      CAPSTONE_RUNTIME_ENV: 'staging',
+      CAPSTONE_EXPECTED_SUPABASE_HOST: STAGING_ROLLBACK_HOST,
+      CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED: rollbackFlag,
     },
   };
 }
@@ -719,7 +756,7 @@ async function main(): Promise<void> {
   const anon = createClient(local.API_URL!, local.ANON_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
   const ledger = new SupabasePublicFeedLedgerRepositoryCore(client);
 
-  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '53');
+  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '57');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('20260824180000','20260824183000','20260825030000');"), '3');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260826090000';"), '1');
   assert.equal(psql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('public_feed_operations','public_feed_versions','public_feed_version_members','public_feed_head','feed_rollback_preparations','public_feed_operation_events');"), '6');
@@ -754,10 +791,19 @@ async function main(): Promise<void> {
     assert.equal(psql(`SELECT count(*) FROM public.projects WHERE public_id=${sqlLiteral(preservedPublicId)};`), '1');
   }
 
+  const runtimeAdminIdentity = await client.auth.admin.createUser({
+    email: `issue-186-admin-${projectId}@example.invalid`,
+    email_confirm: true,
+  });
+  assert.equal(runtimeAdminIdentity.error, null, runtimeAdminIdentity.error?.message);
+  const runtimeAdminAuthUserId = runtimeAdminIdentity.data.user?.id;
+  assert.ok(runtimeAdminAuthUserId);
   psql(`
-    INSERT INTO public.admin_users(id,email,full_name) VALUES
-      (${sqlLiteral(adminId)}::uuid,'issue-186-admin@example.invalid','Issue 186 Runtime Admin')
-      ON CONFLICT (id) DO UPDATE SET full_name=EXCLUDED.full_name;
+    INSERT INTO public.admin_users(id,auth_user_id,email,full_name) VALUES
+      (${sqlLiteral(adminId)}::uuid,${sqlLiteral(runtimeAdminAuthUserId)}::uuid,
+       'issue-186-admin@example.invalid','Issue 186 Runtime Admin')
+      ON CONFLICT (id) DO UPDATE SET full_name=EXCLUDED.full_name,
+        auth_user_id=EXCLUDED.auth_user_id;
     INSERT INTO public.user_roles(user_id,role) VALUES (${sqlLiteral(adminId)}::uuid,'admin')
       ON CONFLICT (user_id,role) DO NOTHING;
   `);
@@ -821,14 +867,14 @@ async function main(): Promise<void> {
     INSERT INTO public.media_assets(
       id,project_id,asset_type,file_name,storage_bucket,storage_path,mime_type,file_size_bytes,
       public_storage_bucket,public_storage_path,public_url,is_public_approved,
-      gallery_position,alt_text_public
+      gallery_position,alt_text_public,image_content_kind,full_text_public
     ) VALUES (
       ${sqlLiteral(relevanceFlipFixture.mediaId)}::uuid,
       ${sqlLiteral(relevanceFlipFixture.projectId)}::uuid,'snapshot_image','snapshot-1.png',
       'project-drafts-private','drafts/203-relevance-flip/snapshot_image/snapshot-1.png',
       'image/png',12,'project-public-assets',
       'published/203-relevance-flip/snapshot_image/snapshot-1.png',
-      ${sqlLiteral(relevanceFlipFixture.snapshotUrl)},true,1,'Relevance flip snapshot.'
+      ${sqlLiteral(relevanceFlipFixture.snapshotUrl)},true,1,'Relevance flip snapshot.','ordinary',NULL
     );
     UPDATE public.projects SET created_at='2026-08-20T00:00:00Z'::timestamptz
       WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;
@@ -1283,6 +1329,238 @@ async function main(): Promise<void> {
     activationDisciplineBefore,
   );
 
+  const rollbackHeadEvidence: PublicFeedRollbackHeadEvidence = {
+    versionNumber: head.currentVersion.versionNumber,
+    generation: head.generation,
+    feedHash: head.currentVersion.feedHash,
+    recordCount: head.currentVersion.recordCount,
+  };
+  const stagingRollbackDependencies = stagingHistoryDependencies(
+    client, [traffic, relevanceProject],
+  );
+  const capabilityEventsBefore = Number(psql(
+    'SELECT count(*) FROM public.public_feed_rollback_capability_events;',
+  ));
+  const enableConfirmation = requiredPublicFeedRollbackCapabilityConfirmation(
+    true, rollbackHeadEvidence,
+  );
+  const initiallyEnabled = await transitionPublicFeedRollbackCapability(
+    stagingRollbackDependencies, true, rollbackHeadEvidence, enableConfirmation,
+  );
+  assert.equal(initiallyEnabled.resultCode, 'CAPABILITY_UPDATED', JSON.stringify(initiallyEnabled));
+  assert.equal(await new SupabasePublicFeedLedgerRepositoryCore(client)
+    .isCurrentVerifiedStagingRollbackCapabilityEnabled(), true);
+  assert.equal(
+    Number(psql('SELECT count(*) FROM public.public_feed_rollback_capability_events;')),
+    capabilityEventsBefore + 1,
+  );
+  const repeatedEnable = await transitionPublicFeedRollbackCapability(
+    stagingRollbackDependencies, true, rollbackHeadEvidence, enableConfirmation,
+  );
+  assert.equal(repeatedEnable.resultCode, 'NO_CHANGE', JSON.stringify(repeatedEnable));
+  assert.equal(
+    Number(psql('SELECT count(*) FROM public.public_feed_rollback_capability_events;')),
+    capabilityEventsBefore + 1,
+    'A repeated enable request created a false audit event.',
+  );
+  const disableConfirmation = requiredPublicFeedRollbackCapabilityConfirmation(
+    false, rollbackHeadEvidence,
+  );
+  const disabled = await transitionPublicFeedRollbackCapability(
+    stagingRollbackDependencies, false, rollbackHeadEvidence, disableConfirmation,
+  );
+  assert.equal(disabled.resultCode, 'CAPABILITY_UPDATED', JSON.stringify(disabled));
+  assert.equal(psql('SELECT rollback_enabled::text FROM public.public_feed_head WHERE singleton=true;'), 'false');
+  assert.equal(
+    Number(psql('SELECT count(*) FROM public.public_feed_rollback_capability_events;')),
+    capabilityEventsBefore + 2,
+  );
+
+  const capabilityNoChange = await transitionPublicFeedRollbackCapability(
+    stagingRollbackDependencies, false, rollbackHeadEvidence, disableConfirmation,
+  );
+  assert.equal(capabilityNoChange.resultCode, 'NO_CHANGE', JSON.stringify(capabilityNoChange));
+  assert.equal(
+    Number(psql('SELECT count(*) FROM public.public_feed_rollback_capability_events;')),
+    capabilityEventsBefore + 2,
+    'A no-change capability request created a false audit event.',
+  );
+  const unavailablePreparation = await preparePublicFeedRollback(
+    stagingRollbackDependencies, rollbackHeadEvidence.versionNumber,
+  );
+  assert.equal(unavailablePreparation.resultCode, 'ROLLBACK_UNAVAILABLE');
+  const flagDisabled = await transitionPublicFeedRollbackCapability(
+    stagingHistoryDependencies(client, [traffic, relevanceProject], 'false'),
+    true,
+    rollbackHeadEvidence,
+    requiredPublicFeedRollbackCapabilityConfirmation(true, rollbackHeadEvidence),
+  );
+  assert.equal(flagDisabled.resultCode, 'ROLLBACK_UNAVAILABLE');
+  const staleEvidence = { ...rollbackHeadEvidence, generation: rollbackHeadEvidence.generation + 1 };
+  const staleTransition = await transitionPublicFeedRollbackCapability(
+    stagingRollbackDependencies,
+    true,
+    staleEvidence,
+    requiredPublicFeedRollbackCapabilityConfirmation(true, staleEvidence),
+  );
+  assert.equal(staleTransition.resultCode, 'STALE_HEAD');
+  const mismatchedConfirmation = await transitionPublicFeedRollbackCapability(
+    stagingRollbackDependencies, true, rollbackHeadEvidence, 'ENABLE PUBLIC FEED ROLLBACK',
+  );
+  assert.equal(mismatchedConfirmation.resultCode, 'CONFIRMATION_MISMATCH');
+
+  const inactiveAdminId = '18600000-0000-4000-8000-000000000099';
+  const inactiveIdentity = await client.auth.admin.createUser({
+    email: `inactive-a06-${projectId}@example.invalid`, email_confirm: true,
+  });
+  assert.equal(inactiveIdentity.error, null, inactiveIdentity.error?.message);
+  const inactiveAuthUserId = inactiveIdentity.data.user?.id;
+  assert.ok(inactiveAuthUserId);
+  psql(`INSERT INTO public.admin_users(id,auth_user_id,email,full_name,lifecycle_status,deactivated_at)
+    VALUES (${sqlLiteral(inactiveAdminId)}::uuid,${sqlLiteral(inactiveAuthUserId)}::uuid,
+      'inactive-a06@example.invalid','Inactive A-06 Operator','deactivated',pg_catalog.now());
+    INSERT INTO public.user_roles(user_id,role) VALUES (${sqlLiteral(inactiveAdminId)}::uuid,'admin');`);
+  const inactiveAttempt = await new SupabasePublicFeedLedgerRepositoryCore(client)
+    .transitionRollbackCapability({
+      adminId: inactiveAdminId,
+      enabled: true,
+      requireExactHeadEvent: true,
+      expectedVersionNumber: rollbackHeadEvidence.versionNumber,
+      expectedGeneration: rollbackHeadEvidence.generation,
+      expectedFeedHash: rollbackHeadEvidence.feedHash,
+      expectedRecordCount: rollbackHeadEvidence.recordCount,
+      confirmation: requiredPublicFeedRollbackCapabilityConfirmation(true, rollbackHeadEvidence),
+  });
+  assert.equal(inactiveAttempt.resultCode, 'PERMISSION_DENIED');
+
+  const revokedAdminId = '18600000-0000-4000-8000-000000000098';
+  const revokedIdentity = await client.auth.admin.createUser({
+    email: `revoked-a06-${projectId}@example.invalid`, email_confirm: true,
+  });
+  assert.equal(revokedIdentity.error, null, revokedIdentity.error?.message);
+  const revokedAuthUserId = revokedIdentity.data.user?.id;
+  assert.ok(revokedAuthUserId);
+  psql(`INSERT INTO public.admin_users(id,auth_user_id,email,full_name)
+    VALUES (${sqlLiteral(revokedAdminId)}::uuid,${sqlLiteral(revokedAuthUserId)}::uuid,
+      'revoked-a06@example.invalid','Revoked A-06 Operator');
+    INSERT INTO public.user_roles(user_id,role) VALUES (${sqlLiteral(revokedAdminId)}::uuid,'reviewer');`);
+  const revokedAttempt = await new SupabasePublicFeedLedgerRepositoryCore(client)
+    .transitionRollbackCapability({
+      adminId: revokedAdminId,
+      enabled: true,
+      requireExactHeadEvent: true,
+      expectedVersionNumber: rollbackHeadEvidence.versionNumber,
+      expectedGeneration: rollbackHeadEvidence.generation,
+      expectedFeedHash: rollbackHeadEvidence.feedHash,
+      expectedRecordCount: rollbackHeadEvidence.recordCount,
+      confirmation: requiredPublicFeedRollbackCapabilityConfirmation(true, rollbackHeadEvidence),
+    });
+  assert.equal(revokedAttempt.resultCode, 'PERMISSION_DENIED');
+
+  const enabled = await transitionPublicFeedRollbackCapability(
+    stagingRollbackDependencies, true, rollbackHeadEvidence, enableConfirmation,
+  );
+  assert.equal(enabled.resultCode, 'CAPABILITY_UPDATED', JSON.stringify(enabled));
+  assert.equal(psql('SELECT rollback_enabled::text FROM public.public_feed_head WHERE singleton=true;'), 'true');
+  assert.equal(
+    psql('SELECT confirmation_digest FROM public.public_feed_rollback_capability_events ORDER BY sequence;'),
+    [enableConfirmation, disableConfirmation, enableConfirmation]
+      .map((confirmation) => createHash('sha256').update(confirmation, 'utf8').digest('hex'))
+      .join('\n'),
+  );
+  assert.equal(
+    psql("SELECT count(*) FROM public.public_feed_rollback_capability_events"
+      + ` WHERE actor_id=${sqlLiteral(adminId)}::uuid AND head_version_id=${sqlLiteral(head.currentVersion.id)}::uuid`
+      + ` AND head_version_number=${rollbackHeadEvidence.versionNumber}`
+      + ` AND head_generation=${rollbackHeadEvidence.generation}`
+      + ` AND head_feed_hash=${sqlLiteral(rollbackHeadEvidence.feedHash)}`
+      + ` AND head_record_count=${rollbackHeadEvidence.recordCount};`),
+    '3',
+  );
+
+  const concurrentAdminId = '18600000-0000-4000-8000-000000000097';
+  const concurrentEmail = 'concurrent-deactivation-a06@example.invalid';
+  const concurrentIdentity = await client.auth.admin.createUser({
+    email: `concurrent-a06-${projectId}@example.invalid`, email_confirm: true,
+  });
+  assert.equal(concurrentIdentity.error, null, concurrentIdentity.error?.message);
+  const concurrentAuthUserId = concurrentIdentity.data.user?.id;
+  assert.ok(concurrentAuthUserId);
+  psql(`INSERT INTO public.admin_users(id,auth_user_id,email,full_name)
+    VALUES (${sqlLiteral(concurrentAdminId)}::uuid,${sqlLiteral(concurrentAuthUserId)}::uuid,
+      ${sqlLiteral(concurrentEmail)},'Concurrent A-06 Operator');
+    INSERT INTO public.user_roles(user_id,role) VALUES (${sqlLiteral(concurrentAdminId)}::uuid,'admin');`);
+
+  const deactivation = await beginSnapshotTransaction(
+    'READ COMMITTED', 'A06_DEACTIVATION_TRANSACTION_READY',
+  );
+  sendPsql(deactivation, `SELECT 'A06_DEACTIVATION_APPLIED|' || (
+    public.manage_staff_lifecycle(
+      ${sqlLiteral(adminId)}::uuid,${sqlLiteral(concurrentEmail)},'deactivate',NULL,1
+    )->>'resultCode'
+  );`);
+  await waitForPsqlMarker(deactivation, 'A06_DEACTIVATION_APPLIED|UPDATED');
+
+  const concurrentTransition = await beginSnapshotTransaction(
+    'READ COMMITTED', 'A06_CONCURRENT_TRANSITION_READY',
+  );
+  sendPsql(concurrentTransition, `SELECT 'A06_CONCURRENT_TRANSITION_RESULT|' || (
+    public.transition_public_feed_rollback_capability(
+      ${sqlLiteral(concurrentAdminId)}::uuid,false,true,
+      ${rollbackHeadEvidence.versionNumber},${rollbackHeadEvidence.generation},
+      ${sqlLiteral(rollbackHeadEvidence.feedHash)},${rollbackHeadEvidence.recordCount},
+      ${sqlLiteral(disableConfirmation)}
+    )->>'resultCode'
+  );`);
+  assert.ok(concurrentTransition.backendPid);
+  await waitForBackendWaitEvent(
+    concurrentTransition.backendPid, /Lock\|advisory/i, 'A06_CONCURRENT_DEACTIVATION_FENCE',
+  );
+  sendPsql(deactivation, 'COMMIT;');
+  sendPsql(deactivation, `SELECT 'A06_DEACTIVATION_COMMITTED';`);
+  await waitForPsqlMarker(deactivation, 'A06_DEACTIVATION_COMMITTED');
+  await closePsqlSession(deactivation);
+  await waitForPsqlMarker(
+    concurrentTransition, 'A06_CONCURRENT_TRANSITION_RESULT|PERMISSION_DENIED',
+  );
+  sendPsql(concurrentTransition, 'ROLLBACK;');
+  await closePsqlSession(concurrentTransition);
+  assert.equal(
+    Number(psql('SELECT count(*) FROM public.public_feed_rollback_capability_events;')),
+    capabilityEventsBefore + 3,
+    'A concurrently deactivated administrator created a capability event.',
+  );
+  expectPsqlFailure(
+    'UPDATE public.public_feed_rollback_capability_events SET enabled=NOT enabled;',
+    'Rollback capability audit immutability',
+  );
+
+  const activeFenceToken = token();
+  const activeFence = await ledger.reserve({
+    operationKey: randomUUID(), kind: 'removal', mode: null, adminId,
+    publicId: traffic.publicId, ownerToken: activeFenceToken,
+    archiveReason: 'A-06 active writer capability fence',
+    storageBucket: feedBucket, storagePath: feedPath, rollbackCapability: false,
+  });
+  assert.equal(activeFence.resultCode, 'OPERATION_RESERVED', JSON.stringify(activeFence));
+  const blockedByActiveWriter = await transitionPublicFeedRollbackCapability(
+    stagingRollbackDependencies, false, rollbackHeadEvidence, disableConfirmation,
+  );
+  assert.equal(blockedByActiveWriter.resultCode, 'PUBLICATION_IN_PROGRESS');
+  assert.equal(
+    (await ledger.fail(
+      String(activeFence.operationId), Number(activeFence.ownerEpoch), activeFenceToken, adminId,
+      'A06_CAPABILITY_FENCE_VERIFIED',
+    )).resultCode,
+    'FAILED',
+  );
+  assert.equal(
+    Number(psql('SELECT count(*) FROM public.public_feed_rollback_capability_events;')),
+    capabilityEventsBefore + 3,
+    'A refused active-writer transition created an audit event.',
+  );
+  console.log('PASS: verified-staging capability is exact-head, active-admin-only, writer-fenced, off by environment and database independently, and truthfully audited');
+
   const medical = project('186-rollback-publication');
   const confirmedDiscipline = 'Taxonomy Discipline B';
   const confirmedIndustryCategory = 'Taxonomy Industry B';
@@ -1339,17 +1617,134 @@ async function main(): Promise<void> {
     /^archived\|published\|false\|.+/,
   );
 
-  const preparation = await preparePublicFeedRollback(historyDependencies(client, [
-    project(traffic.publicId, 'archived'), relevanceProject, medical,
-  ]), 1);
+  const rollbackProjects = [project(traffic.publicId, 'archived'), relevanceProject, medical];
+  head = await ledger.getHead();
+  assert.ok(head?.rollbackEnabled);
+  assert.equal(
+    await ledger.isCurrentVerifiedStagingRollbackCapabilityEnabled(),
+    false,
+    'A capability event for an older immutable head authorized a later head.',
+  );
+  const expiredHeadPreparation = await preparePublicFeedRollback(
+    stagingHistoryDependencies(client, rollbackProjects), 1,
+  );
+  assert.equal(expiredHeadPreparation.resultCode, 'ROLLBACK_UNAVAILABLE');
+  const currentRollbackEvidence: PublicFeedRollbackHeadEvidence = {
+    versionNumber: head.currentVersion.versionNumber,
+    generation: head.generation,
+    feedHash: head.currentVersion.feedHash,
+    recordCount: head.currentVersion.recordCount,
+  };
+  const currentEnableConfirmation = requiredPublicFeedRollbackCapabilityConfirmation(
+    true, currentRollbackEvidence,
+  );
+  const currentHeadEnabled = await transitionPublicFeedRollbackCapability(
+    stagingHistoryDependencies(client, rollbackProjects),
+    true,
+    currentRollbackEvidence,
+    currentEnableConfirmation,
+  );
+  assert.equal(currentHeadEnabled.resultCode, 'CAPABILITY_UPDATED', JSON.stringify(currentHeadEnabled));
+  let preparation = await preparePublicFeedRollback(
+    stagingHistoryDependencies(client, rollbackProjects), 1,
+  );
   assert.equal(preparation.resultCode, 'PREPARED', JSON.stringify(preparation));
   if (preparation.resultCode !== 'PREPARED') throw new Error('ROLLBACK_PREPARATION_FAILED');
+  assert.equal(
+    psql(`SELECT count(*) FROM public.public_feed_rollback_preparation_capabilities
+      WHERE preparation_handle=${sqlLiteral(preparation.preparationHandle)}::uuid;`),
+    '1',
+  );
+  const forgedCapabilityEvent = await client.from('public_feed_rollback_capability_events').insert({});
+  assert.ok(forgedCapabilityEvent.error, 'Service role forged a rollback capability event directly.');
+  const forgedCapabilityBinding = await client.from('public_feed_rollback_preparation_capabilities').insert({});
+  assert.ok(forgedCapabilityBinding.error, 'Service role forged a rollback capability binding directly.');
+
+  const currentDisableConfirmation = requiredPublicFeedRollbackCapabilityConfirmation(
+    false, currentRollbackEvidence,
+  );
+  const disabledAfterPreparation = await transitionPublicFeedRollbackCapability(
+    stagingHistoryDependencies(client, rollbackProjects),
+    false,
+    currentRollbackEvidence,
+    currentDisableConfirmation,
+  );
+  assert.equal(disabledAfterPreparation.resultCode, 'CAPABILITY_UPDATED');
+  const reenabledAfterPreparation = await transitionPublicFeedRollbackCapability(
+    stagingHistoryDependencies(client, rollbackProjects),
+    true,
+    currentRollbackEvidence,
+    currentEnableConfirmation,
+  );
+  assert.equal(reenabledAfterPreparation.resultCode, 'CAPABILITY_UPDATED');
+  const supersededPreparation = await executePublicFeedRollback(
+    stagingHistoryDependencies(client, rollbackProjects),
+    preparation.preparationHandle,
+    preparation.requiredAcknowledgement,
+  );
+  assert.equal(supersededPreparation.resultCode, 'ROLLBACK_UNAVAILABLE');
+  assert.equal(
+    psql(`SELECT operation_id IS NULL FROM public.feed_rollback_preparations
+      WHERE handle=${sqlLiteral(preparation.preparationHandle)}::uuid;`),
+    't',
+  );
+  const refreshedPreparation = await preparePublicFeedRollback(
+    stagingHistoryDependencies(client, rollbackProjects), 1,
+  );
+  assert.equal(refreshedPreparation.resultCode, 'PREPARED', JSON.stringify(refreshedPreparation));
+  if (refreshedPreparation.resultCode !== 'PREPARED') {
+    throw new Error('ROLLBACK_PREPARATION_REFRESH_FAILED');
+  }
+  preparation = refreshedPreparation;
   const rollback = await executePublicFeedRollback(
-    historyDependencies(client, [project(traffic.publicId, 'archived'), relevanceProject, medical]),
+    stagingHistoryDependencies(withFeedWriteFault(client, 'reject_then_unavailable'), rollbackProjects),
     preparation.preparationHandle, preparation.requiredAcknowledgement,
   );
-  assert.equal(rollback.resultCode, 'COMPLETED', JSON.stringify(rollback));
+  assert.equal(rollback.resultCode, 'RECOVERY_REQUIRED', JSON.stringify(rollback));
+  const recoveryHead = await ledger.getHead();
+  assert.ok(recoveryHead?.rollbackEnabled);
+  const recoveryEvidence: PublicFeedRollbackHeadEvidence = {
+    versionNumber: recoveryHead.currentVersion.versionNumber,
+    generation: recoveryHead.generation,
+    feedHash: recoveryHead.currentVersion.feedHash,
+    recordCount: recoveryHead.currentVersion.recordCount,
+  };
+  const recoveryFence = await transitionPublicFeedRollbackCapability(
+    stagingHistoryDependencies(client, rollbackProjects),
+    false,
+    recoveryEvidence,
+    requiredPublicFeedRollbackCapabilityConfirmation(false, recoveryEvidence),
+  );
+  assert.equal(recoveryFence.resultCode, 'RECOVERY_REQUIRED');
+  const recoveryWithFlagDisabled = await recoverPublicFeedOperation(
+    stagingHistoryDependencies(client, rollbackProjects, 'false'),
+  );
+  assert.equal(recoveryWithFlagDisabled.resultCode, 'RECOVERY_REQUIRED');
+  assert.deepEqual(
+    (await exactStored(client)).feed.map(({ publicId }) => publicId),
+    [relevanceProject.publicId, medical.publicId],
+    'An unavailable rollback write changed the feed before recovery.',
+  );
+  psql("UPDATE public.public_feed_operations SET lease_expires_at=pg_catalog.now()-interval '1 second',"
+    + " storage_uncertainty_until=pg_catalog.now()-interval '1 second'"
+    + " WHERE kind='rollback' AND state='RECOVERY_REQUIRED';");
+  const recoveredRollback = await recoverPublicFeedOperation(
+    stagingHistoryDependencies(client, rollbackProjects),
+  );
+  assert.equal(recoveredRollback.resultCode, 'COMPLETED', JSON.stringify(recoveredRollback));
   assert.deepEqual((await exactStored(client)).feed.map(({ publicId }) => publicId), activationPublicIds);
+  const versionsAfterRecoveredRollback = psql('SELECT count(*) FROM public.public_feed_versions;');
+  const responseLossRetry = await executePublicFeedRollback(
+    stagingHistoryDependencies(client, rollbackProjects),
+    preparation.preparationHandle, preparation.requiredAcknowledgement,
+  );
+  assert.deepEqual(responseLossRetry, recoveredRollback);
+  assert.equal(
+    psql('SELECT count(*) FROM public.public_feed_versions;'),
+    versionsAfterRecoveredRollback,
+    'A response-loss rollback retry created duplicate durable evidence.',
+  );
+  console.log('PASS: verified-staging rollback failed closed on an unknown write outcome, blocked capability mutation, rechecked environment during recovery, converged the immutable target forward, and returned the same durable evidence on retry');
 
   const feedBeforeReconciliation = await exactStored(client);
   const medicalProjectId = psql(`SELECT id FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)};`);
@@ -1434,6 +1829,7 @@ async function main(): Promise<void> {
     storage_bucket: privateBucket, storage_path: addedSnapshotPath, public_url: null,
     mime_type: 'image/png', file_size_bytes: PNG_BYTES.length, is_public_approved: false,
     gallery_position: 4, alt_text_public: 'Synthetic gallery image 4.',
+    image_content_kind: 'ordinary', full_text_public: null,
   }).select('id').single();
   assert.equal(addedSnapshot.error, null, addedSnapshot.error?.message);
   const addDrift = await new SupabaseParticipantPreviewRepositoryCore(client)
@@ -1669,7 +2065,7 @@ async function main(): Promise<void> {
   );
 
   // The reconciled record carries the exact multi-image representation, in deterministic gallery
-  // order, with each URL and its text alternative travelling as one unit.
+  // order, with each URL and its complete accessibility declaration travelling as one unit.
   const reconciledRecord = reconciledFeed.feed.find((record) => record.publicId === medical.publicId);
   assert.ok(reconciledRecord, 'Reconciled target missing from the deployed feed.');
   const expectedSnapshotUrls = [1, 2, 3].map((position) =>
@@ -1679,6 +2075,8 @@ async function main(): Promise<void> {
     url: expectedSnapshotUrls[position - 1],
     altText: `Synthetic gallery image ${position}.`,
     galleryPosition: position,
+    contentKind: 'ordinary',
+    fullText: null,
   })));
 
   // Reconciliation is deployment-only: no lifecycle transition and no fabricated publish audit.
@@ -2114,7 +2512,7 @@ async function main(): Promise<void> {
   const memberHash = psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id=${sqlLiteral(firstVersionId)}::uuid ORDER BY ordinal LIMIT 1;`);
   assert.equal(memberHash, trafficArtifact.members[0].recordHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
-  console.log('Public feed ledger runtime verification passed: fresh 52-migration schema, durable activation authority through pre-write recovery, real overlapping READ COMMITTED/REPEATABLE READ/SERIALIZABLE proof, unrelated-draft nonblocking proof, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, stale-owner fencing, grants, and immutable history.');
+  console.log('Public feed ledger runtime verification passed: fresh 57-migration schema, durable activation authority through pre-write recovery, real overlapping READ COMMITTED/REPEATABLE READ/SERIALIZABLE proof, unrelated-draft nonblocking proof, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, verified-staging exact-head rollback capability audit and denial fences, removal, no-change removal, rollback with recovery and response-loss idempotency, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, stale-owner fencing, grants, and immutable history.');
 }
 
 async function run(): Promise<void> {

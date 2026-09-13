@@ -37,6 +37,7 @@ export interface RuntimeFixture {
 export interface PublicFeedRuntimeHarness {
   db: SupabaseClient;
   apiUrl: string;
+  anonKey: string;
   adminId: string;
   reviewerId: string;
   projects: SupabaseProjectRepositoryCore;
@@ -72,6 +73,11 @@ export async function createPublicFeedRuntimeHarness(): Promise<PublicFeedRuntim
   const local = parseSupabaseCliEnv(raw);
   assert.ok(local.API_URL && local.SERVICE_ROLE_KEY, 'Disposable Supabase credentials unavailable.');
   assert.equal(isLoopbackUrl(local.API_URL!), true, 'The verifier refused a non-loopback Supabase endpoint.');
+  process.env.NEXT_PUBLIC_SUPABASE_URL = local.API_URL;
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = local.ANON_KEY || '';
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = local.ANON_KEY || '';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = local.SERVICE_ROLE_KEY;
+  process.env.SUPABASE_SECRET_KEY = local.SERVICE_ROLE_KEY;
 
   const db = createClient(local.API_URL!, local.SERVICE_ROLE_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -92,11 +98,28 @@ export async function createPublicFeedRuntimeHarness(): Promise<PublicFeedRuntim
   };
   const quoted = (value: string) => `'${value.replaceAll("'", "''")}'`;
 
+  const existingAdmin = await db.from('admin_users').select('auth_user_id')
+    .eq('id', ADMIN_ID).maybeSingle();
+  assert.equal(existingAdmin.error, null, existingAdmin.error?.message);
+  let adminAuthUserId = existingAdmin.data?.auth_user_id as string | null | undefined;
+  if (!adminAuthUserId) {
+    const created = await db.auth.admin.createUser({
+      email: `ledger-runtime-admin-${projectId}@example.invalid`,
+      email_confirm: true,
+    });
+    assert.equal(created.error, null, created.error?.message);
+    adminAuthUserId = created.data.user?.id;
+  }
+  assert.ok(adminAuthUserId);
+
   psql(`
-    INSERT INTO public.admin_users(id,email,full_name) VALUES
-      (${quoted(ADMIN_ID)}::uuid,'ledger-runtime-admin@example.invalid','Ledger Runtime Admin'),
-      (${quoted(REVIEWER_ID)}::uuid,'ledger-runtime-reviewer@example.invalid','Ledger Runtime Reviewer')
-      ON CONFLICT (id) DO UPDATE SET full_name=EXCLUDED.full_name;
+    INSERT INTO public.admin_users(id,auth_user_id,email,full_name) VALUES
+      (${quoted(ADMIN_ID)}::uuid,${quoted(adminAuthUserId)}::uuid,
+       'ledger-runtime-admin@example.invalid','Ledger Runtime Admin'),
+      (${quoted(REVIEWER_ID)}::uuid,NULL,
+       'ledger-runtime-reviewer@example.invalid','Ledger Runtime Reviewer')
+      ON CONFLICT (id) DO UPDATE SET full_name=EXCLUDED.full_name,
+        auth_user_id=COALESCE(public.admin_users.auth_user_id,EXCLUDED.auth_user_id);
     INSERT INTO public.user_roles(user_id,role) VALUES
       (${quoted(ADMIN_ID)}::uuid,'admin'), (${quoted(REVIEWER_ID)}::uuid,'reviewer')
       ON CONFLICT (user_id,role) DO NOTHING;
@@ -183,7 +206,7 @@ export async function createPublicFeedRuntimeHarness(): Promise<PublicFeedRuntim
   };
 
   return {
-    db, apiUrl: local.API_URL!, adminId: ADMIN_ID, reviewerId: REVIEWER_ID, projects, previews,
+    db, apiUrl: local.API_URL!, anonKey: local.ANON_KEY!, adminId: ADMIN_ID, reviewerId: REVIEWER_ID, projects, previews,
     psql, quoted, createProject, makeReady, ensureActiveHead, storedFeed,
     count: async (table, column, value) =>
       (await db.from(table).select('id', { count: 'exact', head: true }).eq(column, value)).count ?? 0,

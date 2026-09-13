@@ -1,5 +1,7 @@
 import { isLoopbackUrl } from '../local-development/localEnvironmentFile';
 
+export type LocalPublicationEnvironment = Record<string, string | undefined>;
+
 /** Local publication is available only when the configured Supabase API is loopback. */
 export function isLocalPublicationExecutionAvailable(supabaseUrl: string): boolean {
   return isLoopbackUrl(supabaseUrl);
@@ -14,7 +16,7 @@ export const LOCAL_PUBLIC_FEED_ROLLBACK_ENABLED_VAR = 'CAPSTONE_LOCAL_PUBLIC_FEE
  */
 export function isLocalPublicFeedRollbackAvailable(
   supabaseUrl: string,
-  env: Record<string, string | undefined> = process.env,
+  env: LocalPublicationEnvironment = process.env,
 ): boolean {
   return isLoopbackUrl(supabaseUrl)
     && env.CAPSTONE_RUNTIME_ENV?.trim().toLowerCase() === 'local'

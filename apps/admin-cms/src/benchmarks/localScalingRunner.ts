@@ -27,6 +27,8 @@ import {
 import {
   adaptSyntheticProjectForDb,
   createDeterministicStoragePayload,
+  scopeSyntheticTaxonomyName,
+  SYNTHETIC_SECONDARY_INDUSTRY,
 } from './localScalingFixtureAdapter';
 
 export interface LocalScalingRunnerOptions {
@@ -51,22 +53,34 @@ export interface CleanupOperationResult<T> {
 
 export interface CleanupDependencies {
   findVerifierProjectIds(): Promise<CleanupOperationResult<string[]>>;
+  deleteVerifierTaxonomyMappings?(projectIds: string[]): Promise<CleanupOperationResult<number>>;
   deleteVerifierMedia(projectIds: string[]): Promise<CleanupOperationResult<number>>;
   deleteVerifierProjects(projectIds: string[]): Promise<CleanupOperationResult<number>>;
   countVerifierProjects(): Promise<CleanupOperationResult<number>>;
+  countVerifierTaxonomyMappings?(projectIds: string[]): Promise<CleanupOperationResult<number>>;
+  deleteVerifierTaxonomy?(): Promise<CleanupOperationResult<number>>;
+  countVerifierTaxonomy?(): Promise<CleanupOperationResult<number>>;
+  verifyCatalogueBaseline?(): Promise<CleanupOperationResult<boolean>>;
   listVerifierStorage(): Promise<CleanupOperationResult<string[]>>;
   removeVerifierStorage(paths: string[]): Promise<CleanupOperationResult<number>>;
 }
 
 export interface CleanupEvidence {
   projectDeletionAttempted: boolean;
+  taxonomyMappingsDeletionAttempted: boolean;
+  taxonomyDeletionAttempted: boolean;
   mediaAssetDeletionAttempted: boolean;
   storageDeletionAttempted: boolean;
   projectsRemoved: number;
+  taxonomyMappingsRemoved: number;
+  taxonomyRowsRemoved: number;
   mediaAssetsRemoved: number;
   storageObjectsRemoved: number;
   residualVerifierProjects: number | null;
+  residualVerifierTaxonomyMappings: number | null;
+  residualVerifierTaxonomyRows: number | null;
   residualVerifierStorageObjects: number | null;
+  catalogueBaselineUnchanged: boolean | null;
   errors: string[];
   clean: boolean;
 }
@@ -93,13 +107,21 @@ export async function cleanupVerifierArtifacts(
   const errors: string[] = [];
   let verifierIds: string[] | null = null;
   let projectDeletionAttempted = false;
+  let taxonomyMappingsDeletionAttempted = false;
+  let taxonomyDeletionAttempted = false;
   let mediaAssetDeletionAttempted = false;
   let storageDeletionAttempted = false;
   let projectsRemoved = 0;
+  let taxonomyMappingsRemoved = 0;
+  let taxonomyRowsRemoved = 0;
   let mediaAssetsRemoved = 0;
   let storageObjectsRemoved = 0;
   let residualVerifierProjects: number | null = null;
+  let residualVerifierTaxonomyMappings: number | null = null;
+  let residualVerifierTaxonomyRows: number | null = null;
   let residualVerifierStorageObjects: number | null = null;
+  let catalogueBaselineUnchanged: boolean | null = dependencies.verifyCatalogueBaseline ? null : true;
+  let projectDeletionSucceeded = false;
 
   try {
     verifierIds = requireSuccessful(
@@ -110,7 +132,21 @@ export async function cleanupVerifierArtifacts(
     errors.push(errorMessage(error));
   }
 
+  if (verifierIds && verifierIds.length === 0) projectDeletionSucceeded = true;
+
   if (verifierIds && verifierIds.length > 0) {
+    if (dependencies.deleteVerifierTaxonomyMappings) {
+      taxonomyMappingsDeletionAttempted = true;
+      try {
+        taxonomyMappingsRemoved = requireSuccessful(
+          await dependencies.deleteVerifierTaxonomyMappings(verifierIds),
+          'Deleting verifier-owned taxonomy mappings failed',
+        );
+      } catch (error) {
+        errors.push(errorMessage(error));
+      }
+    }
+
     mediaAssetDeletionAttempted = true;
     try {
       mediaAssetsRemoved = requireSuccessful(
@@ -127,6 +163,7 @@ export async function cleanupVerifierArtifacts(
         await dependencies.deleteVerifierProjects(verifierIds),
         'Deleting verifier-owned projects failed',
       );
+      projectDeletionSucceeded = projectsRemoved === verifierIds.length;
     } catch (error) {
       errors.push(errorMessage(error));
     }
@@ -139,6 +176,51 @@ export async function cleanupVerifierArtifacts(
     );
   } catch (error) {
     errors.push(errorMessage(error));
+  }
+
+  if (dependencies.countVerifierTaxonomyMappings && verifierIds) {
+    try {
+      residualVerifierTaxonomyMappings = requireSuccessful(
+        await dependencies.countVerifierTaxonomyMappings(verifierIds),
+        'Post-delete verifier taxonomy mapping residue query failed',
+      );
+    } catch (error) {
+      errors.push(errorMessage(error));
+    }
+  }
+
+  if (dependencies.deleteVerifierTaxonomy && projectDeletionSucceeded && residualVerifierProjects === 0 && residualVerifierTaxonomyMappings === 0) {
+    taxonomyDeletionAttempted = true;
+    try {
+      taxonomyRowsRemoved = requireSuccessful(
+        await dependencies.deleteVerifierTaxonomy(),
+        'Deleting verifier-owned taxonomy rows failed',
+      );
+    } catch (error) {
+      errors.push(errorMessage(error));
+    }
+  }
+
+  if (dependencies.countVerifierTaxonomy) {
+    try {
+      residualVerifierTaxonomyRows = requireSuccessful(
+        await dependencies.countVerifierTaxonomy(),
+        'Post-delete verifier taxonomy residue query failed',
+      );
+    } catch (error) {
+      errors.push(errorMessage(error));
+    }
+  }
+
+  if (dependencies.verifyCatalogueBaseline) {
+    try {
+      catalogueBaselineUnchanged = requireSuccessful(
+        await dependencies.verifyCatalogueBaseline(),
+        'Catalogue baseline comparison failed',
+      );
+    } catch (error) {
+      errors.push(errorMessage(error));
+    }
   }
 
   let storagePaths: string[] | null = null;
@@ -175,17 +257,27 @@ export async function cleanupVerifierArtifacts(
 
   const clean = errors.length === 0
     && residualVerifierProjects === 0
+    && (residualVerifierTaxonomyMappings === null || residualVerifierTaxonomyMappings === 0)
+    && (residualVerifierTaxonomyRows === null || residualVerifierTaxonomyRows === 0)
+    && catalogueBaselineUnchanged === true
     && residualVerifierStorageObjects === 0;
 
   return {
     projectDeletionAttempted,
+    taxonomyMappingsDeletionAttempted,
+    taxonomyDeletionAttempted,
     mediaAssetDeletionAttempted,
     storageDeletionAttempted,
     projectsRemoved,
+    taxonomyMappingsRemoved,
+    taxonomyRowsRemoved,
     mediaAssetsRemoved,
     storageObjectsRemoved,
     residualVerifierProjects,
+    residualVerifierTaxonomyMappings,
+    residualVerifierTaxonomyRows,
     residualVerifierStorageObjects,
+    catalogueBaselineUnchanged,
     errors,
     clean,
   };
@@ -199,6 +291,20 @@ function assertScopedProjects(result: ProjectListResult, expectedIds: Set<string
   assertCondition(
     result.projects.every((project) => project.publicId && expectedIds.has(project.publicId)),
     `${label} returned a project outside the verifier namespace`,
+  );
+  const projectIds = result.projects.map((project) => project.publicId).filter(Boolean);
+  assertCondition(new Set(projectIds).size === projectIds.length, `${label} returned duplicate parent projects`);
+}
+
+function assertExactProjectIds(result: ProjectListResult, expected: Project[], label: string): void {
+  const expectedIds = expected.map((project) => project.publicId).filter(Boolean);
+  const actualIds = result.projects.map((project) => project.publicId).filter(Boolean);
+  const expectedSet = new Set(expectedIds);
+  assertCondition(
+    actualIds.length === expectedIds.length
+      && new Set(actualIds).size === expectedSet.size
+      && actualIds.every((id) => expectedSet.has(id)),
+    `${label} returned an unexpected parent identity set`,
   );
 }
 
@@ -260,10 +366,14 @@ export function assertFilterOptions(
   postSeed: ProjectFilterOptions,
   syntheticProjects: Project[],
 ): void {
+  const industryValues = syntheticProjects.flatMap((project) =>
+    (project as Project & { taxonomyIndustryNames?: string[] }).taxonomyIndustryNames || [project.industry],
+  );
   const checks: Array<[keyof ProjectFilterOptions, string[]]> = [
     ['years', syntheticProjects.map((project) => project.year)],
     ['programs', syntheticProjects.map((project) => project.program)],
     ['disciplines', syntheticProjects.map((project) => project.discipline)],
+    ['industries', industryValues],
   ];
   for (const [key, expectedSyntheticValues] of checks) {
     const postValues = new Set(postSeed[key]);
@@ -278,10 +388,105 @@ export function assertFilterOptions(
   }
 }
 
+interface TaxonomyCatalogueState {
+  disciplines: Array<{ id: string; name: string }>;
+  industryCategories: Array<{ id: string; name: string }>;
+}
+
+interface TaxonomyOwnership {
+  disciplineIds: string[];
+  industryCategoryIds: string[];
+}
+
+interface RunTaxonomyFixture {
+  disciplineIdsByName: Map<string, string>;
+  industryCategoryIdsByName: Map<string, string>;
+  ownership: TaxonomyOwnership;
+}
+
+async function readTaxonomyCatalogueState(
+  supabase: SupabaseClient,
+): Promise<CleanupOperationResult<TaxonomyCatalogueState>> {
+  const [disciplines, industryCategories] = await Promise.all([
+    supabase.from('disciplines').select('id, name').order('id', { ascending: true }),
+    supabase.from('industry_categories').select('id, name').order('id', { ascending: true }),
+  ]);
+  const error = disciplines.error || industryCategories.error;
+  if (error || disciplines.data === null || industryCategories.data === null) {
+    return {
+      data: { disciplines: [], industryCategories: [] },
+      error: error || new Error('Taxonomy catalogue state was unavailable.'),
+    };
+  }
+  return {
+    data: {
+      disciplines: disciplines.data as Array<{ id: string; name: string }>,
+      industryCategories: industryCategories.data as Array<{ id: string; name: string }>,
+    },
+  };
+}
+
+async function insertRunTaxonomyRows(
+  supabase: SupabaseClient,
+  table: 'disciplines' | 'industry_categories',
+  names: string[],
+  destination: Map<string, string>,
+  ownedIds: string[],
+): Promise<void> {
+  if (names.length === 0) return;
+  const result = await supabase
+    .from(table)
+    .insert(names.map((name) => ({ name })))
+    .select('id, name');
+  if (result.error || result.data === null) {
+    throw new Error(`Failed to seed synthetic ${table} catalogue: ${result.error?.message || 'missing inserted rows'}`);
+  }
+  const rows = result.data as Array<{ id: string; name: string }>;
+  if (rows.length !== names.length) {
+    throw new Error(`Synthetic ${table} catalogue returned ${rows.length} of ${names.length} inserted rows.`);
+  }
+  for (const row of rows) {
+    destination.set(row.name, row.id);
+    ownedIds.push(row.id);
+  }
+}
+
+async function createRunTaxonomyFixture(
+  supabase: SupabaseClient,
+  adapted: Array<ReturnType<typeof adaptSyntheticProjectForDb>>,
+  ownership: TaxonomyOwnership,
+): Promise<RunTaxonomyFixture> {
+  const disciplineNames = [...new Set(adapted.flatMap((item) => item.taxonomyMappingIntents.disciplineNames))].sort();
+  const industryCategoryNames = [...new Set(adapted.flatMap((item) => item.taxonomyMappingIntents.industryCategoryNames))].sort();
+  const disciplineIdsByName = new Map<string, string>();
+  const industryCategoryIdsByName = new Map<string, string>();
+
+  await insertRunTaxonomyRows(
+    supabase,
+    'disciplines',
+    disciplineNames,
+    disciplineIdsByName,
+    ownership.disciplineIds,
+  );
+  await insertRunTaxonomyRows(
+    supabase,
+    'industry_categories',
+    industryCategoryNames,
+    industryCategoryIdsByName,
+    ownership.industryCategoryIds,
+  );
+
+  assertCondition(disciplineNames.every((name) => disciplineIdsByName.has(name)), 'synthetic discipline catalogue rows were incomplete');
+  assertCondition(industryCategoryNames.every((name) => industryCategoryIdsByName.has(name)), 'synthetic industry catalogue rows were incomplete');
+  return { disciplineIdsByName, industryCategoryIdsByName, ownership };
+}
+
 function createCleanupDependencies(
   supabase: SupabaseClient,
   runPrefix: string,
   storagePrefix: string,
+  taxonomyOwnership: TaxonomyOwnership,
+  baselineTaxonomyState: TaxonomyCatalogueState | null,
 ): CleanupDependencies {
   return {
     async findVerifierProjectIds() {
@@ -292,6 +497,19 @@ function createCleanupDependencies(
       return {
         data: (result.data || []).map((project: { id: string }) => project.id),
         error: result.error || (result.data === null ? new Error('Project lookup returned no deletion evidence.') : undefined),
+      };
+    },
+    async deleteVerifierTaxonomyMappings(projectIds) {
+      const [disciplines, industries] = await Promise.all([
+        supabase.from('project_disciplines').delete().in('project_id', projectIds).select('project_id'),
+        supabase.from('project_industry_categories').delete().in('project_id', projectIds).select('project_id'),
+      ]);
+      const errors = [disciplines.error, industries.error].filter(Boolean);
+      return {
+        data: (disciplines.data || []).length + (industries.data || []).length,
+        error: errors[0] || (disciplines.data === null || industries.data === null
+          ? new Error('Taxonomy mapping deletion returned no confirmation data.')
+          : undefined),
       };
     },
     async deleteVerifierMedia(projectIds) {
@@ -329,6 +547,64 @@ function createCleanupDependencies(
         error: result.error || (result.count === null ? new Error('Project residue count was unavailable.') : undefined),
       };
     },
+    async countVerifierTaxonomyMappings(projectIds) {
+      if (projectIds.length === 0) return { data: 0 };
+      const [disciplines, industries] = await Promise.all([
+        supabase.from('project_disciplines').select('project_id', { count: 'exact', head: true }).in('project_id', projectIds),
+        supabase.from('project_industry_categories').select('project_id', { count: 'exact', head: true }).in('project_id', projectIds),
+      ]);
+      const errors = [disciplines.error, industries.error].filter(Boolean);
+      return {
+        data: (disciplines.count || 0) + (industries.count || 0),
+        error: errors[0] || (disciplines.count === null || industries.count === null
+          ? new Error('Taxonomy mapping residue count was unavailable.')
+          : undefined),
+      };
+    },
+    async deleteVerifierTaxonomy() {
+      const [disciplines, industries] = await Promise.all([
+        taxonomyOwnership.disciplineIds.length === 0
+          ? Promise.resolve({ data: [] as Array<{ id: string }>, error: null })
+          : supabase.from('disciplines').delete().in('id', taxonomyOwnership.disciplineIds).select('id'),
+        taxonomyOwnership.industryCategoryIds.length === 0
+          ? Promise.resolve({ data: [] as Array<{ id: string }>, error: null })
+          : supabase.from('industry_categories').delete().in('id', taxonomyOwnership.industryCategoryIds).select('id'),
+      ]);
+      const errors = [disciplines.error, industries.error].filter(Boolean);
+      return {
+        data: (disciplines.data || []).length + (industries.data || []).length,
+        error: errors[0] || (disciplines.data === null || industries.data === null
+          ? new Error('Taxonomy catalogue deletion returned no confirmation data.')
+          : undefined),
+      };
+    },
+    async countVerifierTaxonomy() {
+      const [disciplines, industries] = await Promise.all([
+        taxonomyOwnership.disciplineIds.length === 0
+          ? Promise.resolve({ count: 0, error: null })
+          : supabase.from('disciplines').select('id', { count: 'exact', head: true }).in('id', taxonomyOwnership.disciplineIds),
+        taxonomyOwnership.industryCategoryIds.length === 0
+          ? Promise.resolve({ count: 0, error: null })
+          : supabase.from('industry_categories').select('id', { count: 'exact', head: true }).in('id', taxonomyOwnership.industryCategoryIds),
+      ]);
+      const errors = [disciplines.error, industries.error].filter(Boolean);
+      return {
+        data: (disciplines.count || 0) + (industries.count || 0),
+        error: errors[0] || (disciplines.count === null || industries.count === null
+          ? new Error('Taxonomy catalogue residue count was unavailable.')
+          : undefined),
+      };
+    },
+    ...(baselineTaxonomyState ? {
+      async verifyCatalogueBaseline() {
+        const result = await readTaxonomyCatalogueState(supabase);
+        if (result.error) return { data: false, error: result.error };
+        return {
+          data: JSON.stringify(result.data) === JSON.stringify(baselineTaxonomyState),
+          error: undefined,
+        };
+      },
+    } : {}),
     async listVerifierStorage() {
       const result = await supabase.storage.from(STORAGE_BUCKET).list(storagePrefix);
       return {
@@ -388,7 +664,7 @@ export async function runLocalScalingVerification(
     inReview: 0,
     archived: 0,
   };
-  const emptyOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [] };
+  const emptyOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [], industries: [] };
   let baselineDashboard = emptyMetrics;
   let postSeedDashboard = emptyMetrics;
   let baselineFilterOptions = emptyOptions;
@@ -402,9 +678,12 @@ export async function runLocalScalingVerification(
   const dbResults: DatabaseBenchmarkResult[] = [];
   const storageResults: StorageBenchmarkResult[] = [];
   let projectsInsertedCount = 0;
+  let taxonomyMappingsInsertedCount = 0;
   let mediaAssetsInsertedCount = 0;
   let storageObjectsCreated = 0;
   let inlineStorageObjectsRemoved = 0;
+  const taxonomyOwnership: TaxonomyOwnership = { disciplineIds: [], industryCategoryIds: [] };
+  let baselineTaxonomyState: TaxonomyCatalogueState | null = null;
 
   try {
     const baselineVerifierResult = await supabase
@@ -435,6 +714,10 @@ export async function runLocalScalingVerification(
       baselineProjects.length === baselineDashboard.totalProjects,
       'baseline repository population did not match dashboard total',
     );
+    baselineTaxonomyState = requireSuccessful(
+      await readTaxonomyCatalogueState(supabase),
+      'Baseline taxonomy catalogue query failed',
+    );
 
     const baselineSearchTotals = new Map<string, number>();
     for (const search of ['Signal', 'Mapping']) {
@@ -443,9 +726,14 @@ export async function runLocalScalingVerification(
 
     const syntheticProjects = generateSyntheticProjects({ count: datasetSize, seed });
     const adapted = syntheticProjects.map((project) => adaptSyntheticProjectForDb(project, runPrefix));
-    const scopedSyntheticProjects = syntheticProjects.map((project) => ({
+    const taxonomyFixture = await createRunTaxonomyFixture(supabase, adapted, taxonomyOwnership);
+    const scopedSyntheticProjects = syntheticProjects.map((project, index) => ({
       ...project,
       publicId: `${runPrefix}-${project.publicId}`,
+      discipline: String(adapted[index].projectRow.discipline || ''),
+      disciplines: adapted[index].taxonomyMappingIntents.disciplineNames,
+      industry: String(adapted[index].projectRow.industry || ''),
+      taxonomyIndustryNames: adapted[index].taxonomyMappingIntents.industryCategoryNames,
     }));
     const expectedIds = new Set(scopedSyntheticProjects.map((project) => project.publicId as string));
     syntheticPublishedProjects = scopedSyntheticProjects.filter((project) => project.status === 'published').length;
@@ -467,6 +755,29 @@ export async function runLocalScalingVerification(
       projectInsert.data.forEach((row: { id: string; public_id: string }) => {
         idByPublicId.set(row.public_id, row.id);
       });
+      const disciplineRows = batch.flatMap((item) => item.taxonomyMappingIntents.disciplineNames.map((name) => ({
+        project_id: idByPublicId.get(String(item.projectRow.public_id)),
+        discipline_id: taxonomyFixture.disciplineIdsByName.get(name),
+      })));
+      const industryRows = batch.flatMap((item) => item.taxonomyMappingIntents.industryCategoryNames.map((name) => ({
+        project_id: idByPublicId.get(String(item.projectRow.public_id)),
+        industry_category_id: taxonomyFixture.industryCategoryIdsByName.get(name),
+      })));
+      assertCondition(
+        [...disciplineRows, ...industryRows].every((row) => row.project_id && ('discipline_id' in row ? row.discipline_id : row.industry_category_id)),
+        'synthetic taxonomy mapping intents could not be resolved to inserted IDs',
+      );
+      const [disciplineInsert, industryInsert] = await Promise.all([
+        supabase.from('project_disciplines').insert(disciplineRows).select('project_id, discipline_id'),
+        supabase.from('project_industry_categories').insert(industryRows).select('project_id, industry_category_id'),
+      ]);
+      if (disciplineInsert.error || !disciplineInsert.data) {
+        throw new Error(`Failed to seed synthetic discipline mappings: ${disciplineInsert.error?.message || 'missing inserted rows'}`);
+      }
+      if (industryInsert.error || !industryInsert.data) {
+        throw new Error(`Failed to seed synthetic industry mappings: ${industryInsert.error?.message || 'missing inserted rows'}`);
+      }
+      taxonomyMappingsInsertedCount += disciplineInsert.data.length + industryInsert.data.length;
       const mediaRows = batch.flatMap((item) => item.mediaRows.map((media) => ({
         ...media,
         project_id: idByPublicId.get(String(item.projectRow.public_id)),
@@ -498,6 +809,10 @@ export async function runLocalScalingVerification(
 
     const asPage = (result: unknown) => result as ProjectListResult;
     const asProjects = (result: unknown) => result as Project[];
+    const primaryDiscipline = scopeSyntheticTaxonomyName(runPrefix, 'discipline', 'Synthetic Software Engineering');
+    const secondaryDiscipline = scopeSyntheticTaxonomyName(runPrefix, 'discipline', 'Synthetic Cross-Discipline');
+    const technologyIndustry = scopeSyntheticTaxonomyName(runPrefix, 'industry', 'Synthetic Technology');
+    const secondaryIndustry = scopeSyntheticTaxonomyName(runPrefix, 'industry', SYNTHETIC_SECONDARY_INDUSTRY);
     let feedProjects: Project[] = [];
     let compiledFeed = compilePublicFeed([]);
 
@@ -563,13 +878,64 @@ export async function runLocalScalingVerification(
       }),
       pageOperation('Filter (Program + Discipline)', 'filtering', {
         program: 'Synthetic Software Systems',
-        discipline: 'Synthetic Software Engineering',
+        discipline: primaryDiscipline,
         search: runPrefix,
         pageSize: 10,
       }, (result) => {
-        const expected = scopedSyntheticProjects.filter((project) => project.program === 'Synthetic Software Systems' && project.discipline === 'Synthetic Software Engineering');
-        assertCondition(result.total === expected.length && result.projects.every((project) => project.program === 'Synthetic Software Systems' && project.discipline === 'Synthetic Software Engineering'), 'program/discipline filtering was incorrect');
+        const expected = scopedSyntheticProjects.filter((project) => project.program === 'Synthetic Software Systems' && project.disciplines.includes(primaryDiscipline));
+        assertCondition(result.total === expected.length && result.projects.every((project) => project.program === 'Synthetic Software Systems' && project.disciplines.includes(primaryDiscipline)), 'program/discipline filtering was incorrect');
         assertScopedProjects(result, expectedIds, 'program/discipline filter');
+      }),
+      pageOperation('Filter (Secondary Discipline; Page 2, Size 25)', 'filtering', {
+        discipline: secondaryDiscipline,
+        search: runPrefix,
+        page: 2,
+        pageSize: 25,
+      }, (result) => {
+        const expected = scopedSyntheticProjects.filter((project) => project.disciplines.includes(secondaryDiscipline));
+        assertCondition(
+          result.total === expected.length
+            && result.pageCount === Math.ceil(expected.length / 25)
+            && result.projects.length === Math.min(25, Math.max(0, expected.length - 25)),
+          'secondary discipline filtering or pagination was incorrect',
+        );
+        assertCondition(result.projects.every((project) => project.disciplines.includes(secondaryDiscipline)), 'secondary discipline relation was not retained');
+        assertScopedProjects(result, expectedIds, 'secondary discipline filter');
+      }),
+      pageOperation('Filter (Industry)', 'filtering', {
+        industry: technologyIndustry,
+        search: runPrefix,
+        pageSize: 10,
+      }, (result) => {
+        const expected = scopedSyntheticProjects.filter((project) => project.taxonomyIndustryNames.includes(technologyIndustry));
+        assertCondition(result.total === expected.length && result.projects.every((project) => project.industry === technologyIndustry), 'industry filtering was incorrect');
+        assertScopedProjects(result, expectedIds, 'industry filter');
+      }),
+      pageOperation('Filter (Secondary Industry)', 'filtering', {
+        industry: secondaryIndustry,
+        search: runPrefix,
+        pageSize: 10,
+      }, (result) => {
+        const expected = scopedSyntheticProjects.filter((project) => project.taxonomyIndustryNames.includes(secondaryIndustry));
+        assertCondition(expected.length > 0 && result.total === expected.length, 'secondary industry filtering count was incorrect');
+        assertExactProjectIds(result, expected, 'secondary industry filter');
+        assertScopedProjects(result, expectedIds, 'secondary industry filter');
+      }),
+      pageOperation('Filter (Discipline + Industry Intersection)', 'filtering', {
+        discipline: secondaryDiscipline,
+        industry: secondaryIndustry,
+        search: runPrefix,
+        pageSize: 10,
+      }, (result) => {
+        const expected = scopedSyntheticProjects.filter((project) => project.disciplines.includes(secondaryDiscipline) && project.taxonomyIndustryNames.includes(secondaryIndustry));
+        assertCondition(
+          expected.length > 0
+            && result.total === expected.length
+            && result.projects.every((project) => project.disciplines.includes(secondaryDiscipline)),
+          'discipline/industry intersection filtering was incorrect',
+        );
+        assertExactProjectIds(result, expected, 'discipline/industry intersection filter');
+        assertScopedProjects(result, expectedIds, 'discipline/industry intersection filter');
       }),
       pageOperation('Sort (Created At Descending)', 'sorting', { search: runPrefix, sort: 'created_at', direction: 'desc', pageSize: 10 }, (result) => {
         assertCondition(result.total === datasetSize && result.projects.length === 10, 'created_at sort population was incorrect');
@@ -602,7 +968,7 @@ export async function runLocalScalingVerification(
         run: () => repository.getProjectFilterOptions(),
         count: (result) => {
           const optionsResult = result as ProjectFilterOptions;
-          return optionsResult.years.length + optionsResult.programs.length + optionsResult.disciplines.length;
+          return optionsResult.years.length + optionsResult.programs.length + optionsResult.disciplines.length + optionsResult.industries.length;
         },
         validate: (result) => assertFilterOptions(baselineFilterOptions, result as ProjectFilterOptions, scopedSyntheticProjects),
       },
@@ -725,7 +1091,7 @@ export async function runLocalScalingVerification(
     errors.push(errorMessage(error));
   } finally {
     const cleanup = await cleanupVerifierArtifacts(
-      createCleanupDependencies(supabase, runPrefix, storagePrefix),
+      createCleanupDependencies(supabase, runPrefix, storagePrefix, taxonomyOwnership, baselineTaxonomyState),
     );
     errors.push(...cleanup.errors.map((message) => `Cleanup error: ${message}`));
 
@@ -751,16 +1117,25 @@ export async function runLocalScalingVerification(
       storage: storageResults,
       cleanup: {
         projectsCreated: projectsInsertedCount,
+        taxonomyMappingsCreated: taxonomyMappingsInsertedCount,
+        taxonomyRowsCreated: taxonomyOwnership.disciplineIds.length + taxonomyOwnership.industryCategoryIds.length,
         mediaAssetsCreated: mediaAssetsInsertedCount,
         storageObjectsCreated,
         projectDeletionAttempted: cleanup.projectDeletionAttempted,
+        taxonomyMappingsDeletionAttempted: cleanup.taxonomyMappingsDeletionAttempted,
+        taxonomyDeletionAttempted: cleanup.taxonomyDeletionAttempted,
         mediaAssetDeletionAttempted: cleanup.mediaAssetDeletionAttempted,
         storageDeletionAttempted: cleanup.storageDeletionAttempted || inlineStorageObjectsRemoved > 0,
         projectsRemoved: cleanup.projectsRemoved,
+        taxonomyMappingsRemoved: cleanup.taxonomyMappingsRemoved,
+        taxonomyRowsRemoved: cleanup.taxonomyRowsRemoved,
         mediaAssetsRemoved: cleanup.mediaAssetsRemoved,
         storageObjectsRemoved: cleanup.storageObjectsRemoved + inlineStorageObjectsRemoved,
         residualVerifierProjects: cleanup.residualVerifierProjects,
+        residualVerifierTaxonomyMappings: cleanup.residualVerifierTaxonomyMappings,
+        residualVerifierTaxonomyRows: cleanup.residualVerifierTaxonomyRows,
         residualVerifierStorageObjects: cleanup.residualVerifierStorageObjects,
+        catalogueBaselineUnchanged: cleanup.catalogueBaselineUnchanged,
         errors: cleanup.errors,
         clean: cleanup.clean,
       },

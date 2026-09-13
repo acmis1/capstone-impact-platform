@@ -220,7 +220,23 @@ export class SupabasePublicFeedLedgerRepositoryCore {
     confirmedAt?: string | null; privateBucket?: string | null; archiveReason?: string | null;
     rollbackPreparationHandle?: string | null; rollbackAcknowledgement?: string | null;
     storageBucket: string; storagePath: string; rollbackCapability: boolean;
+    verifiedStagingRollback?: boolean;
   }): Promise<PublicFeedRpcResult> {
+    if (params.verifiedStagingRollback) {
+      if (params.kind !== 'rollback') throw new Error('VERIFIED_STAGING_ROLLBACK_SCOPE_INVALID');
+      const { data, error } = await this.supabase.rpc(
+        'reserve_verified_staging_public_feed_rollback',
+        {
+          p_admin_id: params.adminId,
+          p_owner_token: params.ownerToken,
+          p_rollback_preparation_handle: params.rollbackPreparationHandle ?? null,
+          p_rollback_acknowledgement: params.rollbackAcknowledgement ?? null,
+          p_storage_bucket: params.storageBucket,
+          p_storage_path: params.storagePath,
+        },
+      );
+      return rpcResult(data, error);
+    }
     const { data, error } = await this.supabase.rpc('reserve_public_feed_operation', {
       p_operation_key: params.operationKey, p_kind: params.kind, p_publication_mode: params.mode,
       p_admin_id: params.adminId, p_public_id: params.publicId, p_owner_token: params.ownerToken,
@@ -288,6 +304,117 @@ export class SupabasePublicFeedLedgerRepositoryCore {
       p_admin_id: adminId, p_target_version_number: targetVersionNumber,
       p_observed_storage_hash: hash, p_observed_storage_record_count: count,
       p_lifecycle_drift: drift,
+    });
+    return rpcResult(data, error);
+  }
+
+  async prepareVerifiedStagingRollback(
+    adminId: string,
+    targetVersionNumber: number,
+    hash: string,
+    count: number,
+    drift: object,
+  ): Promise<PublicFeedRpcResult> {
+    const { data, error } = await this.supabase.rpc(
+      'prepare_verified_staging_public_feed_rollback',
+      {
+        p_admin_id: adminId,
+        p_target_version_number: targetVersionNumber,
+        p_observed_storage_hash: hash,
+        p_observed_storage_record_count: count,
+        p_lifecycle_drift: drift,
+      },
+    );
+    return rpcResult(data, error);
+  }
+
+  async isCurrentVerifiedStagingRollbackCapabilityEnabled(): Promise<boolean> {
+    const head = await this.getHead();
+    if (!head?.rollbackEnabled) return false;
+    return this.isVerifiedStagingRollbackCapabilityEnabledForHead({
+      rollbackEnabled: head.rollbackEnabled,
+      versionId: head.currentVersion.id,
+      versionNumber: head.currentVersion.versionNumber,
+      generation: head.generation,
+      feedHash: head.currentVersion.feedHash,
+      recordCount: head.currentVersion.recordCount,
+    });
+  }
+
+  async isVerifiedStagingRollbackCapabilityEnabledForHead(head: {
+    rollbackEnabled: boolean;
+    versionId: string;
+    versionNumber: number;
+    generation: number;
+    feedHash: string;
+    recordCount: number;
+  }): Promise<boolean> {
+    if (!head.rollbackEnabled) return false;
+    const event = await this.supabase.from('public_feed_rollback_capability_events')
+      .select('enabled,head_version_id,head_version_number,head_generation,head_feed_hash,head_record_count')
+      .eq('head_version_id', head.versionId)
+      .eq('head_version_number', head.versionNumber)
+      .eq('head_generation', head.generation)
+      .eq('head_feed_hash', head.feedHash)
+      .eq('head_record_count', head.recordCount)
+      .order('sequence', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (event.error) throw new Error('ROLLBACK_CAPABILITY_READ_FAILED');
+    return event.data?.enabled === true;
+  }
+
+  async isVerifiedStagingRollbackOperationAuthorized(
+    operation: PublicFeedOperationRecord,
+  ): Promise<boolean> {
+    if (operation.kind !== 'rollback' || !operation.rollbackPreparationId) return false;
+    const preparation = await this.getRollbackPreparation(operation.rollbackPreparationId);
+    if (!preparation
+        || preparation.actorId !== operation.authorizingActorId
+        || preparation.operationId !== operation.id
+        || (operation.baselineVersionId !== null
+          && preparation.baselineVersionId !== operation.baselineVersionId)) {
+      return false;
+    }
+    const [binding, baseline] = await Promise.all([
+      this.supabase.from('public_feed_rollback_preparation_capabilities')
+        .select('capability_event_id')
+        .eq('preparation_handle', preparation.handle).maybeSingle(),
+      this.getVersionById(preparation.baselineVersionId),
+    ]);
+    if (binding.error) throw new Error('ROLLBACK_CAPABILITY_READ_FAILED');
+    if (!binding.data?.capability_event_id) return false;
+    const event = await this.supabase.from('public_feed_rollback_capability_events')
+      .select('enabled,head_version_id,head_version_number,head_feed_hash,head_record_count')
+      .eq('id', binding.data.capability_event_id).maybeSingle();
+    if (event.error) throw new Error('ROLLBACK_CAPABILITY_READ_FAILED');
+    return event.data?.enabled === true
+      && baseline !== null
+      && String(event.data.head_version_id) === baseline.id
+      && Number(event.data.head_version_number) === baseline.versionNumber
+      && String(event.data.head_feed_hash) === baseline.feedHash
+      && Number(event.data.head_record_count) === baseline.recordCount;
+  }
+
+  async transitionRollbackCapability(params: {
+    adminId: string;
+    enabled: boolean;
+    requireExactHeadEvent: boolean;
+    expectedVersionNumber: number;
+    expectedGeneration: number;
+    expectedFeedHash: string;
+    expectedRecordCount: number;
+    confirmation: string;
+  }): Promise<PublicFeedRpcResult> {
+    const { data, error } = await this.supabase.rpc('transition_public_feed_rollback_capability', {
+      p_admin_id: params.adminId,
+      p_enabled: params.enabled,
+      p_require_exact_head_event: params.requireExactHeadEvent,
+      p_expected_version_number: params.expectedVersionNumber,
+      p_expected_generation: params.expectedGeneration,
+      p_expected_feed_hash: params.expectedFeedHash,
+      p_expected_record_count: params.expectedRecordCount,
+      p_confirmation: params.confirmation,
     });
     return rpcResult(data, error);
   }

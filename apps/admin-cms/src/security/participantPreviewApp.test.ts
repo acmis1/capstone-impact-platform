@@ -277,6 +277,56 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
     expect(result?.mediaSnapshot).toHaveLength(1);
   });
 
+  it('parses the exact frozen gallery declaration and rejects impossible stored evidence', async () => {
+    const outcome = (mediaSnapshot: unknown[]) => ({
+      data: {
+        resultCode: 'SUCCESS',
+        previewId: 'p1',
+        snapshot: { title: 'Test Project' },
+        mediaSnapshot,
+        expiresAt: '2026-08-17T00:00:00.000Z',
+      },
+      error: null,
+    });
+    const base = {
+      mediaAssetId: 'm1',
+      assetType: 'snapshot_image',
+      galleryPosition: 2,
+      fileName: 'snapshot-2.png',
+      storageBucket: 'project-drafts-private',
+      storagePath: 'drafts/x/snapshot_image/snapshot-2.png',
+      mimeType: 'image/png',
+      altText: 'Synthetic results dashboard.',
+    };
+    const validClient = {
+      rpc: vi.fn().mockResolvedValue(outcome([{
+        ...base,
+        contentKind: 'text_bearing',
+        fullText: 'Accepted 42; pending 3; rejected 0.',
+      }])),
+    } as unknown as import('@supabase/supabase-js').SupabaseClient;
+
+    await expect(new SupabaseParticipantPreviewRepositoryCore(validClient).resolveByTokenHash('a'.repeat(64)))
+      .resolves.toMatchObject({
+        mediaSnapshot: [expect.objectContaining({
+          contentKind: 'text_bearing',
+          fullText: 'Accepted 42; pending 3; rejected 0.',
+        })],
+      });
+
+    for (const invalid of [
+      { ...base, contentKind: 'text_bearing', fullText: null },
+      { ...base, contentKind: 'ordinary', fullText: 'Contradictory.' },
+      { ...base, contentKind: 'ordinary' },
+    ]) {
+      const client = {
+        rpc: vi.fn().mockResolvedValue(outcome([invalid])),
+      } as unknown as import('@supabase/supabase-js').SupabaseClient;
+      await expect(new SupabaseParticipantPreviewRepositoryCore(client).resolveByTokenHash('a'.repeat(64)))
+        .resolves.toBeNull();
+    }
+  });
+
   it('confirmPreview sends only the token hash to the RPC and never a preview/project id, timestamp, or actor identity', async () => {
     const mockRpc = vi.fn().mockResolvedValue({
       data: { resultCode: 'SUCCESS', confirmationId: 'c1', confirmedAt: '2026-08-11T00:00:00.000Z', alreadyConfirmed: false },

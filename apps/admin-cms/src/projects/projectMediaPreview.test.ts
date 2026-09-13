@@ -206,6 +206,8 @@ describe('project media preview read model', () => {
       file_name: `snapshot-${gallery_position}.png`,
       storage_path: `drafts/private/snapshot_image/snapshot-${gallery_position}.png`,
       alt_text_public: `Accessible snapshot ${gallery_position}.`,
+      image_content_kind: 'ordinary',
+      full_text_public: null,
     }));
 
     expect(validateSubmissionSnapshotGallery(snapshots, { projectPublicId: 'private', privateBucket: 'draft-media' })).toEqual([]);
@@ -234,12 +236,20 @@ describe('project media preview read model', () => {
       file_name: 'snapshot-1.png',
       storage_path: 'drafts/private/snapshot_image/snapshot-1.png',
       alt_text_public: 'Accessible snapshot.',
+      image_content_kind: 'ordinary',
+      full_text_public: null,
     };
 
     expect(deriveApprovalMediaInput([posterImage, posterPdf, snapshot], params)).toEqual({
       posterImage: { rowCount: 1, validPrivateCount: 1 },
       posterPdf: { rowCount: 1, validPrivateCount: 1 },
-      snapshotMedia: [{ galleryPosition: 1, validPrivate: true, altText: 'Accessible snapshot.' }],
+      snapshotMedia: [{
+        galleryPosition: 1,
+        validPrivate: true,
+        altText: 'Accessible snapshot.',
+        imageContentKind: 'ordinary',
+        fullTextPublic: null,
+      }],
     });
     expect(validateSubmissionSnapshotGallery([snapshot], params)).toEqual([]);
 
@@ -274,6 +284,8 @@ describe('project media preview read model', () => {
       storage_path: 'drafts/private/snapshot_image/snapshot-1.png',
       mime_type: 'application/pdf',
       alt_text_public: 'Accessible snapshot.',
+      image_content_kind: 'ordinary',
+      full_text_public: null,
     };
 
     expect(validateSubmissionSnapshotGallery([malformed], { projectPublicId: 'private', privateBucket: 'draft-media' })).toEqual([

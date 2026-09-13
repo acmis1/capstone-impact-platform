@@ -90,6 +90,8 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
         publicUrl?: string | null;
         galleryPosition?: number;
         altText?: string | null;
+        imageContentKind?: string | null;
+        fullTextPublic?: string | null;
       }
     ) => {
       const bucket = overrides?.bucket ?? PRIVATE_DRAFT_BUCKET;
@@ -116,6 +118,9 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
           public_url: overrides?.publicUrl ?? null,
           is_public_approved: overrides?.isPublicApproved ?? false,
           alt_text_public: overrides?.altText ?? null,
+          // Migration 0057: preview fixtures declare their gallery images unless a scenario opts out.
+          image_content_kind: assetType === 'snapshot_image' ? overrides?.imageContentKind ?? 'ordinary' : null,
+          full_text_public: overrides?.fullTextPublic ?? null,
         })
         .select()
         .single();

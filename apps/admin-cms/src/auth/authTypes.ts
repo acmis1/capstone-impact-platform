@@ -6,7 +6,8 @@ export type AdminPermission =
   | 'projects.archive'
   | 'projects.edit'
   | 'projects.publish'
-  | 'staff.manage';
+  | 'staff.manage'
+  | 'taxonomy.manage';
 
 export interface AuthenticatedAdminContext {
   authUserId: string; // matches auth_user_id (auth.users(id))

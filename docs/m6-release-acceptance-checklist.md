@@ -58,7 +58,7 @@ Human-evidence boundary: [Stakeholder and Constrained Human-Evidence Audit](stak
 
 ## Core workflow
 
-Reference the [integrated release evaluation harness](release-evaluation-harness.md) for disposable-Local release-scale evidence; do not create a competing release-scale harness. Its report is evidence for the listed Local boundaries, not hosted capacity, institutional UAT, or staff-effort KPIs.
+Reference the [integrated release evaluation harness](release-evaluation-harness.md) for disposable-Local release-scale evidence; do not create a competing release-scale harness. Its report is evidence for the listed Local boundaries, not hosted capacity, institutional UAT, end-to-end publishing elapsed time, or human person-hours.
 
 - [ ] `npm run verify:release-evaluation` produced a reviewed `Local harness gate: PASS` report; desktop/mobile browser evidence and exact-head CI were reviewed separately. Record the evidence references: ____
 - [ ] Import preview, selection, metadata staging, media staging, and completed batch evidence passed. Evidence: ____
@@ -118,7 +118,7 @@ Reference the [integrated release evaluation harness](release-evaluation-harness
 
 ## KPI decision
 
-The integrated release-evaluation report deliberately records staff-effort/KPI evidence as not measured. Complete the [manual efficiency template](templates/release-evaluation-manual-efficiency.md) with comparable human measurements before making a reduction claim.
+The integrated release-evaluation report deliberately records BRIEF-SC01 as not measured. Complete the [manual efficiency template](templates/release-evaluation-manual-efficiency.md) on the same comparable cohort. Pass only when end-to-end elapsed-time reduction is at least 50% **and** total human person-hour reduction is independently at least 50%. If either measure is missing, record `NOT MEASURED`; if either is below 50%, record `NOT PASSED`. Do not average the percentages or substitute machine timings.
 
 KPI-14 remains `NOT PASSED` unless deployment, hosted backup restoration, Render rollback/redeploy, monitoring/alert routing, and RPO/RTO evidence above are checked with reviewed references.
 

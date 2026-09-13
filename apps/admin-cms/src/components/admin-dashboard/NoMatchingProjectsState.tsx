@@ -35,6 +35,7 @@ export function NoMatchingProjectsState({ query }: NoMatchingProjectsStateProps)
   if (query.year) context.push(`year ${query.year}`);
   if (query.program) context.push(`program ${query.program}`);
   if (query.discipline) context.push(`discipline ${query.discipline}`);
+  if (query.industry) context.push(`industry ${query.industry}`);
 
   const description =
     context.length > 0

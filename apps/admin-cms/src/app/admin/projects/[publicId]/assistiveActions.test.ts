@@ -166,7 +166,7 @@ describe('Assistive Validation Server Actions', () => {
         state: 'BUDGET_REACHED',
         canEnqueue: false,
         message: 'Assistive checks have reached their processing limit for now. You can continue '
-          + 'reviewing and editing project information manually.',
+          + 'reviewing and requesting corrected project-team packages through the normal workflow.',
       });
       const result = await runAssistiveChecksAction(PUBLIC_ID);
       expect(result).toMatchObject({ ok: false, code: 'EXECUTION_BUDGET_REACHED' });

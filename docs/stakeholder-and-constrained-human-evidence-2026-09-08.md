@@ -145,7 +145,7 @@ repository. It must not be read as final stakeholder acceptance.
 
 ## 7. KPI-01 — publishing workflow efficiency
 
-Formal status: `NOT TESTED / PENDING COMPARABLE HUMAN MEASUREMENT`.
+Formal status: `NOT MEASURED / PENDING COMPARABLE HUMAN MEASUREMENT`.
 
 The project brief/proposal records a historical reference baseline of about,
 or at least, two weeks of one staff member's work for a batch. That is
@@ -153,14 +153,20 @@ or at least, two weeks of one staff member's work for a batch. That is
 plausibility of savings, but it is not a comparable same-batch staff
 measurement and must not be inserted into `T_manual` by itself.
 
-The formal KPI remains:
+The formal requirement has two independent measurements for the same comparable
+cohort:
 
-`((T_manual - T_system) / T_manual) × 100`
+`elapsed_time_reduction_pct = (manual_elapsed - system_elapsed) / manual_elapsed × 100`
 
-using staff minutes for equivalent project batches and the unchanged threshold
-of at least 50% reduction. Machine runtime, evaluator milliseconds, browser
-timing, or Local harness timing must never be substituted for staff effort.
-Use the existing [manual-efficiency template](templates/release-evaluation-manual-efficiency.md)
+`manpower_reduction_pct = (manual_person_hours - system_person_hours) / manual_person_hours × 100`
+
+Both manual denominators must be greater than zero. Headcount is supporting
+context, not a substitute for total person-hours. BRIEF-SC01 passes only when
+both reductions are at least 50%; missing either measure is `NOT MEASURED`, and
+either result below 50% is `NOT PASSED`. The percentages are never averaged.
+Machine runtime, evaluator milliseconds, browser timing, server timing, or Local
+harness timing must not be substituted for either measurement. Use the existing
+[manual-efficiency template](templates/release-evaluation-manual-efficiency.md)
 without pre-populating its result.
 
 An optional `TEAM_PROXY_EFFICIENCY_EXERCISE` may compare a team member's old
@@ -226,7 +232,7 @@ technical claims. They do not close R1 or the formal human KPI gaps.
 
 | KPI | Formal current evidence status | Supplementary evidence available |
 | --- | --- | --- |
-| KPI-01 | `NOT TESTED / PENDING COMPARABLE HUMAN MEASUREMENT` | Historical two-week `REFERENCE_BASELINE_ONLY`; optional `TEAM_PROXY` possible but not run |
+| KPI-01 | `NOT MEASURED / PENDING COMPARABLE HUMAN MEASUREMENT` | Historical two-week `REFERENCE_BASELINE_ONLY`; optional `TEAM_PROXY` possible but not run |
 | KPI-12 | `FORMAL_INTENDED_USER_UAT_PENDING` | Historical industry requirements/usability feedback and academic-supervisor demonstrations |
 | KPI-15 | `HUMAN_TRAINING_AND_OWNERSHIP_PENDING` | Documentation and instrument complete; formal run and institutional transfer remain pending |
 

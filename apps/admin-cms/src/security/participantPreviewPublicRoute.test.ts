@@ -14,6 +14,12 @@ const { JSDOM } = require('jsdom') as {
 
 vi.mock('../previews/participantCorrectionService', () => ({ getParticipantCorrectionContext: vi.fn().mockResolvedValue({ submitted: false, canSubmit: true }), stageParticipantCorrection: vi.fn() }));
 vi.mock('server-only', () => ({}));
+// Existing rendering/response tests isolate the new evidence-persistence boundary.
+// Dedicated access-route and repository/runtime tests qualify its actual behavior.
+vi.mock('../previews/participantPreviewAccessEvidence', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../previews/participantPreviewAccessEvidence')>(),
+  recordPreviewResponsePrepared: vi.fn().mockResolvedValue(true),
+}));
 vi.mock('../lib/supabase/admin', () => ({
   createSupabaseAdminClient: vi.fn(),
 }));

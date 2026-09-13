@@ -1,3 +1,4 @@
+import { isSnapshotImageContentKind } from '../domain/galleryTextEquivalent';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { isLoopbackUrl } from '../local-development/localEnvironmentFile';
 import { PublicationMediaBinding, PublicationMediaSource } from '../projects/publicationArtifact';
@@ -121,7 +122,7 @@ export class SupabasePublicationExecutionRepositoryCore {
     if (project.error) throw new Error('Publication project media lookup failed.');
     if (!project.data) return [];
     const result = await this.supabase.from('media_assets').select(
-      'id,project_id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public',
+      'id,project_id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public,image_content_kind,full_text_public',
     ).eq('project_id', project.data.id).order('asset_type', { ascending: true });
     if (result.error) throw new Error('Publication media lookup failed.');
     return (result.data ?? []).map((row) => ({
@@ -142,6 +143,8 @@ export class SupabasePublicationExecutionRepositoryCore {
       fileSizeBytes: Number(row.file_size_bytes),
       isPublicApproved: row.is_public_approved === true,
       altTextPublic: row.alt_text_public === null ? null : String(row.alt_text_public),
+      imageContentKind: isSnapshotImageContentKind(row.image_content_kind) ? row.image_content_kind : null,
+      fullTextPublic: row.full_text_public === null || row.full_text_public === undefined ? null : String(row.full_text_public),
     }));
   }
 

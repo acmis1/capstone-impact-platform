@@ -20,6 +20,13 @@ import { Button } from '../../components/ui/button';
 import { ErrorState } from '../../components/ui/error-state';
 import { EmptyState } from '../../components/ui/empty-state';
 import { BulkProjectReviewBusyProvider } from '../../components/admin-dashboard/BulkProjectReviewBusyContext';
+import type { BulkArchiveExecutionTarget } from '../../components/admin-dashboard/BulkArchivePanel';
+import { getServerEnv } from '../../lib/env';
+import { resolvePublicationExecutionTarget } from '../../projects/publicationExecutionPolicy';
+import {
+  isProductionRuntimeEnvironment,
+  isStagingRuntimeEnvironment,
+} from '../../security/stagingRuntimeIdentity';
 
 import {
   toProjectIndexRow,
@@ -38,7 +45,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
   let result: ProjectListResult | null = null;
   let metrics: ProjectDashboardMetrics | null = null;
-  let filterOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [] };
+  let filterOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [], industries: [] };
   let loadError: boolean = false;
 
   // Authorization is the first gate, and it is authoritative for this page. The admin layout
@@ -64,6 +71,25 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const canSubmitBulk = hasPermission(authContext.permissions, 'projects.edit');
   const canReviewBulk = hasPermission(authContext.permissions, 'projects.review');
   const canRunAssistiveBulk = hasPermission(authContext.permissions, 'projects.edit');
+  const canArchiveBulk = hasPermission(authContext.permissions, 'projects.archive');
+  let archiveExecutionTarget: BulkArchiveExecutionTarget = null;
+  if (canArchiveBulk) {
+    try {
+      const env = getServerEnv();
+      archiveExecutionTarget = resolvePublicationExecutionTarget(env.supabaseUrl)
+        ?? (isStagingRuntimeEnvironment()
+          ? 'staging-unavailable'
+          : isProductionRuntimeEnvironment()
+            ? 'production-unavailable'
+            : null);
+    } catch {
+      archiveExecutionTarget = isStagingRuntimeEnvironment()
+        ? 'staging-unavailable'
+        : isProductionRuntimeEnvironment()
+          ? 'production-unavailable'
+          : null;
+    }
+  }
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -93,7 +119,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     : null;
 
   const hasActiveFilters = Boolean(
-    query.search || query.status || query.year || query.program || query.discipline
+    query.search || query.status || query.year || query.program || query.discipline || query.industry
   );
 
   const resultContext = clientResult
@@ -153,6 +179,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 availableYears={filterOptions.years}
                 availablePrograms={filterOptions.programs}
                 availableDisciplines={filterOptions.disciplines}
+                availableIndustries={filterOptions.industries}
               />
 
               {clientResult.total === 0 ? (
@@ -182,6 +209,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   canSubmitBulk={canSubmitBulk}
                   canReviewBulk={canReviewBulk}
                   canRunAssistiveBulk={canRunAssistiveBulk}
+                  canArchiveBulk={canArchiveBulk}
+                  archiveExecutionTarget={archiveExecutionTarget}
                 />
               )}
             </BulkProjectReviewBusyProvider>

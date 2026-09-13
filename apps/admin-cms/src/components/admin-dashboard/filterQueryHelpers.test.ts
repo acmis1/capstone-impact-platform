@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildQueryString } from './filterQueryHelpers';
+import { buildClearFiltersQueryString, buildQueryString } from './filterQueryHelpers';
 
 describe('filterQueryHelpers', () => {
   it('resets page parameter when search or filters change', () => {
@@ -24,5 +24,10 @@ describe('filterQueryHelpers', () => {
     const current = 'status=approved&year=2026&q=test';
     const updated = buildQueryString(current, { q: null, status: '' });
     expect(updated).toBe('year=2026');
+  });
+
+  it('clears the industry filter with the other filters', () => {
+    const current = 'status=approved&year=2026&industry=Technology&q=test';
+    expect(buildClearFiltersQueryString(current)).toBe('');
   });
 });

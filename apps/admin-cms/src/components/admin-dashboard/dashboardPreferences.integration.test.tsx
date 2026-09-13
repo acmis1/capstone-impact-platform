@@ -33,6 +33,7 @@ const filterOptions = {
   availableYears: ['2025', '2026'],
   availablePrograms: ['Engineering', 'Science'],
   availableDisciplines: ['Software', 'Data'],
+  availableIndustries: ['Technology', 'Healthcare'],
 };
 
 function renderFilterBar(rawSearch = navigation.search) {
@@ -116,6 +117,7 @@ describe('dashboard preference production integration', () => {
       year: '2022',
       program: 'Retired program',
       discipline: 'Retired discipline',
+      industry: 'Retired industry',
       pageSize: 50,
     });
 
@@ -126,6 +128,7 @@ describe('dashboard preference production integration', () => {
       year: '',
       program: '',
       discipline: '',
+      industry: '',
       pageSize: 50,
     });
   });
@@ -137,19 +140,20 @@ describe('dashboard preference production integration', () => {
       year: '2026',
       program: 'Engineering',
       discipline: 'Software',
+      industry: 'Technology',
       pageSize: 50,
       sort: 'title',
       direction: 'asc',
       visibleColumns: ['title', 'status', 'actions'],
     });
 
-    renderFilterBar('q=capstone&status=approved&year=2026&program=Engineering&discipline=Software&pageSize=50&sort=title&direction=asc&page=3');
+    renderFilterBar('q=capstone&status=approved&year=2026&program=Engineering&discipline=Software&industry=Technology&pageSize=50&sort=title&direction=asc&page=3');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Clear search and filters' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Clear search and filters' }));
 
     expect(navigation.push).toHaveBeenCalledWith('/admin?pageSize=50&sort=title&direction=asc');
     expect(loadDashboardPreferences()).toMatchObject({
-      status: '', year: '', program: '', discipline: '', pageSize: 50, sort: 'title', direction: 'asc',
+      status: '', year: '', program: '', discipline: '', industry: '', pageSize: 50, sort: 'title', direction: 'asc',
     });
   });
 
@@ -187,13 +191,14 @@ describe('active filter presentation', () => {
   afterEach(cleanup);
 
   it('names each active filter token and its removal control in accessible text', async () => {
-    renderFilterBar('q=atlas&status=approved&year=2026&program=Engineering&discipline=Software');
+    renderFilterBar('q=atlas&status=approved&year=2026&program=Engineering&discipline=Software&industry=Technology');
 
     expect(await screen.findByRole('button', { name: 'Remove Search filter: atlas' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Remove Status filter: Approved' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Remove Year filter: 2026' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Remove Program filter: Engineering' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Remove Discipline filter: Software' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove Industry filter: Technology' })).toBeTruthy();
   });
 
   it('renders no active filter region when nothing is applied', async () => {

@@ -9,6 +9,7 @@ import {
 } from './browserImportMediaStageContract';
 import { computeCanonicalMediaIntentHash } from './browserImportMediaStageServerCore';
 import { BrowserImportMediaAssetType } from './browserImportMediaSelection';
+import type { SnapshotImageContentKind } from '../domain/galleryTextEquivalent';
 import { MAX_GALLERY_IMAGES } from './galleryConvention';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -30,6 +31,12 @@ export interface MediaFileToStage {
    * package manifest — it is never accepted from the browser as an independent value.
    */
   snapshotAltText: string | null;
+  /**
+   * Server-derived text-equivalent declaration for a `snapshot_image`, from the same reparsed
+   * manifest entry as the alt text; null for every other asset and for an undeclared legacy row.
+   */
+  snapshotContentKind: SnapshotImageContentKind | null;
+  snapshotFullText: string | null;
   content: Buffer;
 }
 
@@ -194,6 +201,8 @@ export async function stageBrowserImportMedia(params: {
       fileSizeBytes: f.fileSizeBytes,
       galleryPosition: f.galleryPosition,
       snapshotAltText: f.snapshotAltText,
+      snapshotContentKind: f.snapshotContentKind,
+      snapshotFullText: f.snapshotFullText,
     })),
   });
 
@@ -263,6 +272,8 @@ export async function stageBrowserImportMedia(params: {
     mimeType: f.canonicalMimeType,
     fileSizeBytes: f.fileSizeBytes,
     snapshotAltText: f.snapshotAltText,
+    snapshotContentKind: f.snapshotContentKind,
+    snapshotFullText: f.snapshotFullText,
   }));
 
   const { data, error } = await supabase.rpc('finalize_browser_import_media_stage', {

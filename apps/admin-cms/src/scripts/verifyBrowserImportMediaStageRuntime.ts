@@ -44,7 +44,9 @@ function ensureLocalEnvironmentVariables(): void {
   }
   try {
     const cliPath = path.resolve(REPO_ROOT, 'node_modules/.bin/supabase');
-    const workdir = path.resolve(REPO_ROOT, 'infra');
+    const workdir = process.env.CAPSTONE_VERIFY_SUPABASE_WORKDIR
+      ? path.resolve(process.env.CAPSTONE_VERIFY_SUPABASE_WORKDIR)
+      : path.resolve(REPO_ROOT, 'infra');
     const output = execSync(`"${cliPath}" status --workdir "${workdir}" -o env`, { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe' });
     const parsedEnv = parseSupabaseCliEnv(output);
 
@@ -113,13 +115,20 @@ function executeLocalDatabaseSql(sql: string): void {
     .map((name) => name.trim())
     .filter((name) => /^supabase_db_[a-z0-9_-]+$/i.test(name));
 
-  if (containers.length !== 1) {
-    throw new Error('Expected exactly one disposable local Supabase database container.');
+  const disposableProjectId = process.env.CAPSTONE_VERIFY_SUPABASE_PROJECT_ID;
+  if (disposableProjectId && !/^[a-z0-9_-]+$/i.test(disposableProjectId)) {
+    throw new Error('Disposable Supabase project identity is invalid.');
+  }
+  const databaseContainer = disposableProjectId
+    ? `supabase_db_${disposableProjectId}`
+    : containers.length === 1 ? containers[0] : null;
+  if (!databaseContainer || !containers.includes(databaseContainer)) {
+    throw new Error('Expected the exact disposable local Supabase database container.');
   }
 
   execFileSync(
     'docker',
-    ['exec', '-i', containers[0], 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres'],
+    ['exec', '-i', databaseContainer, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres'],
     { input: sql, stdio: ['pipe', 'ignore', 'pipe'] }
   );
 }
@@ -217,9 +226,11 @@ async function stageFixtureMetadataBatch(params: {
   return { batchId: res.batchId, metadataIntentHash: computeCanonicalIntentHash(intent) };
 }
 
-/** Synthetic staff-authored description used by this suite's snapshot fixtures. */
+/** Synthetic project-team-authored description used by this suite's snapshot fixtures. */
 const MEDIA_STAGE_SNAPSHOT_ALT_TEXT =
   'Synthetic snapshot image used by the browser media staging runtime verifier.';
+const MEDIA_STAGE_SNAPSHOT_FULL_TEXT =
+  'Synthetic dashboard: queue length 12 vehicles; wait 41 seconds; three active routes.';
 
 function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
   const files: MediaFileToStage[] = [];
@@ -234,6 +245,8 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       galleryPosition: null,
       // The poster's text alternative stays the project-level accessibility text.
       snapshotAltText: null,
+      snapshotContentKind: null,
+      snapshotFullText: null,
       content: PNG_BYTES,
     });
     files.push({
@@ -245,6 +258,8 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       canonicalMimeType: 'application/pdf',
       galleryPosition: null,
       snapshotAltText: null,
+      snapshotContentKind: null,
+      snapshotFullText: null,
       content: PDF_BYTES,
     });
     files.push({
@@ -256,6 +271,8 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       canonicalMimeType: 'image/png',
       galleryPosition: 1,
       snapshotAltText: MEDIA_STAGE_SNAPSHOT_ALT_TEXT,
+      snapshotContentKind: 'text_bearing',
+      snapshotFullText: MEDIA_STAGE_SNAPSHOT_FULL_TEXT,
       content: PNG_BYTES,
     });
   }
@@ -731,6 +748,8 @@ export async function verifyBrowserImportMediaStageRuntime(): Promise<void> {
       galleryPosition: 2,
       snapshotAltText:
         'Synthetic second gallery image used by the browser media staging runtime verifier.',
+      snapshotContentKind: 'ordinary',
+      snapshotFullText: null,
       content: PNG_BYTES,
     });
 
@@ -744,6 +763,8 @@ export async function verifyBrowserImportMediaStageRuntime(): Promise<void> {
       galleryPosition: 3,
       snapshotAltText:
         'Synthetic third gallery image used by the browser media staging runtime verifier.',
+      snapshotContentKind: 'ordinary',
+      snapshotFullText: null,
       content: PNG_BYTES,
     });
 
@@ -784,7 +805,7 @@ export async function verifyBrowserImportMediaStageRuntime(): Promise<void> {
     const { data: assetRows7 } = await supabase
       .from('media_assets')
       .select(
-        'asset_type, gallery_position, alt_text_public, storage_bucket, storage_path',
+        'asset_type, gallery_position, alt_text_public, image_content_kind, full_text_public, storage_bucket, storage_path',
       )
       .eq('project_id', projRow7.id);
 
@@ -838,6 +859,13 @@ export async function verifyBrowserImportMediaStageRuntime(): Promise<void> {
       );
     }
 
+    if (JSON.stringify(snapshotRows7.map((row) => row.image_content_kind)) !== JSON.stringify(['text_bearing', 'ordinary', 'ordinary'])) {
+      throw new Error(`[Scenario 7] Gallery content declarations were not persisted by position: ${JSON.stringify(snapshotRows7)}.`);
+    }
+    if (JSON.stringify(snapshotRows7.map((row) => row.full_text_public)) !== JSON.stringify([MEDIA_STAGE_SNAPSHOT_FULL_TEXT, null, null])) {
+      throw new Error(`[Scenario 7] Gallery full texts were not persisted by position: ${JSON.stringify(snapshotRows7)}.`);
+    }
+
     // Verify deterministic storage paths.
     const expectedSnapshotPaths7 = [
       `drafts/${pkg7.publicId}/snapshot_image/snapshot-1.png`,
@@ -888,6 +916,19 @@ export async function verifyBrowserImportMediaStageRuntime(): Promise<void> {
       throw new Error(
         `[Scenario 7] Retry created duplicate media_assets rows: ${assetCountAfterRetry7}.`,
       );
+    }
+
+    const divergentFiles7 = mediaFiles7.map((file) => file.galleryPosition === 1
+      ? { ...file, snapshotFullText: `${MEDIA_STAGE_SNAPSHOT_FULL_TEXT} Changed.` }
+      : file);
+    const divergentRetry7 = await stageBrowserImportMedia({
+      authContext,
+      batchId: fixture7.batchId,
+      metadataIntentHash: fixture7.metadataIntentHash,
+      files: divergentFiles7,
+    });
+    if (divergentRetry7.success || divergentRetry7.code !== 'BATCH_ALREADY_COMPLETED_MISMATCH') {
+      throw new Error(`[Scenario 7] Divergent full-text retry was not fenced by the completed intent: ${JSON.stringify(divergentRetry7)}`);
     }
 
     process.stdout.write('  ✓ Scenario 7 PASSED!\n\n');
