@@ -201,15 +201,15 @@ from the fully migrated repository schema, not from a second hand-maintained DDL
    The command fails closed if the checkout has tracked staged or unstaged changes; an untracked
    snapshot artifact is allowed because it is input evidence, not repository contract source.
 
-The current hosted result is `GATE4_CLASSIFICATION=GATE4_MATCH` for the 57-migration contract, with
-`MIGRATIONS=57/57`, `TABLES=48/48`, `COLUMNS=MATCH`, `CONSTRAINTS=MATCH`, `RLS=MATCH`,
-`POLICIES=MATCH`, `GRANTS=MATCH`, `RPC_SIGNATURES=92/92`, `RPC_NAMES=91/91`,
-`CANONICAL_STAFF_ROLES_HELPERS=1/1`, `DISPATCHER_CONTROL_ROUTINES=4/4`, and
-`STORAGE_BUCKETS=4/4`. The table total is 45 public application tables plus 3 non-public
-execution-control tables. The 46-row, 48/48, and 52-row results remain evidence for their earlier
-repository states. The hosted collector was read-only, but its large snapshot was not persisted as
-an on-disk formal comparator artifact; the exact repository/disposable comparison independently
-returned `GATE4_MATCH` at implementation SHA `90646e08`.
+The fresh hosted catalog capture records the 57-migration structural totals: 57 migrations, 48 tables,
+558 columns, 420 constraints, 35 policies, 92 service-role application RPC signatures across 91 names,
+1 canonical staff-role helper, 4 dispatcher-control routines, and 4 Storage buckets. The table total is
+45 public application tables plus 3 non-public execution-control tables. The 46-row, 48/48, and 52-row
+results remain evidence for their earlier repository states. The hosted collector was read-only, but its
+large snapshot was not persisted as an on-disk formal comparator artifact; therefore the hosted capture
+itself is not labelled a formal `GATE4_MATCH` artifact. Separately, the exact repository/disposable
+comparison returned `GATE4_CLASSIFICATION=GATE4_MATCH` at implementation SHA `90646e08`, with all
+Gate-4 categories matching.
 
 #### PostgreSQL 17 MAINTAIN drift on the five historical `GRANT ALL` tables
 

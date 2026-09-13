@@ -9,7 +9,7 @@ mutation, publication, email, or institutional acceptance.
 - Supabase target: `capstone-admin-cms-staging-v2-2026`, project ref
   `sqkpceeltukbzxpsvinb`, PostgreSQL 17, `ap-southeast-1`.
 - Render service: `capstone-admin-cms-staging-v2`; auto-deploy remains off.
-- Current documentation main: `88a24958cd541a513e99dc72cb522ded658129fc`.
+- Documentation baseline at evidence capture: `88a24958cd541a513e99dc72cb522ded658129fc`; later documentation-only commits may advance `main` without changing the staged runtime implementation SHA.
 - Runtime implementation deployed to staging: `90646e084f827e399617078b21a91dee3e899799`.
 - Migration history advanced from an exact 52-row prefix to 57 rows. A dry run listed exactly
   Migrations 53–57, and all five applied successfully in order, with no migration repair:

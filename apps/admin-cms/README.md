@@ -14,7 +14,7 @@ The application currently owns:
 - published-only stable JSON feed compilation; and
 - an immutable public deployment ledger, explicit deployment head, and bounded deployment-history UI.
 
-The project detail workspace renders project-team-authored public content for staff review. Direct metadata and gallery-description writes are now denied; staff request a complete corrected project-team/participant package, compare it, and explicitly accept the exact revision. Participant preview, confirmation, correction, reminder/reissue, and public deployment history are implemented. Production-capable publication and verified-staging historical rollback code paths exist behind fail-closed identity, enablement, authority, and exact-head gates; this does not establish hosted availability, production cutover, or live Duda publication.
+The project detail workspace renders project-team-authored public content for staff review. Direct metadata and gallery-description writes are now denied; staff request a complete corrected project-team/participant package, compare it, and explicitly accept the exact revision. Participant preview, confirmation, correction, reminder/reissue, and public deployment history are implemented. Production-capable publication and verified-staging historical rollback code paths exist behind fail-closed identity, enablement, authority, and exact-head gates; current hosted staging qualification is recorded separately and does not establish production cutover or live Duda publication.
 
 ### Public deployment ledger runtime verification
 
@@ -43,12 +43,12 @@ The explicit `npm run verify:release-evaluation` command runs the deterministic 
 | Import workflow | Yes | Browser import preview, metadata/media staging, and mapping-driven Admin Excel reference reconciliation foundation verified | Server-side reconciliation and replay verified; multi-batch analytics pending |
 | Review transitions | Yes | Workflow tests, static contract tests, and atomic RPC performReviewAction route implemented | Full reviewer/editor UAT pending |
 | Project content correction | Yes | Project-team/participant replacement packages are reviewed and accepted as exact revisions; direct public-content writes fail closed | Broader staff acceptance remains pending |
-| Media validation/storage | Yes | Offline media validation plus governed metadata/media staging and private draft storage paths are covered by tests | Hosted and production verification remains pending |
+| Media validation/storage | Yes | Offline media validation plus governed metadata/media staging and private draft storage paths are covered by tests | Hosted staging schema/storage qualification is recorded; production and human workflow verification remain pending |
 | Published-only feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled live cutover pending |
 | Public deployment ledger | Yes | Exact-byte versions, explicit head, controlled writer/recovery, history UI, reconciliation, and disposable-Local/verified-staging rollback policies are tested | Active hosted enablement and production acceptance remain separate |
 | Duda integration | Maintained presentation package | `apps/public-layer` renderer and approved-feed contract have loopback and bounded Duda TEST evidence | Live Duda publication remains pending authorization |
-| Database schema/RLS | Versioned | Migration tests and SQL contracts cover the 57-migration repository candidate; latest accepted hosted evidence remains at 52 | Fresh hosted reconciliation and full production verification pending |
-| Automated testing | Yes | Vitest offline suite and onboarding precheck | No hosted CI evidence is asserted here |
+| Database schema/RLS | Versioned | Migration tests and SQL contracts cover all 57 migrations; hosted staging is verified at the same 57-migration contract | Production verification and institutional acceptance remain pending |
+| Automated testing | Yes | Vitest offline suite, onboarding precheck, and merged-main CI | Hosted staging smoke is separate from human/UAT acceptance |
 | Production publication paths | Implemented, disabled | Exact production identity and enablement policies and routes are tested | Undeployed, unauthorized, and not live; hardening and controlled cutover pending |
 
 ## Technology stack
@@ -207,7 +207,7 @@ Do not blindly reinitialize an already-applied environment. Use the [Supabase mi
 
 ## Database and migrations
 
-The repository candidate contains 57 timestamped migrations through Migration `0057`. The latest accepted hosted staging evidence remains a 52-migration observation; Migrations `0053`–`0057` require fresh, separately authorized hosted reconciliation. The migration set is manually governed for authorized isolated environments. It must never target `Prototype/`, recovery, or unrelated environments, and an already provisioned environment must not be blindly reinitialized. Production migration delivery and verification remain pending.
+The repository contains 57 timestamped migrations through Migration `0057`, and current hosted staging records the same 57-migration contract after the governed 2026-09-13 forward application of Migrations `0053`-`0057` without migration-history repair. See the [Staging-57 Deployment Evidence](../../docs/staging-57-deployment-evidence-2026-09-13.md). The migration set remains manually governed for authorized isolated environments: never target `Prototype/`, recovery, or unrelated environments, and never blindly reinitialize an already provisioned environment. Production migration delivery and verification remain pending.
 
 - [`20260601035138_staging_schema.sql`](../../infra/supabase/migrations/20260601035138_staging_schema.sql) defines the relational schema, constraints, indexes and timestamps.
 - [`20260601035139_staging_rls_policies.sql`](../../infra/supabase/migrations/20260601035139_staging_rls_policies.sql) establishes the restrictive Row-Level Security baseline.
@@ -296,9 +296,9 @@ Reminder bodies deliberately have no URL input. They tell the participant to use
 | `/admin/imports` | Authenticated provisioned Admin/CMS staff | List import batches and validation summaries. | Implemented |
 | `/admin/imports/[batchId]` | Authenticated provisioned Admin/CMS staff | Inspect a batch, linked project and validation flags. | Implemented |
 | `/admin/staff` | `requireAdmin` plus `staff.manage` | Invite Admin/CMS staff and review current access and incomplete provisioning attempts. | Implemented locally; institutional rollout and staff UAT pending |
-| `/admin/public-feed` | Authenticated provisioned Admin/CMS staff | Inspect bounded deployment versions, exact hashes/counts, membership, lifecycle/deployment drift, blocking recovery state, and gated historical rollback controls. | Implemented for disposable Local and verified staging; hosted enablement/deployment remains separate |
+| `/admin/public-feed` | Authenticated provisioned Admin/CMS staff | Inspect bounded deployment versions, exact hashes/counts, membership, lifecycle/deployment drift, blocking recovery state, and gated historical rollback controls. | Implemented for disposable Local and verified staging; rollback capability enablement remains separately governed and production remains unavailable |
 
-There is no settings route. Project content is reviewed read-only; complete participant/project-team correction packages are the content-change authority. Participant confirmation and public deployment-history routes are implemented; hosted deployment and broader staff acceptance remain separate activities.
+There is no settings route. Project content is reviewed read-only; complete participant/project-team correction packages are the content-change authority. Participant confirmation and public deployment-history routes are implemented; hosted staging is qualified separately, while broader staff acceptance and production/live deployment remain separate activities.
 
 ## API routes
 
@@ -423,7 +423,7 @@ npm run check:feed
 git diff --check
 ```
 
-The offline suite covers authentication and authorization helpers, workflow transitions, project and import validation, feed compilation and validation, media safety, project-query parsing, repository query behavior, invitation/password flows and design-token contrast. Automated offline coverage is distinct from staging UAT. Hosted CI evidence, authenticated browser regression, full screen-reader validation and production deployment verification are not asserted here.
+The offline suite covers authentication and authorization helpers, workflow transitions, project and import validation, feed compilation and validation, media safety, project-query parsing, repository query behavior, invitation/password flows and design-token contrast. Automated offline coverage is distinct from staging UAT. Merged-main CI and credential-free hosted staging smoke are separately verified; authenticated browser regression, full screen-reader validation and production deployment verification are not asserted here.
 
 ## Security and privacy boundaries
 
@@ -442,7 +442,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - Project-team-authored public content is read-only in the project workspace; staff use the complete correction-package review/acceptance path. Broader staff acceptance remains pending.
 - Reviewer/editor permission-matrix UAT remains pending.
 - Project detail is the next major UI modernization area.
-- The 57-migration repository candidate is locally verified; the latest accepted hosted staging evidence remains at 52 migrations, so fresh hosted reconciliation is pending.
+- The 57-migration repository and hosted staging schema are verified at the same 57-migration contract; production migration delivery and institutional acceptance remain pending.
 - Participant preview/confirmation is implemented. Deployment history and disposable-Local/verified-staging rollback code are implemented; hosted enablement remains separately governed and production rollback remains unavailable.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.
