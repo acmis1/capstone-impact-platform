@@ -25,6 +25,26 @@ The final stored feed bytes are copied to an OS-temporary evidence directory and
 to the maintained Duda HTML/CSS/JavaScript browser harness. No second feed is generated. Exact-feed
 mode adds 320 px coverage and binds renderer evidence to both the manifest hash and feed hash.
 
+## Recorded LV-01 result
+
+The external LV-01 run recorded `BRIEF_SC02_LOCAL_INTEGRATED_COHORT_DEMONSTRATED` at execution
+head `c8df57b21a483b2352c6e67c434b8b4297633251`. That commit is an ancestor of merged `main`
+`90646e084f827e399617078b21a91dee3e899799`; later commits through `90646e08` did not change the
+cohort fixture, production feed contract, public renderer, migrations, or application workflow
+covered by LV-01.
+
+The cohort contained 120 total identities: 100 package-origin and 20 standardized-form-origin.
+The manifest SHA-256 was
+`97bb214cc539e38296190b29ccc5e01239980e9f20c98c60f68a4b82e65aaf8e`, and the final feed SHA-256
+was `db00bfc60f897aa73bf4b894e3f5d5602a8bc195c0869483d81d63e748c5c4e7`. All 120 identities
+remained equal through the integrated workflow; all 120 were reconciled, staged, reviewed and
+approved, previewed and confirmed, governed-published, present in the exact stored feed, and
+rendered. All 480/480 media bindings matched.
+
+LV-01 used no hosted service, real email, or Duda mutation. This is local integrated evidence only;
+it does not prove production capacity, live publication, human staff-effort reduction, UAT,
+training/ownership transfer, or institutional accessibility acceptance.
+
 The disposable owner gives this verifier its own Supabase project ID, loopback port block, Docker
 network, and temporary workdir, then removes containers, volumes, network, and workdir in `finally`.
 The evidence directory is deliberately separate and retained for review. The run does not contact

@@ -1,7 +1,7 @@
 # Runtime configuration contract
 
-**Source-reviewed:** 10 September 2026
-**Scope:** current integration baseline at `21d577e`
+**Source-reviewed:** 13 September 2026
+**Scope:** current integration baseline at merged main `90646e084f827e399617078b21a91dee3e899799`
 **Status:** implementation and configuration handoff; not a deployment record or institutional authorization
 
 This document is the source-backed reference for runtime and deployment configuration. The
@@ -27,6 +27,12 @@ reminder-runner profile.
 
 AI, OCR, language checking and duplicate detection remain assistive-only. They have no approval,
 publication or autonomous project-mutation authority.
+
+Supabase Auth leaked-password / Have I Been Pwned protection is a hosted provider setting, not a
+repository or SQL-migration setting. It remains `INSTITUTION_DEPENDENT`: the School/project owner
+must confirm availability, plan, cost, and activation in the hosted Auth password-security
+configuration. The application already handles the provider's compromised-password rejection; this
+document does not claim that protection is enabled or that a paid plan exists.
 
 ## 2. Process ownership
 

@@ -162,6 +162,15 @@ SELECT version, inserted_at
 ```
 Record exact count and missing timestamps against the 57 repository migrations.
 
+### Current 53–57 release order
+
+For merged main `90646e084f827e399617078b21a91dee3e899799`, the current deployed bundle must be
+closed for maintenance before the release window begins. The truthful order is: verify
+preconditions → apply missing forward migrations 53–57 → fresh Gate 3 → fresh Gate 4 → advisor
+recheck → deploy the exact merged-main SHA → verify health, readiness, deployment SHA, and smoke
+→ reopen. Do not deploy this application bundle before migrations 53–57: its `/api/readiness`
+requires the Migration-57 release capability sentinel.
+
 For active staging-v2, historical point-in-time evidence first recorded 46 rows through `20260828120000`, then 48/48 through `20260831090000`. Current independent read-only evidence records 52 rows through `20260906120000_public_removal_completion_reconciliation`. Recheck migration alignment for each release candidate and whenever reconciliation is required; migration history alone does not establish exact schema, grant, or RPC parity.
 
 The configured Data API exposes `public`, `graphql_public`, and `storage`, not `supabase_migrations`. Therefore the automated checker truthfully reports `MIGRATION_HISTORY_READABLE = NO` and `HOSTED_RECORDED_MIGRATIONS = UNKNOWN`; this separately governed read-only evidence is mandatory and must not be replaced with a `public.schema_migrations` fallback.

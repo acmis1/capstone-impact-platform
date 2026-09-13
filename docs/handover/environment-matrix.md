@@ -2,7 +2,7 @@
 
 **STATUS:** Current — handover
 **PURPOSE:** Operations
-**LAST VERIFIED:** 2026-08-28
+**LAST VERIFIED:** 2026-09-13
 
 The environments the platform supports, what each is for, and what each is allowed to do. No secret
 value appears here.

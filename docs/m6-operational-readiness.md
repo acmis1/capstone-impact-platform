@@ -19,6 +19,15 @@ Every capability in this package uses exactly one status:
 
 `LOCAL`, `STAGING`, and `PRODUCTION` evidence are never interchangeable. `PROCEDURE DEFINED` is not `REHEARSAL PASSED`.
 
+## Hosted Auth provider handover item
+
+Supabase Auth leaked-password / Have I Been Pwned protection is an
+`INSTITUTION_DEPENDENT` hosted configuration item. The repository cannot enable it through SQL
+migrations or local `config.toml`; the School/project owner must confirm provider availability,
+plan, and cost, then configure it in the hosted Auth password-security settings. The application
+already handles the provider's compromised-password rejection. This documentation does not claim
+that the setting is enabled or that a paid plan exists.
+
 ## Current constrained human-evidence boundary — 2026-09-08
 
 Stakeholder/staff availability is constrained near the deadline. Completion
@@ -213,6 +222,7 @@ Store values only in institution-owned systems. The repository records names, no
 | Application security | `CAPSTONE_AUTH_FLOW_SECRET`; credential ownership, rotation date, and recovery owner without storing the value. |
 | Storage | `SUPABASE_DRAFT_BUCKET`, `SUPABASE_PUBLIC_ASSETS_BUCKET`, `SUPABASE_PUBLIC_FEEDS_BUCKET`, `SUPABASE_PUBLIC_FEED_FILE`. |
 | Participant email | `PARTICIPANT_PREVIEW_EMAIL_ENABLED`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_PORT`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_USER`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD`, `PARTICIPANT_PREVIEW_EMAIL_FROM`, `PARTICIPANT_PREVIEW_REMINDERS_ENABLED`; provider and policy remain institution-dependent. |
+| Supabase Auth leaked-password protection | Hosted Auth password-security setting; repository configuration and SQL migrations cannot enable it. Availability, plan, cost, and activation must be confirmed by the School/project owner. |
 | Staff/publication feature gates | `STAFF_PROVISIONING_ENABLED`, `CAPSTONE_STAGING_PUBLICATION_ENABLED`, `CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED`, `CAPSTONE_LOCAL_PUBLIC_FEED_ROLLBACK_ENABLED`, and `CAPSTONE_PRODUCTION_PUBLICATION_ENABLED`; each remains fail-closed unless its exact target, authority, and capability contract also passes. Repository configuration names do not prove deployment or enablement. |
 | Publication/Duda | Canonical feed bucket/path variables above, Duda test/live consumer boundary, and the institution-owned location of Duda configuration. No Duda credential belongs in the repository. |
 | Optional assistive extraction | `GEMINI_ASSISTIVE_EXTRACTION_ENABLED`, `GEMINI_API_KEY`, `GEMINI_MODEL`; institutional vendor/privacy/cost approval remains required. |
@@ -334,6 +344,11 @@ The authoritative application contract is in [Admin/CMS Hosted Staging Deploymen
 5. Confirm environment variable **names**, target identity, secret ownership, and rotation status without exposing values.
 6. Confirm the Render web service uses the Admin/CMS root/commands and `/api/readiness`, not the Prototype service.
 7. Confirm the deployment authority, rollback decision owner, monitoring recipient, and change window.
+
+For the current 53–57 release, the deployed bundle is closed for maintenance before these gates
+continue. Apply missing forward migrations 53–57, then obtain fresh Gate 3, Gate 4, and advisor
+evidence before deploying the exact reviewed SHA. Complete health/readiness/SHA/smoke checks and
+reopen only after those checks pass; `/api/readiness` requires Migration 57's capability sentinel.
 
 ### Deploy and post-deploy evidence
 

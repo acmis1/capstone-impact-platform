@@ -2,7 +2,7 @@
 
 **STATUS:** Current — handover
 **PURPOSE:** Operations
-**LAST VERIFIED:** 2026-08-28
+**LAST VERIFIED:** 2026-09-13
 
 Every external resource the platform depends on, who owns it **today**, who must own it **finally**,
 and exactly how to get from one to the other.

@@ -115,7 +115,7 @@ The correction path loops back through review and approval. Participant-owned co
 *   **Measurement Metrics**: Demonstrating, on the same comparable cohort, at least a **50% end-to-end elapsed publishing-time reduction and at least a 50% human-manpower reduction measured in total person-hours** compared with the current manual workflow. Both independent thresholds must pass; neither result may compensate for the other. The [manual efficiency instrument](templates/release-evaluation-manual-efficiency.md) is currently unfilled, so BRIEF-SC01 remains `NOT MEASURED`.
 
 ### B. Optional Capabilities
-*   **Community Voting**: Public participant voting or feedback modules (Voting must remain optional and outside the critical publishing path).
+*   **Community Voting**: Excluded by the final project decision. It is not part of the delivered or evaluated publishing workflow.
 
 ---
 
