@@ -98,8 +98,8 @@ This document maps out the completed project baseline, foundations present, and 
 
 ---
 
-## 7. Optional Enhancements
-*   **Community Voting**: Embed optional participant and visitor voting widgets on Duda pages (must not block the core publishing path).
+## 7. Excluded Scope
+*   **Community Voting**: Excluded by final project decision. Voting is not part of the delivered or evaluated publishing workflow.
 
 ---
 
