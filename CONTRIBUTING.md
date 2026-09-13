@@ -84,11 +84,11 @@ npm run supabase:stop
    - New postgres-owned functions are private by default; execution privileges must be explicitly revoked from `PUBLIC`, `anon`, and `authenticated`, and granted only to intended roles (e.g. `service_role`).
    - Do not alter `supabase_admin` default privileges.
 
-### Migration Inventory (53 Timestamped Migrations)
+### Migration Inventory (57 Timestamped Migrations)
 
-The current repository contains 53 migrations through
-`20260909120000_staff_lifecycle_readiness.sql`. See the
-[selected migration inventory](infra/supabase/README.md#selected-migration-inventory-53-migrations-total)
+The current repository contains 57 migrations through
+`20260911120000_gallery_full_text_equivalents.sql`. See the
+[selected migration inventory](infra/supabase/README.md#selected-migration-inventory-57-migrations-total)
 and [local development guide](infra/supabase/local-development.md) for current replay and bucket
 ownership. The first nine migrations below are historical milestones, not the complete inventory.
 
