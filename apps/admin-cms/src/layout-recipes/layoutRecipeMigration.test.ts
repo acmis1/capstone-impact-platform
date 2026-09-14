@@ -21,7 +21,6 @@ describe('layout recipe persistence migration', () => {
     expect(migration).toContain("request.status = 'pending_activation'");
     expect(migration).not.toMatch(/DELETE\s+FROM\s+public\.layout_recipe_versions/i);
     for (const internalSignature of [
-      'public.layout_recipe_config_valid(jsonb)',
       'public.layout_recipe_actor_can_manage(uuid)',
       'public.get_project_publication_readiness_without_layout_recipe(text, uuid, text)',
       'public.get_project_reconciliation_readiness_without_layout_recipe(text, uuid, text)',
@@ -29,6 +28,10 @@ describe('layout recipe persistence migration', () => {
       expect(migration).toContain(`REVOKE ALL ON FUNCTION ${internalSignature} FROM PUBLIC, anon, authenticated, service_role;`);
       expect(migration).not.toContain(`GRANT EXECUTE ON FUNCTION ${internalSignature} TO service_role;`);
     }
+    expect(migration).toContain('REVOKE ALL ON FUNCTION public.layout_recipe_config_valid(jsonb) FROM PUBLIC, anon, authenticated, service_role;');
+    expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.layout_recipe_config_valid(jsonb) TO service_role;');
+    expect(migration).not.toContain('GRANT EXECUTE ON FUNCTION public.layout_recipe_config_valid(jsonb) TO anon');
+    expect(migration).not.toContain('GRANT EXECUTE ON FUNCTION public.layout_recipe_config_valid(jsonb) TO authenticated');
     for (const signature of [
       'public.create_layout_recipe(uuid, text, jsonb, uuid)',
       'public.version_layout_recipe(uuid, uuid, integer, text, jsonb)',

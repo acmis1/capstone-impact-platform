@@ -1519,8 +1519,15 @@ function assertAfter58(
     );
   }
 
+  assert.equal(
+    psql(`SELECT has_function_privilege('service_role','public.layout_recipe_config_valid(jsonb)','EXECUTE')::text`
+      + ` || '|' || has_function_privilege('anon','public.layout_recipe_config_valid(jsonb)','EXECUTE')::text`
+      + ` || '|' || has_function_privilege('authenticated','public.layout_recipe_config_valid(jsonb)','EXECUTE')::text;`),
+    'true|false|false',
+    'Migration 0058 layout validator must remain service-role-only so CHECK constraints can execute.',
+  );
+
   for (const signature of [
-    'public.layout_recipe_config_valid(jsonb)',
     'public.layout_recipe_actor_can_manage(uuid)',
     'public.get_project_publication_readiness_without_layout_recipe(text,uuid,text)',
     'public.get_project_reconciliation_readiness_without_layout_recipe(text,uuid,text)',

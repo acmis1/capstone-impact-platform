@@ -277,7 +277,10 @@ export async function verifyLayoutRecipeRuntime(repositoryRoot: string, identity
   assert((await anonymous.rpc('create_layout_recipe', {
     p_actor_admin_id: adminId, p_name: 'Anonymous recipe', p_layout_config: configA, p_source_version_id: null,
   })).error);
-  assert((await firstSession.rpc('layout_recipe_config_valid', { p_config: configA })).error);
+  const serviceValidator = await firstSession.rpc('layout_recipe_config_valid', { p_config: configA });
+  assert.equal(serviceValidator.error, null);
+  assert.equal(serviceValidator.data, true);
+  assert((await anonymous.rpc('layout_recipe_config_valid', { p_config: configA })).error);
   assert((await firstSession.rpc('layout_recipe_actor_can_manage', { p_actor_admin_id: adminId })).error);
   assert((await firstSession.rpc('get_project_publication_readiness_without_layout_recipe', {
     p_public_id: 'not-applicable', p_admin_id: adminId, p_private_bucket: 'project-drafts-private',

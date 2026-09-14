@@ -69,7 +69,12 @@ EXCEPTION
 END;
 $$;
 
+-- PostgreSQL evaluates CHECK expressions under the statement role. participant_previews and
+-- layout_recipe_versions both call this pure immutable validator from CHECK constraints, and the
+-- server-side application legitimately writes them as service_role. Keep it unavailable to public
+-- clients, but permit the server-only service_role so those constraints can execute.
 REVOKE ALL ON FUNCTION public.layout_recipe_config_valid(jsonb) FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.layout_recipe_config_valid(jsonb) TO service_role;
 
 CREATE TABLE public.layout_recipe_versions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
