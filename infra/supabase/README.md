@@ -7,7 +7,7 @@ This directory contains the version-controlled database schema migrations, polic
 ## ⚠️ Current Environment & Staging Status
 
 > [!NOTE]
-> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. The current 57-file timestamped migration manifest through `20260911120000_gallery_full_text_equivalents.sql` is the executable repository candidate and passes its automated manifest contract. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
+> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. The current candidate has a 58-file timestamped migration manifest through `20260914100000_layout_recipe_library.sql` and passes its automated manifest contract. Hosted staging remains separately verified at 57 until Migration 0058 is authorized and applied. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
 > * **Active Hosted Staging (`capstone-admin-cms-staging-v2-2026`):** Historical read-only observations recorded 46, 48/48, and 52 rows. Current staging records 57 migrations through `20260911120000_gallery_full_text_equivalents`; fresh Gate 4 structural totals match 48 tables, 558 columns, 420 constraints, 35 policies, 92 application RPC signatures across 91 names, 4 dispatcher routines, and 4 buckets. See [Staging-57 Deployment Evidence](../../docs/staging-57-deployment-evidence-2026-09-13.md). This proves the collected structural contract, not human UAT, managed recovery, monitoring, or production acceptance.
 > * **Historical/Paused Hosted Staging (`capstone-admin-cms-staging-2026`):** This is the environment associated with the old manually evolved migration baseline. Its history must not be confused with the active staging-v2 evidence.
 > * **Corrective Fix:** Migration `0006` corrected the initial administrator bootstrap runtime by replacing `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
@@ -73,7 +73,7 @@ npm run supabase:stop
 
 ---
 
-## Selected Migration Inventory (57 Migrations Total)
+## Selected Migration Inventory (58 Migrations Total)
 
 The executable files under `migrations/` and the exact manifest enforced by
 `apps/admin-cms/src/deployment/hostedDeploymentReadiness.ts` are authoritative. The entries below
@@ -119,3 +119,4 @@ highlight major milestones rather than replacing that complete manifest.
 * **[20260910120100_participant_preview_access_observations.sql](./migrations/20260910120100_participant_preview_access_observations.sql):** Adds one bounded first successful HTML-response preparation observation per exact participant preview; it records no token, participant identity, delivery, reading, confirmation, approval, or publication claim.
 * **[20260910120200_assistive_worker_production_identity.sql](./migrations/20260910120200_assistive_worker_production_identity.sql):** Extends heartbeat evidence with exact staging/production environment identity while preserving existing rows and preventing a worker instance ID from being relabelled across environments.
 * **[20260911120000_gallery_full_text_equivalents.sql](./migrations/20260911120000_gallery_full_text_equivalents.sql):** Adds the project-team-declared text-equivalent contract for every gallery image (`media_assets.image_content_kind` ordinary/text_bearing plus `full_text_public` for text-bearing images), forward-redefines media staging, review submission, approval, participant-preview issuance, publication/reconciliation readiness and participant-correction RPCs to require and carry it, and leaves every existing row undeclared and blocked rather than backfilled.
+* **[20260914100000_layout_recipe_library.sql](./migrations/20260914100000_layout_recipe_library.sql):** Adds versioned/audited admin-managed layout recipes constrained to existing renderer primitives, plus immutable by-value layout snapshots for new participant previews and layout-staleness readiness checks. Historical preview rows remain `NULL` and retain their established behavior.

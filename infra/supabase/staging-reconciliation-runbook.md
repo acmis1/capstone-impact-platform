@@ -160,7 +160,7 @@ SELECT version, inserted_at
   FROM supabase_migrations.schema_migrations
  ORDER BY version ASC;
 ```
-Record exact count and missing timestamps against the 57 repository migrations.
+Record exact count and missing timestamps against the 58 repository candidate migrations; hosted staging is expected to remain at 57 until Migration 0058 is separately authorized and applied.
 
 ### Current 53–57 release order
 

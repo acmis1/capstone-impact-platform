@@ -22,6 +22,14 @@ import {
   PROJECT_CONTROLLED_URL_MAX_LENGTH,
   validateProjectControlledUrl,
 } from '../domain/projectControlledUrl';
+import {
+  createLayoutConfigFromStock,
+  HIDEABLE_LAYOUT_SECTION_IDS,
+  LAYOUT_SECTION_IDS,
+  type HideableLayoutSectionId,
+  type LayoutSectionId,
+  type LayoutTemplateId,
+} from '../domain/layoutConfig';
 type WorkbookInternalField =
   (typeof COLUMN_DEFINITIONS)[number]['internalField'];
 
@@ -729,6 +737,52 @@ export async function parseProjectDetailsWorkbook(
     }
   }
 
+  const parseSectionList = <T extends string>(
+    fieldName: 'sectionOrder' | 'hiddenSections',
+    allowed: readonly T[],
+    fallback: readonly T[],
+    requireComplete = false,
+  ): T[] => {
+    const cell = extractFieldValue(fieldName);
+    if (!cell.rawString) return [...fallback];
+    const values = cell.rawString.split(/[,;\r\n]+/u).map((value) => value.trim()).filter(Boolean);
+    const invalid = values.filter((value) => !allowed.includes(value as T));
+    const duplicate = new Set(values).size !== values.length;
+    if (invalid.length > 0 || duplicate || values.length > allowed.length || (requireComplete && values.length !== allowed.length)) {
+      errors.push({
+        code: 'WORKBOOK_INVALID_LAYOUT_SECTIONS',
+        message: invalid.length > 0
+          ? `Unknown ${fieldName === 'sectionOrder' ? 'ordered' : 'hidden'} layout section: ${invalid[0]}.`
+          : requireComplete && values.length !== allowed.length
+            ? 'Layout sectionOrder must contain every supported section exactly once.'
+            : `Layout ${fieldName} must contain unique supported sections.`,
+        severity: 'error',
+        fieldName,
+        columnName: cell.colInfo?.rawHeader,
+        rowNumber: projectRowObj.rowNumber,
+      });
+      return [...fallback];
+    }
+    return values as T[];
+  };
+
+  const sectionOrder = parseSectionList<LayoutSectionId>(
+    'sectionOrder', LAYOUT_SECTION_IDS,
+    createLayoutConfigFromStock(templateId as LayoutTemplateId).sectionOrder,
+    true,
+  );
+  const hiddenSections = parseSectionList<HideableLayoutSectionId>('hiddenSections', HIDEABLE_LAYOUT_SECTION_IDS, []);
+  if (featuredMedia === 'video' && hiddenSections.includes('video')) {
+    errors.push({
+      code: 'WORKBOOK_INCOMPATIBLE_LAYOUT_OPTIONS',
+      message: 'The selected featured media cannot also be hidden.',
+      severity: 'error',
+      fieldName: 'featuredMedia',
+      columnName: mediaCell.colInfo?.rawHeader,
+      rowNumber: projectRowObj.rowNumber,
+    });
+  }
+
   // Throw if any blocking errors occurred, preserving all warnings
   if (errors.length > 0) {
     throw new ProjectDetailsWorkbookError(
@@ -762,8 +816,8 @@ export async function parseProjectDetailsWorkbook(
     layoutConfig: {
       templateId,
       featuredMedia,
-      sectionOrder: [...DEFAULT_LAYOUT_CONFIG.sectionOrder],
-      hiddenSections: [...DEFAULT_LAYOUT_CONFIG.hiddenSections]
+      sectionOrder,
+      hiddenSections
     }
   };
 

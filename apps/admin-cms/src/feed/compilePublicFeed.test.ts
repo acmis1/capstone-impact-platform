@@ -111,6 +111,26 @@ describe('compilePublicFeed', () => {
     expect(result[0].layoutConfig.sectionOrder).toEqual(['background', 'solution', 'snapshots', 'video', 'links']);
   });
 
+  it('copies a resolved recipe value into the existing wire without library administration fields', () => {
+    const project = createMockProject({
+      status: 'published',
+      layoutConfig: {
+        templateId: 'poster_showcase', featuredMedia: 'snapshots',
+        sectionOrder: ['team', 'solution', 'background', 'snapshots', 'video', 'links', 'citations', 'accessibilityText'],
+        hiddenSections: ['video'],
+      },
+    });
+    Object.assign(project.layoutConfig as unknown as Record<string, unknown>, {
+      recipeVersionId: 'must-not-cross-public-boundary', recipeName: 'Private administration value',
+    });
+
+    expect(compilePublicFeed([project])[0].layoutConfig).toEqual({
+      templateId: 'poster_showcase', featuredMedia: 'snapshots',
+      sectionOrder: ['team', 'solution', 'background', 'snapshots', 'video', 'links', 'citations', 'accessibilityText'],
+      hiddenSections: ['video'],
+    });
+  });
+
   it('does not mutate the input projects', () => {
     const project = createMockProject({ status: 'published' });
     const originalJson = JSON.stringify(project);

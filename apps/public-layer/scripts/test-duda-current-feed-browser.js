@@ -842,6 +842,28 @@ function harnessDriver() {
       return;
     }
 
+    if (scenario === 'detail-layout-recipe') {
+      const project = window.__CAPSTONE_HARNESS_FIXTURE.find(p => p.id === 202601);
+      const headings = Array.from(document.querySelectorAll('.poster-body > .detail-section .section-title'))
+        .map((heading) => heading.textContent.trim());
+      check(Boolean(document.querySelector('.layout-preset-poster_showcase')), 'recipe keeps the existing poster_showcase renderer preset');
+      check(document.querySelector('.snapshot-hero-grid, .exhibition-strip') !== null, 'recipe featured snapshots use the maintained gallery controls');
+      check(!headings.includes('Project Video'), 'recipe hides the optional video section');
+      check(
+        JSON.stringify(headings.slice(0, 6)) === JSON.stringify(['The Team', 'The Solution', 'Background', 'Resources', 'Citations', 'Accessibility Text']),
+        `recipe section order is rendered by value (${headings.join(' > ')})`,
+      );
+      verifyRendererHeadingHierarchy();
+      verifyRenderedSnapshotAlts(2);
+      const fullTextDisclosure = document.querySelector('.snapshot-text-disclosure[data-gallery-position="1"]');
+      const fullTextBody = fullTextDisclosure?.querySelector('.snapshot-text-content');
+      check(fullTextDisclosure?.tagName === 'DETAILS', 'recipe keeps the text-bearing snapshot disclosure available');
+      check(fullTextBody?.textContent === project.snapshotMedia[0].fullText, 'recipe renders the exact snapshot full text');
+      check(fullTextBody?.getAttribute('aria-hidden') === null, 'recipe snapshot full text remains available to assistive technology');
+      finish();
+      return;
+    }
+
     if (scenario === 'unsafe-record') {
       check(Boolean(document.querySelector('.capstone-inline-error')), 'unsafe record rejects the whole feed before rendering');
       check(document.body.textContent.includes('FEED_RECORD_INVALID'), 'unsafe record exposes the bounded record-invalid reason');
@@ -1152,6 +1174,16 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases, runt
   if (scenario === 'detail-featured-gallery') {
     payload[2].layoutConfig.featuredMedia = 'snapshots';
   }
+  if (scenario === 'detail-layout-recipe') {
+    payload = [structuredClone(fixtureCopy[0])];
+    payload[0].layoutConfig = {
+      templateId: 'poster_showcase',
+      featuredMedia: 'snapshots',
+      sectionOrder: ['team', 'solution', 'background', 'links', 'citations', 'accessibilityText', 'snapshots', 'video'],
+      hiddenSections: ['video'],
+    };
+    fixtureCopy[0].layoutConfig = structuredClone(payload[0].layoutConfig);
+  }
   if (scenario === 'unsafe-record') {
     const unsafe = structuredClone(fixtureCopy[0]);
     unsafe.id = "202601');window.location='https://attacker.example.test/?quote-break-marker";
@@ -1340,6 +1372,11 @@ const scenarios = [
   ['detail-media-long', '/project-detail?id=202493', 375, 812],
   ['detail-media-long', '/project-detail?id=202493', 320, 568],
   ['detail-featured-gallery', '/project-detail?id=202403', 1440, 1000],
+  ['detail-layout-recipe', '/project-detail?id=202601', 1440, 1000],
+  ['detail-layout-recipe', '/project-detail?id=202601', 768, 1024],
+  ['detail-layout-recipe', '/project-detail?id=202601', 390, 844],
+  ['detail-layout-recipe', '/project-detail?id=202601', 375, 812],
+  ['detail-layout-recipe', '/project-detail?id=202601', 320, 568],
   ['detail-generic-video', '/project-detail?id=202601', 1440, 1000],
   ['empty-feed', '/', 390, 844],
   ['malformed-feed', '/', 1440, 1000],

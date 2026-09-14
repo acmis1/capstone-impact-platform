@@ -65,7 +65,7 @@ describe('participant preview email enablement', () => {
       PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD: 'secret',
     });
     expect(result.enabled).toBe(true);
-    if (!result.enabled) throw new Error('expected enabled configuration');
+    if (!result.enabled || result.provider === 'brevo') throw new Error('expected enabled SMTP configuration');
     expect(result.smtp.auth).toEqual({ user: 'mailer', password: 'secret' });
   });
 
@@ -92,6 +92,83 @@ describe('participant preview email enablement', () => {
       resolveParticipantPreviewEmailConfig({
         ...COMPLETE,
         PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST: `127.0.0.1${CRLF}evil`,
+      }),
+    ).toEqual({ enabled: false });
+  });
+
+  it('resolves a valid Brevo HTTPS configuration with sandbox disabled by default', () => {
+    const env = {
+      PARTICIPANT_PREVIEW_EMAIL_ENABLED: 'true',
+      PARTICIPANT_PREVIEW_EMAIL_PROVIDER: 'brevo',
+      PARTICIPANT_PREVIEW_EMAIL_BREVO_API_KEY: 'xkeysib-mock-test-key-12345',
+      PARTICIPANT_PREVIEW_EMAIL_FROM: 'sender@capstone.test',
+      PARTICIPANT_PREVIEW_EMAIL_FROM_NAME: 'Capstone Showcase',
+    };
+
+    const result = resolveParticipantPreviewEmailConfig(env);
+    expect(result.enabled).toBe(true);
+    if (!result.enabled) throw new Error('expected enabled');
+    expect(result.provider).toBe('brevo');
+    expect(result.fromAddress).toBe('sender@capstone.test');
+    expect(result.brevo).toEqual({
+      apiKey: 'xkeysib-mock-test-key-12345',
+      from: 'sender@capstone.test',
+      fromName: 'Capstone Showcase',
+      sandbox: false,
+    });
+  });
+
+  it('resolves Brevo sandbox mode when explicitly set to true', () => {
+    const env = {
+      PARTICIPANT_PREVIEW_EMAIL_ENABLED: 'true',
+      PARTICIPANT_PREVIEW_EMAIL_PROVIDER: 'brevo',
+      PARTICIPANT_PREVIEW_EMAIL_BREVO_API_KEY: 'xkeysib-mock-test-key-12345',
+      PARTICIPANT_PREVIEW_EMAIL_FROM: 'sender@capstone.test',
+      PARTICIPANT_PREVIEW_EMAIL_BREVO_SANDBOX: 'true',
+    };
+
+    const result = resolveParticipantPreviewEmailConfig(env);
+    expect(result.enabled).toBe(true);
+    if (!result.enabled) throw new Error('expected enabled');
+    expect(result.brevo?.sandbox).toBe(true);
+  });
+
+  it('disables delivery if Brevo API key or From address is missing or invalid', () => {
+    // Missing API key
+    expect(
+      resolveParticipantPreviewEmailConfig({
+        PARTICIPANT_PREVIEW_EMAIL_ENABLED: 'true',
+        PARTICIPANT_PREVIEW_EMAIL_PROVIDER: 'brevo',
+        PARTICIPANT_PREVIEW_EMAIL_FROM: 'sender@capstone.test',
+      }),
+    ).toEqual({ enabled: false });
+
+    // Missing From address
+    expect(
+      resolveParticipantPreviewEmailConfig({
+        PARTICIPANT_PREVIEW_EMAIL_ENABLED: 'true',
+        PARTICIPANT_PREVIEW_EMAIL_PROVIDER: 'brevo',
+        PARTICIPANT_PREVIEW_EMAIL_BREVO_API_KEY: 'xkeysib-mock-test-key-12345',
+      }),
+    ).toEqual({ enabled: false });
+
+    // Invalid From address (no @ or no domain dot)
+    expect(
+      resolveParticipantPreviewEmailConfig({
+        PARTICIPANT_PREVIEW_EMAIL_ENABLED: 'true',
+        PARTICIPANT_PREVIEW_EMAIL_PROVIDER: 'brevo',
+        PARTICIPANT_PREVIEW_EMAIL_BREVO_API_KEY: 'xkeysib-mock-test-key-12345',
+        PARTICIPANT_PREVIEW_EMAIL_FROM: 'not-an-email',
+      }),
+    ).toEqual({ enabled: false });
+  });
+
+  it('fails closed when an unknown provider is specified', () => {
+    expect(
+      resolveParticipantPreviewEmailConfig({
+        PARTICIPANT_PREVIEW_EMAIL_ENABLED: 'true',
+        PARTICIPANT_PREVIEW_EMAIL_PROVIDER: 'unsupported-mailer',
+        PARTICIPANT_PREVIEW_EMAIL_FROM: 'sender@capstone.test',
       }),
     ).toEqual({ enabled: false });
   });

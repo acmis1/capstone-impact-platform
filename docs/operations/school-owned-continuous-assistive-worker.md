@@ -3,7 +3,7 @@
 **Status:** Repository deployment profile
 
 **Scope:** Exactly one staging or explicitly qualified production continuous Profile B worker on a
-School/user-controlled Docker host
+School/user-controlled Linux amd64 (`linux/amd64`) Docker host
 
 **Ingress:** None
 
@@ -17,7 +17,10 @@ the institution remains responsible for its licence review and local-use decisio
 
 ## Host prerequisites
 
-- A Linux Docker host controlled by the School or its nominated maintainer.
+- A Linux amd64 (`linux/amd64`) Docker host controlled by the School or its nominated maintainer.
+  This is the currently qualified Profile B architecture: the frozen OpenCV wheel and locked
+  PaddlePaddle path are x86_64-specific. ARM hosts, alternate architectures, and emulation are
+  not qualified.
 - Docker Engine with the Compose v2 plugin and Git. Start with 2 CPUs and 4 GiB RAM for the worker;
   these are operational allocation defaults pending acceptance on the chosen host, not proven hard
   minimums.
@@ -79,7 +82,8 @@ budget controls, cloud launch, SQL, publication, or historical rollback.
 ## Level 1: offline/local acceptance
 
 The verifier reads values without sourcing the external file and never prints the secret. Run its
-self-tests first. Configuration verification requires the deployment version to be a valid full
+self-tests first. Configuration verification first checks the Docker engine platform and fails
+before any image build unless it is `linux/amd64`. It then requires the deployment version to be a valid full
 40-hex local commit equal to `HEAD`; it also rejects a secret file inside the repository/build
 context, missing variables, placeholders, mismatched Supabase identity, more than one service,
 published ports, a privileged runtime user, incorrect mode, scale, pull policy, or restart policy.
@@ -109,6 +113,67 @@ image ID in `/etc/capstone/assistive-worker.env.image-acceptance.<commit>`.
 If an offline build cache does not contain the base image, packages, and qualified artifacts, only
 the configuration check can run fully offline. Record that limitation rather than claiming an image
 build passed.
+
+## Exact operator activation procedure
+
+This is an operator handoff, not an instruction for an implementation agent to start a hosted
+worker. Use it only after the School has approved the Supabase target, host, secret handling, and
+the exact reviewed commit. Never substitute a hosted URL for a disposable local test target during
+qualification.
+
+1. On the nominated host, check out the exact reviewed commit and confirm the checkout is clean. The
+   verifier intentionally rejects staged, unstaged, or untracked build-context changes.
+2. Create the owner-only environment file outside the repository as described above. Set
+   `CAPSTONE_DEPLOYMENT_VERSION` to the same 40-character commit as the checkout, and set the
+   canonical Supabase host/URL, worker instance ID, and secret through the approved secret procedure.
+3. Run the verifier in order. Stop on any failure; in particular, never bypass the architecture,
+   dependency, or artifact hash checks:
+
+   ```sh
+   sh infra/assistive-worker/verify.sh self-test
+   sh infra/assistive-worker/verify.sh config /etc/capstone/assistive-worker.env staging
+   sh infra/assistive-worker/verify.sh image /etc/capstone/assistive-worker.env staging
+   ```
+
+   The image step builds from `git archive HEAD`, records the accepted immutable image ID beside the
+   external env file, and proves that the image revision equals the reviewed commit.
+4. Start exactly one worker from the accepted image and do not publish a port:
+
+   ```sh
+   export CAPSTONE_ASSISTIVE_WORKER_ENV_FILE=/etc/capstone/assistive-worker.env
+   export CAPSTONE_ASSISTIVE_WORKER_BUILD_CONTEXT="$(pwd)"
+   docker compose --project-directory infra/assistive-worker \
+     --env-file "$CAPSTONE_ASSISTIVE_WORKER_ENV_FILE" \
+     -f infra/assistive-worker/compose.yaml up -d --no-build
+   sh infra/assistive-worker/verify.sh running /etc/capstone/assistive-worker.env staging
+   ```
+
+5. Confirm genuine readiness from the governed Admin/CMS availability surface: the fresh heartbeat
+   must match the same environment, worker instance, deployment version, and capability settings.
+   A running container alone is not READY evidence.
+6. Enqueue one bounded synthetic assistive run through the existing Admin workflow and record the
+   queue claim, processing outcome, stored finding, and staff-visible finding. Do not approve,
+   publish, or use real participant content as part of this activation check.
+7. Test the lifecycle before handoff:
+
+   ```sh
+   docker compose --project-directory infra/assistive-worker \
+     --env-file "$CAPSTONE_ASSISTIVE_WORKER_ENV_FILE" \
+     -f infra/assistive-worker/compose.yaml stop
+   docker compose --project-directory infra/assistive-worker \
+     --env-file "$CAPSTONE_ASSISTIVE_WORKER_ENV_FILE" \
+     -f infra/assistive-worker/compose.yaml up -d --no-build
+   sh infra/assistive-worker/verify.sh running /etc/capstone/assistive-worker.env staging
+   ```
+
+   Confirm `STOPPING`, a stale/unavailable heartbeat during the stop, and a fresh compatible
+   heartbeat after restart. Record measured action-to-visible-result timing; do not call a running
+   container or a few successful cases statistical p95 evidence.
+
+8. For an update, stop the old worker, update Admin's expected deployment identity and the external
+   env file together, build and accept the new exact commit, then start one worker with `--no-build`.
+   For restore, use the previously accepted compatible commit and its acceptance record; never roll
+   database migrations backward or run two continuous workers at once.
 
 ## Start and verify the host
 

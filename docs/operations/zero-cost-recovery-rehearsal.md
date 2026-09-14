@@ -202,9 +202,9 @@ npm run capture:recovery-backup -- \
 Required terminal evidence includes `SOURCE_CAPTURE_COMPLETE`, the exact reviewed SHA and its
 matching migration manifest, bounded database/Auth/execution-control counts, canonical bucket
 summaries, `SOURCE_MUTATIONS = NONE`, and `PRIVATE_RECOVERY_EVIDENCE_NEVER_COMMIT`. The current
-repository contains 57 migrations through
-`20260911120000_gallery_full_text_equivalents.sql`; active staging-v2 records all 57 migrations,
-with four buckets and fresh 57-migration Gate 4 evidence. Historical 48/48 and 52-row evidence
+repository candidate contains 58 migrations through
+`20260914100000_layout_recipe_library.sql`; active staging-v2 remains verified at 57 migrations through Migration 0057,
+with four buckets and fresh 57-migration Gate 4 evidence. A hosted-origin capture from this 58-migration candidate must fail closed until source parity is re-established by a separately authorized Migration 0058 application and fresh schema evidence. Historical 48/48 and 52-row evidence
 through `20260906120000` remains historical. The current staging deployment and its qualification
 boundaries are recorded in [Staging-57 Deployment Evidence](../staging-57-deployment-evidence-2026-09-13.md).
 Source parity must still be separately verified before any authorized hosted-origin capture.
@@ -247,7 +247,7 @@ removes that partial target. Diagnostics distinguish `ROLE_PLATFORM_ACL_COMPATIB
 then restores only approved PP1 managed-schema customizations, restores Storage through the API,
 and checks:
 
-- all 57 migrations and latest migration;
+- the exact repository/bundle migration manifest and latest migration (58 migrations for this candidate);
 - the complete public application and execution-control table inventory;
 - safe table row counts and order-independent checksums;
 - Auth user/identity counts and zero orphan identities;
@@ -257,8 +257,7 @@ and checks:
 - recovery-only table-grant compatibility (`TABLE_GRANT_PORTABILITY_COMPATIBILITY`);
 - launch guard `staging / 40 / 31 / 1`, reservation count/checksum, and executor registrations;
 - all canonical bucket configurations and the exact object set, lengths, content types, and SHA-256;
-- current Gate 4 structure: 45 tables, 92 application RPC signatures across 91 names, four
-  dispatcher routines, and four buckets;
+- current Gate 4 structure exactly matching the candidate comparator, including the layout-recipe tables/RPCs, dispatcher routines, and four buckets;
 - `/api/health` 200, `/login` 200 with the stable marker, and a truthful non-staging readiness
   classification; and
 - absence of verifier-owned containers, volumes, network, and workdir after cleanup.

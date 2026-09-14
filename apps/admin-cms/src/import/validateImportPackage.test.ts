@@ -486,6 +486,22 @@ describe('validateImportPackage', () => {
     expect(result.errors.some(e => e.ruleCode === 'METADATA_INVALID_LAYOUT')).toBe(true);
   });
 
+  it('rejects unknown, duplicate, unbounded and incompatible layout wire values', () => {
+    const mutations: Array<(layout: Record<string, unknown>) => void> = [
+      (layout) => { layout.sectionOrder = ['background', 'background']; },
+      (layout) => { layout.sectionOrder = ['arbitraryHtml']; },
+      (layout) => { layout.sectionOrder = Array.from({ length: 20 }, (_, index) => `section-${index}`); },
+      (layout) => { layout.featuredMedia = 'video'; layout.hiddenSections = ['video']; },
+    ];
+    for (const mutate of mutations) {
+      const pkg = createMockParsedPackage();
+      mutate(pkg.manifest.layoutConfig as unknown as Record<string, unknown>);
+      const result = validateImportPackage(pkg);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.ruleCode === 'METADATA_INVALID_LAYOUT')).toBe(true);
+    }
+  });
+
   it('fails validation when poster.png is missing', () => {
     const pkg = createMockParsedPackage({ posterImage: null });
     const result = validateImportPackage(pkg);

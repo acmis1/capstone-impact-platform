@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Plus,
   Trash2,
@@ -28,6 +28,8 @@ import { Button } from '../ui/button';
 import { Alert } from '../ui/alert';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { cn } from '../../lib/utils';
+import { createLayoutConfigFromStock, resolveLayoutConfigByValue, type LayoutTemplateId } from '../../domain/layoutConfig';
+import type { LayoutRecipeVersion } from '../../layout-recipes/layoutRecipes';
 
 export interface ProjectIntakeFormProps {
   onPackageReady: (pkg: MaterializedPackageFiles) => Promise<void>;
@@ -41,11 +43,39 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [isMaterializing, setIsMaterializing] = useState<boolean>(false);
   const [visibleGalleryCount, setVisibleGalleryCount] = useState<number>(1);
+  const [layoutRecipes, setLayoutRecipes] = useState<LayoutRecipeVersion[]>([]);
+  const [selectedRecipeId, setSelectedRecipeId] = useState('');
+  const [recipeLoadState, setRecipeLoadState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
 
   const submissionLockRef = useRef<boolean>(false);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
   const posterImageInputRef = useRef<HTMLInputElement>(null);
   const posterPdfInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const response = await fetch('/api/layout-recipes', { headers: { Accept: 'application/json' } });
+        const payload = await response.json() as { success?: boolean; recipes?: LayoutRecipeVersion[] };
+        if (!response.ok || !payload.success || !Array.isArray(payload.recipes)) throw new Error('unavailable');
+        const recipes = payload.recipes.flatMap((recipe) => {
+          try {
+            return [{ ...recipe, config: resolveLayoutConfigByValue(recipe.config) }];
+          } catch {
+            return [];
+          }
+        });
+        if (active) {
+          setLayoutRecipes(recipes);
+          setRecipeLoadState('ready');
+        }
+      } catch {
+        if (active) setRecipeLoadState('unavailable');
+      }
+    })();
+    return () => { active = false; };
+  }, []);
 
   const handleMetadataChange = (field: keyof FormIntakeMetadata, value: string) => {
     setMetadata((prev) => ({ ...prev, [field]: value }));
@@ -56,6 +86,40 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
         return next;
       });
     }
+  };
+
+  const handleRecipeSelection = (recipeId: string) => {
+    setSelectedRecipeId(recipeId);
+    const recipe = layoutRecipes.find((candidate) => candidate.id === recipeId);
+    if (!recipe) return;
+    const resolved = resolveLayoutConfigByValue(recipe.config);
+    setMetadata((current) => ({
+      ...current,
+      templateId: resolved.templateId,
+      featuredMedia: resolved.featuredMedia,
+      sectionOrder: resolved.sectionOrder.join(', '),
+      hiddenSections: resolved.hiddenSections.join(', '),
+    }));
+    setErrors((current) => {
+      const next = { ...current };
+      delete next.layoutConfig;
+      return next;
+    });
+  };
+
+  const handleStockLayoutChange = (field: 'templateId' | 'featuredMedia', value: string) => {
+    setSelectedRecipeId('');
+    setMetadata((current) => {
+      const templateId = (field === 'templateId' ? value : current.templateId) as LayoutTemplateId;
+      const stock = createLayoutConfigFromStock(templateId);
+      return {
+        ...current,
+        [field]: value,
+        sectionOrder: stock.sectionOrder.join(', '),
+        hiddenSections: '',
+      };
+    });
+    if (errors.layoutConfig) setErrors((current) => ({ ...current, layoutConfig: '' }));
   };
 
   const handlePosterImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,6 +253,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
     setErrors({});
     setSubmissionError(null);
     setVisibleGalleryCount(1);
+    setSelectedRecipeId('');
     if (posterImageInputRef.current) posterImageInputRef.current.value = '';
     if (posterPdfInputRef.current) posterPdfInputRef.current.value = '';
   };
@@ -595,13 +660,33 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 sm:p-6 flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="layoutRecipe">Reusable layout recipe</Label>
+            <select
+              id="layoutRecipe"
+              value={selectedRecipeId}
+              onChange={(event) => handleRecipeSelection(event.target.value)}
+              disabled={isFieldDisabled || recipeLoadState !== 'ready'}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">Use stock layout choices</option>
+              {layoutRecipes.map((recipe) => (
+                <option key={recipe.id} value={recipe.id}>{recipe.name} (v{recipe.version})</option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              {recipeLoadState === 'loading' && 'Loading shared recipes…'}
+              {recipeLoadState === 'unavailable' && 'Shared recipes are unavailable; the three stock layouts remain available.'}
+              {recipeLoadState === 'ready' && `${layoutRecipes.length} active shared ${layoutRecipes.length === 1 ? 'recipe' : 'recipes'} available. Applying one copies its current values into this project package.`}
+            </p>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="templateId">Showcase Layout</Label>
               <select
                 id="templateId"
                 value={metadata.templateId}
-                onChange={(e) => handleMetadataChange('templateId', e.target.value)}
+                onChange={(e) => handleStockLayoutChange('templateId', e.target.value)}
                 disabled={isFieldDisabled}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -616,16 +701,25 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
               <select
                 id="featuredMedia"
                 value={metadata.featuredMedia}
-                onChange={(e) => handleMetadataChange('featuredMedia', e.target.value)}
+                onChange={(e) => handleStockLayoutChange('featuredMedia', e.target.value)}
                 disabled={isFieldDisabled}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               >
+                <option value="auto">Automatic fallback</option>
                 <option value="poster">Poster Image</option>
                 <option value="snapshots">Snapshot Gallery</option>
                 <option value="video">Project Video</option>
+                <option value="none">No featured media</option>
               </select>
             </div>
           </div>
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+            <p><span className="font-medium text-foreground">Section order:</span> {metadata.sectionOrder}</p>
+            <p className="mt-1"><span className="font-medium text-foreground">Hidden optional sections:</span> {metadata.hiddenSections || 'None'}</p>
+          </div>
+          {errors.layoutConfig && (
+            <p id="err-layoutConfig" className="text-xs text-destructive font-medium" role="alert">{errors.layoutConfig}</p>
+          )}
         </CardContent>
       </Card>
 

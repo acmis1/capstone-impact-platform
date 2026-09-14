@@ -1042,7 +1042,14 @@ describe('Browser Import Preview Suite', () => {
           groupName: 'Group 1',
           participantContactEmail: 'group1@example.invalid',
           teamMembers: ['Alice'],
-          layoutConfig: {},
+          // Real legacy project.json parsing always materializes a renderer-compatible layout wire.
+          // Keep this local-package fixture historical (five-section) rather than using an impossible empty object.
+          layoutConfig: {
+            templateId: 'poster_showcase',
+            featuredMedia: 'poster',
+            sectionOrder: ['background', 'solution', 'snapshots', 'video', 'links'],
+            hiddenSections: [],
+          },
         },
         posterImage: { fileName: 'poster.png', fileSizeBytes: 1000, mimeType: 'image/png', content: Buffer.from('img') },
         posterPdf: { fileName: 'poster.pdf', fileSizeBytes: 2000, mimeType: 'application/pdf', content: Buffer.from('pdf') },

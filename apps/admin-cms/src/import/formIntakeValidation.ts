@@ -5,6 +5,7 @@ import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 import { isSnapshotImageContentKind } from '../domain/galleryTextEquivalent';
 import { MEDIA_VALIDATION_LIMITS } from '../storage/mediaValidationSharedContract';
 import type { FormIntakeMetadata, FormIntakeMediaState } from './formIntakeContract';
+import { resolvedLayoutConfigSchema } from '../domain/layoutConfig';
 
 export interface FormIntakeValidationResult {
   valid: boolean;
@@ -134,6 +135,16 @@ export function validateFormIntake(
         'Source repository URL must be a valid HTTP or HTTPS address without credentials.';
     }
   }
+
+  const sectionOrder = (metadata.sectionOrder || '').split(/[,;\r\n]+/u).map((value) => value.trim()).filter(Boolean);
+  const hiddenSections = (metadata.hiddenSections || '').split(/[,;\r\n]+/u).map((value) => value.trim()).filter(Boolean);
+  const layoutResult = resolvedLayoutConfigSchema.safeParse({
+    templateId: metadata.templateId,
+    featuredMedia: metadata.featuredMedia,
+    sectionOrder,
+    hiddenSections,
+  });
+  if (!layoutResult.success) errors.layoutConfig = 'Layout configuration must use a complete supported section order and safe visibility choices.';
 
   // 13. Required Poster Image
   if (!media.posterImage) {

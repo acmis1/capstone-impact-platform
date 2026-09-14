@@ -29,10 +29,7 @@ function dependencies(): ControlledPublicationDependencies {
       confirmedPreviewId: '22222222-2222-4222-8222-222222222222',
       confirmedAt: '2026-08-24T00:00:00.000Z',
     }),
-    listProjects: vi.fn().mockResolvedValue([
-      createMockProject({ publicId: 'lifecycle-only', status: 'published' }),
-      createMockProject({ publicId: 'target', status: 'approved' }),
-    ]),
+    getProject: vi.fn().mockResolvedValue(createMockProject({ publicId: 'target', status: 'approved' })),
     listProjectMedia: vi.fn().mockResolvedValue([]),
     getPublicUrl: (_bucket, path) => `https://example.com/${path}`,
     downloadObject: vi.fn().mockResolvedValue(null),
@@ -43,7 +40,7 @@ function dependencies(): ControlledPublicationDependencies {
 function deployedDependencies(): ControlledPublicationDependencies {
   return {
     ...dependencies(),
-    listProjects: vi.fn().mockResolvedValue([createMockProject({ publicId: 'target', status: 'published' })]),
+    getProject: vi.fn().mockResolvedValue(createMockProject({ publicId: 'target', status: 'published' })),
   };
 }
 
@@ -81,7 +78,18 @@ describe('ledger-backed controlled publication', () => {
       permissions: ['projects.read'], publicId: 'target', privateBucket: 'private',
       publicAssetsBucket: 'assets', publicFeedBucket: 'feeds', publicFeedPath: 'feed.json', dependencies: deps,
     })).resolves.toEqual({ resultCode: 'PERMISSION_DENIED' });
-    expect(deps.listProjects).not.toHaveBeenCalled();
+    expect(deps.getProject).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before readiness when the exact target is absent or soft-deleted', async () => {
+    const deps = dependencies();
+    deps.getProject = vi.fn().mockResolvedValue(null);
+
+    await expect(publish(deps)).resolves.toEqual({
+      resultCode: 'NOT_READY', readinessCode: 'PROJECT_NOT_FOUND', blockers: ['Project not found'],
+    });
+    expect(deps.getReadiness).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
 
   it('composes from the deployed head and does not re-add an unrelated lifecycle-published row', async () => {
@@ -222,9 +230,9 @@ describe('ledger-backed controlled publication', () => {
     // The pre-readiness read sees A. Before readiness and reservation, a legitimate concurrent
     // workflow replaces the participant-facing representation with B and establishes fresh valid
     // participant confirmation for B.
-    deps.listProjects = vi.fn()
-      .mockResolvedValueOnce([staleA])
-      .mockResolvedValue([authoritativeB]);
+    deps.getProject = vi.fn()
+      .mockResolvedValueOnce(staleA)
+      .mockResolvedValue(authoritativeB);
     // Readiness therefore returns B's exact confirmation evidence, which is what
     // reserve_public_feed_operation independently re-proves and freezes on the durable operation.
     deps.getReadiness = vi.fn().mockResolvedValue({
@@ -264,6 +272,32 @@ describe('ledger-backed controlled publication', () => {
     expect(artifact.feed.map((record) => record.publicId)).toEqual(['deployed', 'target']);
   });
 
+  it('fails explicitly when the exact target disappears after reservation', async () => {
+    const deps = dependencies();
+    deps.getProject = vi.fn()
+      .mockResolvedValueOnce(createMockProject({ publicId: 'target', status: 'approved' }))
+      .mockResolvedValueOnce(null);
+    const baseline = createPublicFeedArtifact([
+      toPublicFeedRecord(createMockProject({ publicId: 'deployed', status: 'published' })),
+    ]);
+    mocks.execute.mockImplementation(async (params) => {
+      try {
+        await params.prepareCandidate(baseline);
+        throw new Error('EXPECTED_PROJECT_NOT_FOUND');
+      } catch (error) {
+        return {
+          resultCode: 'EXECUTION_FAILED',
+          failureCode: error instanceof Error ? error.message : 'EXECUTION_UNAVAILABLE',
+        };
+      }
+    });
+
+    await expect(publish(deps)).resolves.toEqual({
+      resultCode: 'EXECUTION_FAILED', failureCode: 'PROJECT_NOT_FOUND',
+    });
+    expect(deps.getProject).toHaveBeenCalledTimes(2);
+  });
+
   it('binds the authoritative post-reservation target for deployment reconciliation', async () => {
     const staleA = createMockProject({
       publicId: 'target', status: 'published',
@@ -275,9 +309,9 @@ describe('ledger-backed controlled publication', () => {
     });
 
     const deps = dependencies();
-    deps.listProjects = vi.fn()
-      .mockResolvedValueOnce([staleA])
-      .mockResolvedValue([authoritativeB]);
+    deps.getProject = vi.fn()
+      .mockResolvedValueOnce(staleA)
+      .mockResolvedValue(authoritativeB);
     deps.getReconciliationReadiness = vi.fn().mockResolvedValue({
       resultCode: 'READY', ready: true, blockers: [],
       confirmedPreviewId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',

@@ -29,6 +29,18 @@ fail() {
   exit 1
 }
 
+assert_linux_amd64_platform() {
+  platform=$1
+  [ "$platform" = 'linux/amd64' ] \
+    || fail "the currently qualified Profile B worker requires a linux/amd64 Docker engine; detected '$platform'. Use a Linux amd64 host; ARM and emulation are not qualified"
+}
+
+assert_docker_engine_architecture() {
+  engine_platform=$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}' 2>/dev/null) \
+    || fail "could not determine the Docker engine platform; the currently qualified Profile B worker requires linux/amd64"
+  assert_linux_amd64_platform "$engine_platform"
+}
+
 canonical_file() {
   [ -f "$1" ] || fail "environment file does not exist"
   command -v realpath >/dev/null 2>&1 || fail "realpath is required"
@@ -160,6 +172,13 @@ self_test() {
     fail "self-test accepted a different container image ID"
   fi
 
+  assert_linux_amd64_platform 'linux/amd64'
+  architecture_failure=$( (assert_linux_amd64_platform 'linux/arm64') 2>&1 || true )
+  printf '%s' "$architecture_failure" | grep -Fq 'linux/amd64' \
+    || fail "self-test did not reject a non-amd64 Docker engine with the qualified architecture message"
+  printf '%s' "$architecture_failure" | grep -Fq 'ARM and emulation are not qualified' \
+    || fail "self-test architecture message did not explain the unsupported ARM/emulation path"
+
   assert_secret_context_protections "$repo_root/.dockerignore"
   assert_compose_profile "$script_dir/compose.yaml" staging
   assert_compose_profile "$script_dir/compose.production.yaml" production
@@ -186,6 +205,7 @@ command -v git >/dev/null 2>&1 || fail "git is required to verify the source ide
 command -v docker >/dev/null 2>&1 || fail "Docker is required"
 docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is required"
 docker info >/dev/null 2>&1 || fail "the Docker daemon is not available"
+assert_docker_engine_architecture
 
 env_file=$(canonical_file "$env_file")
 assert_path_outside_context "$env_file" "$repo_root"

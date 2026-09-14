@@ -4,6 +4,7 @@ import {
   PARTICIPANT_PREVIEW_EMAIL_ENABLED_VAR,
   PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE_VAR,
   resolveParticipantPreviewEmailConfig,
+  type ParticipantPreviewEmailConfigResult,
   type ParticipantPreviewEmailSmtpConfig,
   type ParticipantPreviewEmailEnv,
 } from '../notifications/participantPreviewEmailConfig';
@@ -67,7 +68,8 @@ export type HostedParticipantPreviewReminderConfigResult =
       state: 'READY';
       supabaseUrl: string;
       supabaseSecretKey: string;
-      smtp: ParticipantPreviewEmailSmtpConfig;
+      emailConfig: ParticipantPreviewEmailConfigResult & { enabled: true };
+      smtp?: ParticipantPreviewEmailSmtpConfig;
       fromAddress: string;
       pollIntervalMs: number;
       batchLimit: number;
@@ -179,14 +181,16 @@ export function resolveHostedParticipantPreviewReminderConfig(
     return { state: 'CONFIGURATION_INVALID', reason: 'PRODUCTION_CAPABILITY_DISABLED' };
   }
 
-  const secureFlag = env[PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE_VAR]?.trim().toLowerCase();
-  if (secureFlag !== 'true' && secureFlag !== 'false') {
-    return { state: 'CONFIGURATION_INVALID', reason: 'EMAIL_CONFIGURATION_INCOMPLETE' };
-  }
-
   const email = resolveParticipantPreviewEmailConfig(env);
   if (!email.enabled) {
     return { state: 'CONFIGURATION_INVALID', reason: 'EMAIL_CONFIGURATION_INCOMPLETE' };
+  }
+
+  if (email.provider === 'smtp') {
+    const secureFlag = env[PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE_VAR]?.trim().toLowerCase();
+    if (secureFlag !== 'true' && secureFlag !== 'false') {
+      return { state: 'CONFIGURATION_INVALID', reason: 'EMAIL_CONFIGURATION_INCOMPLETE' };
+    }
   }
 
   const pollIntervalMs = boundedInteger(
@@ -239,8 +243,9 @@ export function resolveHostedParticipantPreviewReminderConfig(
     state: 'READY',
     supabaseUrl,
     supabaseSecretKey: secretKey,
-    smtp: { ...email.smtp, requireTLS: true },
-    fromAddress: email.smtp.from,
+    emailConfig: email,
+    smtp: email.provider === 'smtp' ? { ...email.smtp, requireTLS: true } : undefined,
+    fromAddress: email.fromAddress,
     pollIntervalMs,
     batchLimit,
   };

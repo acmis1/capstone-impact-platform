@@ -167,7 +167,8 @@ export const FEATURED_MEDIA_MAPPINGS: Record<string, string> = {
   'poster': 'poster',
   'gallery': 'snapshots',
   'snapshots': 'snapshots',
-  'video': 'video'
+  'video': 'video',
+  'none': 'none'
 };
 
 export function normalizeShowcaseLayout(input: string): string | null {
@@ -187,7 +188,9 @@ export interface ColumnDefinition {
     | GalleryAltTextInternalField
     | GalleryTextEquivalentInternalField
     | 'templateId'
-    | 'featuredMedia';
+    | 'featuredMedia'
+    | 'sectionOrder'
+    | 'hiddenSections';
   required: boolean;
   aliases: string[];
 }
@@ -322,6 +325,18 @@ export const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     internalField: 'featuredMedia',
     required: false,
     aliases: ['main media to feature', 'mainmediatofeature', 'featuredmedia', 'featured media']
+  },
+  {
+    canonicalName: 'Section order',
+    internalField: 'sectionOrder',
+    required: false,
+    aliases: ['section order', 'sectionorder', 'layout section order']
+  },
+  {
+    canonicalName: 'Hidden sections',
+    internalField: 'hiddenSections',
+    required: false,
+    aliases: ['hidden sections', 'hiddensections', 'optional hidden sections']
   },
   {
     canonicalName: 'Poster full text',

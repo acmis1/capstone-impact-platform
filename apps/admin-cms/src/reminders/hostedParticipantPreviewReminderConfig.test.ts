@@ -250,4 +250,23 @@ describe('hosted participant preview reminder configuration', () => {
       PARTICIPANT_PREVIEW_REMINDERS_BATCH_LIMIT: value,
     })).toEqual({ state: 'CONFIGURATION_INVALID', reason: 'BATCH_LIMIT_INVALID' });
   });
+
+  it('accepts a valid Brevo HTTPS email provider configuration without requiring SMTP variables', () => {
+    const brevoEnv = {
+      ...VALID,
+      PARTICIPANT_PREVIEW_EMAIL_PROVIDER: 'brevo',
+      PARTICIPANT_PREVIEW_EMAIL_BREVO_API_KEY: 'xkeysib-reminder-key-99',
+      PARTICIPANT_PREVIEW_EMAIL_FROM: 'reminders@capstone.test',
+      PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST: undefined,
+      PARTICIPANT_PREVIEW_EMAIL_SMTP_PORT: undefined,
+      PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE: undefined,
+    };
+
+    const result = resolveHostedParticipantPreviewReminderConfig(brevoEnv);
+    expect(result.state).toBe('READY');
+    if (result.state !== 'READY') throw new Error('expected READY');
+    expect(result.fromAddress).toBe('reminders@capstone.test');
+    expect(result.emailConfig.provider).toBe('brevo');
+    expect(result.emailConfig.brevo?.apiKey).toBe('xkeysib-reminder-key-99');
+  });
 });

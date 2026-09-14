@@ -34,6 +34,16 @@ vi.mock('../lib/env', () => ({
 
 const ADMIN_ID = '11111111-2222-3333-4444-555555555555';
 
+function participantLayoutEvidenceClient(layoutConfig: unknown = null) {
+  const maybeSingle = vi.fn().mockResolvedValue({
+    data: { layout_config_snapshot: layoutConfig },
+    error: null,
+  });
+  const eq = vi.fn().mockReturnValue({ maybeSingle });
+  const select = vi.fn().mockReturnValue({ eq });
+  return { from: vi.fn().mockReturnValue({ select }), select, eq, maybeSingle };
+}
+
 describe('Participant Preview Token Utilities', () => {
   it('generates a 256-bit (64 hex char) raw token each call, never repeating', () => {
     const a = generateRawPreviewToken();
@@ -257,6 +267,7 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
   });
 
   it('resolveByTokenHash returns the snapshot and media on a genuine SUCCESS result', async () => {
+    const layoutEvidence = participantLayoutEvidenceClient();
     const mockSupabase = {
       rpc: vi.fn().mockResolvedValue({
         data: {
@@ -268,6 +279,7 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
         },
         error: null,
       }),
+      from: layoutEvidence.from,
     } as unknown as import('@supabase/supabase-js').SupabaseClient;
     const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
 
@@ -275,6 +287,32 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
     expect(result?.previewId).toBe('p1');
     expect(result?.snapshot).toEqual({ title: 'Test Project' });
     expect(result?.mediaSnapshot).toHaveLength(1);
+    expect(layoutEvidence.select).toHaveBeenCalledWith('layout_config_snapshot');
+    expect(layoutEvidence.eq).toHaveBeenCalledWith('id', 'p1');
+  });
+
+  it('resolveByTokenHash attaches validated immutable layout evidence and rejects malformed evidence', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: {
+        resultCode: 'SUCCESS', previewId: 'p1', snapshot: { title: 'Test Project' }, mediaSnapshot: [],
+        expiresAt: '2026-08-17T00:00:00.000Z',
+      },
+      error: null,
+    });
+    const layoutConfig = {
+      templateId: 'poster_showcase', featuredMedia: 'poster',
+      sectionOrder: ['team', 'background', 'solution', 'snapshots', 'video', 'links', 'citations', 'accessibilityText'],
+      hiddenSections: ['video'],
+    };
+    const validEvidence = participantLayoutEvidenceClient(layoutConfig);
+    await expect(new SupabaseParticipantPreviewRepositoryCore({ rpc, from: validEvidence.from } as never)
+      .resolveByTokenHash('a'.repeat(64)))
+      .resolves.toMatchObject({ snapshot: { title: 'Test Project', layoutConfig } });
+
+    const malformedEvidence = participantLayoutEvidenceClient({ ...layoutConfig, sectionOrder: ['team', 'team'] });
+    await expect(new SupabaseParticipantPreviewRepositoryCore({ rpc, from: malformedEvidence.from } as never)
+      .resolveByTokenHash('a'.repeat(64)))
+      .resolves.toBeNull();
   });
 
   it('parses the exact frozen gallery declaration and rejects impossible stored evidence', async () => {
@@ -304,6 +342,7 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
         contentKind: 'text_bearing',
         fullText: 'Accepted 42; pending 3; rejected 0.',
       }])),
+      from: participantLayoutEvidenceClient().from,
     } as unknown as import('@supabase/supabase-js').SupabaseClient;
 
     await expect(new SupabaseParticipantPreviewRepositoryCore(validClient).resolveByTokenHash('a'.repeat(64)))

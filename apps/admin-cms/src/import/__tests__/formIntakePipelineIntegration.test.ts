@@ -6,6 +6,7 @@ import {
 } from '../formIntakeContract';
 import { validateFormIntake } from '../formIntakeValidation';
 import { materializeFormIntakeWorkbook } from '../formIntakeWorkbookMaterializer';
+import { parseProjectDetailsWorkbook } from '../parseProjectDetailsWorkbook';
 import { analyzeBrowserImportServer } from '../parseBrowserImportPreview';
 import {
   SelectionManifest,
@@ -72,6 +73,8 @@ describe('Form Intake to Server Pipeline Integration (MG-05 Compliant)', () => {
     year: '2026',
     templateId: 'poster_showcase',
     featuredMedia: 'poster',
+    sectionOrder: 'team, background, solution, snapshots, video, links, citations, accessibilityText',
+    hiddenSections: 'video',
     posterText: 'Autonomous Rover Navigation Research Poster Full Text',
     accessibilityText: 'Poster with photos and architecture diagrams of the rover',
     snapshotAltText: 'Front camera photo of the rover',
@@ -103,6 +106,11 @@ describe('Form Intake to Server Pipeline Integration (MG-05 Compliant)', () => {
     // 2. Server materializes canonical workbook
     const workbookBuf = await materializeFormIntakeWorkbook(metadata);
     expect(workbookBuf.length).toBeGreaterThan(0);
+    expect((await parseProjectDetailsWorkbook(workbookBuf)).metadata.layoutConfig).toEqual({
+      templateId: 'poster_showcase', featuredMedia: 'poster',
+      sectionOrder: ['team', 'background', 'solution', 'snapshots', 'video', 'links', 'citations', 'accessibilityText'],
+      hiddenSections: ['video'],
+    });
 
     // 3. Prepare client manifest & uploaded files
     const posterBuf = createDummyPngBuffer();

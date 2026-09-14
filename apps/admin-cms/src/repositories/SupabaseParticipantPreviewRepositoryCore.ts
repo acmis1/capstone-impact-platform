@@ -17,6 +17,7 @@ import {
   type SnapshotImageContentKind,
 } from '../domain/galleryTextEquivalent';
 import { normalizeParticipantPreviewTimestamp } from './participantPreviewTimestamp';
+import { resolvedLayoutConfigSchema } from '../domain/layoutConfig';
 
 export const DEFAULT_PREVIEW_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
@@ -443,9 +444,33 @@ export class SupabaseParticipantPreviewRepositoryCore {
       return null;
     }
 
+    // The participant-facing RPC intentionally keeps its historical response shape. Read the
+    // separately immutable layout evidence by the already-resolved preview id using the same
+    // server-only service-role client. A missing value means a pre-layout-recipe preview; an
+    // invalid non-null value fails closed.
+    const { data: layoutEvidence, error: layoutEvidenceError } = await this.supabase
+      .from('participant_previews')
+      .select('layout_config_snapshot')
+      .eq('id', res.previewId)
+      .maybeSingle();
+    if (layoutEvidenceError || !layoutEvidence) {
+      return null;
+    }
+
+    const parsedLayout = layoutEvidence.layout_config_snapshot === null
+      ? null
+      : resolvedLayoutConfigSchema.safeParse(layoutEvidence.layout_config_snapshot);
+    if (parsedLayout !== null && !parsedLayout.success) {
+      return null;
+    }
+
+    const snapshot = res.snapshot as ParticipantPreviewSnapshot;
+
     return {
       previewId: res.previewId,
-      snapshot: res.snapshot as ParticipantPreviewSnapshot,
+      snapshot: parsedLayout === null
+        ? snapshot
+        : { ...snapshot, layoutConfig: parsedLayout.data },
       mediaSnapshot,
       expiresAt,
     };

@@ -262,6 +262,8 @@ describe('POST /api/projects/[publicId]/participant-preview Route Handler Tests'
     vi.mocked(resolveCanonicalPublicOrigin).mockReturnValue(publicOrigin);
     vi.mocked(resolveParticipantPreviewEmailConfig).mockReturnValue({
       enabled: true,
+      provider: 'smtp',
+      fromAddress: 'noreply@example.test',
       smtp: {
         host: 'smtp.example.test', port: 587, secure: false,
         auth: { user: 'username', password: 'password' }, from: 'noreply@example.test',
@@ -309,5 +311,50 @@ describe('POST /api/projects/[publicId]/participant-preview Route Handler Tests'
 
     expect(res.status).toBe(500);
     expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('13. Routes preview notification through Brevo HTTPS transport when provider is brevo', async () => {
+    const publicOrigin = 'https://capstone-admin-cms-staging-v2.onrender.com';
+    vi.mocked(resolveCanonicalPublicOrigin).mockReturnValue(publicOrigin);
+    vi.mocked(resolveParticipantPreviewEmailConfig).mockReturnValue({
+      enabled: true,
+      provider: 'brevo',
+      brevo: {
+        apiKey: 'xkeysib-test-12345',
+        from: 'brevo-sender@capstone.test',
+        fromName: 'Capstone Impact',
+        sandbox: false,
+      },
+      fromAddress: 'brevo-sender@capstone.test',
+    });
+    vi.mocked(requireAdmin).mockResolvedValue({
+      adminUserId: mockAdminId,
+      permissions: ['projects.review'],
+    } as never);
+    vi.spyOn(
+      SupabaseParticipantPreviewNotificationRepository.prototype,
+      'generatePreviewWithNotification',
+    ).mockResolvedValue({
+      resultCode: 'SUCCESS',
+      value: {
+        previewId: 'prev-brevo-test', publicId: mockPublicId,
+        createdAt: '2026-08-17T03:43:43.849Z', expiresAt: '2026-08-24T03:43:43.849Z',
+        projectTitle: 'Brevo Project', notificationId: 'notification-brevo-1', executionToken: 'token-brevo-1',
+        recipient: 'participant-brevo@example.test', requestedAt: '2026-08-17T03:43:43.849Z',
+      },
+    });
+    vi.mocked(executeParticipantPreviewNotification).mockResolvedValue({
+      code: 'SENT', message: 'Sent.', failureCode: null,
+    });
+
+    const res = await previewPOST(createRequest({ body: { sendEmail: true } }), {
+      params: Promise.resolve({ publicId: mockPublicId }),
+    });
+    expect(res.status).toBe(200);
+
+    const [context, input] = vi.mocked(executeParticipantPreviewNotification).mock.calls.at(-1)!;
+    expect(input.fromAddress).toBe('brevo-sender@capstone.test');
+    expect(input.recipient).toBe('participant-brevo@example.test');
+    expect(context.transport.constructor.name).toBe('BrevoParticipantPreviewEmailTransport');
   });
 });

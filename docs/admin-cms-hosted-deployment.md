@@ -147,8 +147,10 @@ same application code:
 - **Profile A — zero-cost on-demand executor.** A small scheduled dispatcher reserves one launch
   unit in the database and then starts a scale-to-zero heavy worker. Bounded by a hard ceiling of
   40 starts per rolling 31-day window, enforced by database constraint.
-- **Profile B — School-owned continuous worker.** The same image run continuously on School
-  compute. No cloud account, no ceiling, no polling delay.
+- **Profile B — School-owned continuous worker.** The same image run continuously on a
+  School-controlled Linux amd64 (`linux/amd64`) Docker host. No worker compute cloud account,
+  dispatcher, ceiling, or polling delay; the approved Supabase runtime is still required. ARM and
+  emulation are not qualified.
 
 Deployment, operation, troubleshooting, the launch-ceiling semantics, and the honest statement of
 what the zero-cost profile does *not* promise are all in
@@ -318,7 +320,7 @@ A historical target at the 48-migration baseline predates migrations 0049–0051
 ### B. Governed Evidence Boundary
 The active staging-v2 migration history is a separate Gate 3 evidence layer from the Gate 4 schema, grant, RLS, and RPC verification that may be required for a release:
 - **Migration History (Gate 3)**: Current hosted evidence is 57 rows through `20260911120000_gallery_full_text_equivalents`; the 46-row, 48/48, and 52-row records remain historical observations.
-- **Schema & Grants (Gate 4)**: Fresh hosted structural totals match the 57-migration repository contract, while the exact repository/disposable comparison is `GATE4_MATCH`. The hosted snapshot was not persisted as a formal comparator artifact, and structural parity alone does not prove data, recovery, monitoring, or UAT.
+- **Schema & Grants (Gate 4)**: Fresh hosted structural totals match the 57-migration hosted release contract that was current for that evidence capture, while the exact repository/disposable comparison is `GATE4_MATCH`. The hosted snapshot was not persisted as a formal comparator artifact, and structural parity alone does not prove data, recovery, monitoring, or UAT.
 - **Other Gates**: Render deployment identity has separately matched `90646e084f827e399617078b21a91dee3e899799` in bounded read-only smoke. Current-52 Auth/Storage recovery remains separately documented above; UAT, monitoring, formal RPO/RTO, and release acceptance remain their own gates.
 
 Auth readiness is verified via:

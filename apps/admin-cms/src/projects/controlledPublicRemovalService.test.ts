@@ -19,7 +19,7 @@ function dependencies(status: 'published' | 'archived' = 'published'): Controlle
   return {
     supabase: {} as SupabaseClient, adminId: '11111111-1111-4111-8111-111111111111',
     feedBucket: 'feeds', feedPath: 'feed.json', assertExecutionEnvironment: vi.fn(),
-    listProjects: vi.fn().mockResolvedValue([createMockProject({ publicId: 'target', status })]),
+    getProject: vi.fn().mockResolvedValue(createMockProject({ publicId: 'target', status })),
   };
 }
 
@@ -53,7 +53,7 @@ describe('ledger-backed controlled public removal', () => {
     await expect(executeControlledPublicRemoval({
       permissions: ['projects.read'], publicId: 'target', archiveReason: 'Archive', dependencies: deps,
     })).resolves.toEqual({ resultCode: 'PERMISSION_DENIED' });
-    expect(deps.listProjects).not.toHaveBeenCalled();
+    expect(deps.getProject).not.toHaveBeenCalled();
   });
 
   it('preserves the existing sanitized failure before reads when execution policy rejects the runtime', async () => {
@@ -62,7 +62,15 @@ describe('ledger-backed controlled public removal', () => {
     await expect(remove(deps)).resolves.toEqual({
       resultCode: 'EXECUTION_FAILED', failureCode: 'NON_LOCAL_ENVIRONMENT',
     });
-    expect(deps.listProjects).not.toHaveBeenCalled();
+    expect(deps.getProject).not.toHaveBeenCalled();
+  });
+
+  it('treats an absent or soft-deleted exact target as not published', async () => {
+    const deps = dependencies();
+    deps.getProject = vi.fn().mockResolvedValue(null);
+
+    await expect(remove(deps)).resolves.toEqual({ resultCode: 'NOT_PUBLISHED' });
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
 
   it('removes only the exact deployed publicId and preserves unrelated ordering', async () => {

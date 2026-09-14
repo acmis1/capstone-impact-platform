@@ -17,6 +17,7 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
 
 export const STAFF_NAVIGATION_ITEM: NavigationItem = { name: 'Staff access', href: '/admin/staff' };
 export const TAXONOMY_NAVIGATION_ITEM: NavigationItem = { name: 'Project categories', href: '/admin/taxonomy' };
+export const LAYOUT_RECIPES_NAVIGATION_ITEM: NavigationItem = { name: 'Layout recipes', href: '/admin/layout-recipes' };
 
 /**
  * Navigation for a staff member's resolved authority. Omitting the staff-access entry is a
@@ -27,6 +28,7 @@ export function getNavigationItems(canManageStaff: boolean, canManageTaxonomy = 
   return [
     ...NAVIGATION_ITEMS,
     ...(canManageTaxonomy ? [TAXONOMY_NAVIGATION_ITEM] : []),
+    ...(canManageTaxonomy ? [LAYOUT_RECIPES_NAVIGATION_ITEM] : []),
     ...(canManageStaff ? [STAFF_NAVIGATION_ITEM] : []),
   ];
 }
@@ -48,6 +50,14 @@ export function getRouteDescriptor(pathname: string): RouteDescriptor {
       title: 'Project categories',
       breadcrumbs: [{ label: 'Project categories' }],
       activeHref: '/admin/taxonomy',
+    };
+  }
+
+  if (cleanPath === '/admin/layout-recipes') {
+    return {
+      title: 'Layout recipes',
+      breadcrumbs: [{ label: 'Layout recipes' }],
+      activeHref: '/admin/layout-recipes',
     };
   }
 

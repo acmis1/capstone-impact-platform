@@ -32,6 +32,22 @@ function createValidMediaState(): FormIntakeMediaState {
 }
 
 describe('formIntakeValidation', () => {
+  it('rejects incomplete, duplicate, unknown, mandatory-hidden and featured-hidden recipe values', () => {
+    const invalidLayouts: Array<Partial<FormIntakeMetadata>> = [
+      { sectionOrder: 'team, background' },
+      { sectionOrder: 'team, team, background, solution, snapshots, video, links, citations' },
+      { sectionOrder: 'team, background, solution, snapshots, video, links, citations, arbitraryHtml' },
+      { hiddenSections: 'team' },
+      { hiddenSections: 'snapshots' },
+      { featuredMedia: 'video', hiddenSections: 'video' },
+    ];
+    for (const override of invalidLayouts) {
+      const result = validateFormIntake({ ...createValidMetadata(), ...override }, createValidMediaState());
+      expect(result.valid).toBe(false);
+      expect(result.errors.layoutConfig).toContain('complete supported section order');
+    }
+  });
+
   it('passes when all required metadata and media are valid (no gallery images)', () => {
     const metadata = createValidMetadata();
     const media = createValidMediaState();

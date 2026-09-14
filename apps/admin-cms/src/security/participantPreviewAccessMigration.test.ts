@@ -23,13 +23,14 @@ describe('participant preview response-observation migration', () => {
     const files = fs.readdirSync(path.join(root, 'infra/supabase/migrations'))
       .filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
-    expect(files).toHaveLength(57);
-    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(57);
-    expect(files.at(-3)).toBe(filename);
-    expect(files.at(-2)).toBe('20260910120200_assistive_worker_production_identity.sql');
-    expect(files.at(-1)).toBe('20260911120000_gallery_full_text_equivalents.sql');
+    expect(files).toHaveLength(58);
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(58);
+    expect(files.at(-4)).toBe(filename);
+    expect(files.at(-3)).toBe('20260910120200_assistive_worker_production_identity.sql');
+    expect(files.at(-2)).toBe('20260911120000_gallery_full_text_equivalents.sql');
+    expect(files.at(-1)).toBe('20260914100000_layout_recipe_library.sql');
     expect(REQUIRED_RPC_NAMES).toContain('record_participant_preview_response_prepared');
-    expect(REQUIRED_RPC_SIGNATURES).toHaveLength(92);
+    expect(REQUIRED_RPC_SIGNATURES).toHaveLength(95);
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'HEAD', '--',
       ...files.slice(0, -1).map((file) => `infra/supabase/migrations/${file}`),

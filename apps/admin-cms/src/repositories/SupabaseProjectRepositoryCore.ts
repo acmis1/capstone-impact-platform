@@ -46,6 +46,10 @@ function projectSelectForQuery(query: ProjectListQuery): string {
 const PROJECT_FILTER_OPTION_CHUNK_SIZE = 500;
 /** Safety limit to prevent an infinite pagination loop for filter options. */
 const PROJECT_FILTER_OPTION_MAX_ITERATIONS = 200;
+/** Requested page size; PostgREST may enforce a smaller server-side maximum. */
+const PROJECT_LIST_PAGE_SIZE = 1000;
+/** Safety limit for a continuously growing or otherwise non-terminating retained-project scan. */
+const PROJECT_LIST_MAX_ITERATIONS = 10_000;
 
 export interface DatabaseProjectRow {
   id: string;
@@ -324,19 +328,67 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     return Math.abs(hash) % 2147483647;
   }
 
-  async listProjects(): Promise<Project[]> {
-    const { data, error } = await this.supabase
-      .from('projects')
-      .select(PROJECT_WITH_RELATIONS_SELECT)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .order('public_id', { ascending: true });
+  private async scanProjectRowsByPublicId(): Promise<DatabaseProjectRow[]> {
+    const rows: DatabaseProjectRow[] = [];
+    let cursor: string | null = null;
 
-    if (error) {
-      throw new Error(`Failed to list projects from Supabase: ${error.message}`);
+    for (let iteration = 0; iteration < PROJECT_LIST_MAX_ITERATIONS; iteration += 1) {
+      let query = this.supabase
+        .from('projects')
+        .select(PROJECT_WITH_RELATIONS_SELECT)
+        .is('deleted_at', null)
+        .order('public_id', { ascending: true })
+        .limit(PROJECT_LIST_PAGE_SIZE);
+      if (cursor !== null) query = query.gt('public_id', cursor);
+
+      const { data, error } = await query;
+      if (error) {
+        throw new Error(`Failed to list projects from Supabase page ${iteration + 1}: ${error.message}`);
+      }
+
+      const page = (data || []) as DatabaseProjectRow[];
+      if (page.length === 0) return rows;
+
+      let previousPublicId: string | null = cursor;
+      for (const row of page) {
+        if (
+          typeof row.public_id !== 'string'
+          || row.public_id.length === 0
+          || (previousPublicId !== null && row.public_id <= previousPublicId)
+        ) {
+          throw new Error(
+            'Failed to list projects from Supabase: non-unique or out-of-order public_id during pagination',
+          );
+        }
+        rows.push(row);
+        previousPublicId = row.public_id;
+      }
+      cursor = previousPublicId;
     }
 
-    return (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
+    throw new Error('Failed to list projects from Supabase: pagination did not terminate safely');
+  }
+
+  async listProjects(): Promise<Project[]> {
+    // A keyset scan cannot silently skip rows when PostgREST returns fewer rows than requested.
+    // Repeating the complete scan makes overlapping inserts/deletions observable: callers receive
+    // either one stable retained identity set or an explicit failure. This is not a database
+    // transaction snapshot; a mutation after the second scan can still occur normally.
+    const firstScan = await this.scanProjectRowsByPublicId();
+    const stableScan = await this.scanProjectRowsByPublicId();
+    if (
+      firstScan.length !== stableScan.length
+      || firstScan.some((row, index) => row.public_id !== stableScan[index]?.public_id)
+    ) {
+      throw new Error('Failed to list projects from Supabase: project identity set changed during pagination');
+    }
+
+    return stableScan
+      .sort((left, right) => {
+        const createdAtOrder = (right.created_at || '').localeCompare(left.created_at || '');
+        return createdAtOrder !== 0 ? createdAtOrder : left.public_id.localeCompare(right.public_id);
+      })
+      .map((row) => this.mapDbToDomain(row));
   }
 
   private buildFilteredQuery(query: ProjectListQuery, selectOpts?: { count?: 'exact' }) {

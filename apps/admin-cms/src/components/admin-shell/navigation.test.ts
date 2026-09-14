@@ -23,6 +23,14 @@ describe('navigation module', () => {
   it('shows project categories only to staff with the dedicated taxonomy capability', () => {
     expect(getNavigationItems(false, false)).not.toContainEqual({ name: 'Project categories', href: '/admin/taxonomy' });
     expect(getNavigationItems(false, true)).toContainEqual({ name: 'Project categories', href: '/admin/taxonomy' });
+    expect(getNavigationItems(false, false)).not.toContainEqual({ name: 'Layout recipes', href: '/admin/layout-recipes' });
+    expect(getNavigationItems(false, true)).toContainEqual({ name: 'Layout recipes', href: '/admin/layout-recipes' });
+  });
+
+  it('maps the layout recipe route to its own navigation item', () => {
+    expect(getRouteDescriptor('/admin/layout-recipes')).toEqual({
+      title: 'Layout recipes', breadcrumbs: [{ label: 'Layout recipes' }], activeHref: '/admin/layout-recipes',
+    });
   });
 
   it('maps the project categories route to its own navigation item', () => {

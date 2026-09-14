@@ -15,15 +15,25 @@
  */
 
 export const PARTICIPANT_PREVIEW_EMAIL_ENABLED_VAR = 'PARTICIPANT_PREVIEW_EMAIL_ENABLED';
+export const PARTICIPANT_PREVIEW_EMAIL_PROVIDER_VAR = 'PARTICIPANT_PREVIEW_EMAIL_PROVIDER';
+
+// SMTP transport variables
 export const PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST_VAR = 'PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST';
 export const PARTICIPANT_PREVIEW_EMAIL_SMTP_PORT_VAR = 'PARTICIPANT_PREVIEW_EMAIL_SMTP_PORT';
 export const PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE_VAR = 'PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE';
 export const PARTICIPANT_PREVIEW_EMAIL_SMTP_USER_VAR = 'PARTICIPANT_PREVIEW_EMAIL_SMTP_USER';
 export const PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD_VAR = 'PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD';
+
+// Shared and Brevo HTTPS transport variables
 export const PARTICIPANT_PREVIEW_EMAIL_FROM_VAR = 'PARTICIPANT_PREVIEW_EMAIL_FROM';
+export const PARTICIPANT_PREVIEW_EMAIL_FROM_NAME_VAR = 'PARTICIPANT_PREVIEW_EMAIL_FROM_NAME';
+export const PARTICIPANT_PREVIEW_EMAIL_BREVO_API_KEY_VAR = 'PARTICIPANT_PREVIEW_EMAIL_BREVO_API_KEY';
+export const PARTICIPANT_PREVIEW_EMAIL_BREVO_SANDBOX_VAR = 'PARTICIPANT_PREVIEW_EMAIL_BREVO_SANDBOX';
 
 /** A plain environment view, so the resolver stays a pure function that tests can drive directly. */
 export type ParticipantPreviewEmailEnv = Record<string, string | undefined>;
+
+export type ParticipantPreviewEmailProvider = 'smtp' | 'brevo';
 
 export interface ParticipantPreviewEmailSmtpConfig {
   host: string;
@@ -37,9 +47,33 @@ export interface ParticipantPreviewEmailSmtpConfig {
   from: string;
 }
 
+export interface ParticipantPreviewEmailBrevoConfig {
+  /** Brevo v3 API Key (xkeysib-...). Never logged or returned to clients. */
+  apiKey: string;
+  /** Verified sender email address. */
+  from: string;
+  /** Optional display name for the sender. */
+  fromName?: string;
+  /** Whether sandbox mode is active (drop delivery, validates API request only). */
+  sandbox: boolean;
+}
+
 export type ParticipantPreviewEmailConfigResult =
-  | { enabled: true; smtp: ParticipantPreviewEmailSmtpConfig }
-  | { enabled: false };
+  | {
+      enabled: true;
+      provider?: 'smtp';
+      smtp: ParticipantPreviewEmailSmtpConfig;
+      brevo?: never;
+      fromAddress: string;
+    }
+  | {
+      enabled: true;
+      provider: 'brevo';
+      brevo: ParticipantPreviewEmailBrevoConfig;
+      smtp?: never;
+      fromAddress: string;
+    }
+  | { enabled: false; provider?: never; smtp?: never; brevo?: never; fromAddress?: never };
 
 /** Only this exact value enables delivery; everything else — including absent — is disabled. */
 export function isParticipantPreviewEmailEnabledValue(raw: string | undefined | null): boolean {
@@ -57,6 +91,16 @@ function readBounded(raw: string | undefined, maxLength: number): string | null 
   return value;
 }
 
+function isValidEmailAddress(value: string): boolean {
+  if (value.length > 254) return false;
+  const parts = value.split('@');
+  if (parts.length !== 2) return false;
+  const [local, domain] = parts;
+  if (!local || !domain) return false;
+  if (domain.indexOf('.') === -1) return false;
+  return !/\s/.test(value);
+}
+
 /**
  * Resolves the complete transport configuration, or reports disabled. Partial configuration is
  * treated as disabled rather than as an error: an operator who has set only some of the variables
@@ -70,6 +114,40 @@ export function resolveParticipantPreviewEmailConfig(
     return { enabled: false };
   }
 
+  const rawProvider = env[PARTICIPANT_PREVIEW_EMAIL_PROVIDER_VAR]?.trim().toLowerCase();
+  const provider = !rawProvider || rawProvider === 'smtp' ? 'smtp' : rawProvider === 'brevo' ? 'brevo' : null;
+
+  if (provider === null) {
+    // Unsupported or malformed provider specified
+    return { enabled: false };
+  }
+
+  if (provider === 'brevo') {
+    const apiKey = readBounded(env[PARTICIPANT_PREVIEW_EMAIL_BREVO_API_KEY_VAR], 512);
+    const from = readBounded(env[PARTICIPANT_PREVIEW_EMAIL_FROM_VAR], 254);
+    const fromName = readBounded(env[PARTICIPANT_PREVIEW_EMAIL_FROM_NAME_VAR], 70) ?? undefined;
+    const sandbox = isParticipantPreviewEmailEnabledValue(
+      env[PARTICIPANT_PREVIEW_EMAIL_BREVO_SANDBOX_VAR],
+    );
+
+    if (!apiKey || !from || !isValidEmailAddress(from)) {
+      return { enabled: false };
+    }
+
+    return {
+      enabled: true,
+      provider: 'brevo',
+      brevo: {
+        apiKey,
+        from,
+        ...(fromName ? { fromName } : {}),
+        sandbox,
+      },
+      fromAddress: from,
+    };
+  }
+
+  // SMTP provider
   const host = readBounded(env[PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST_VAR], 253);
   const from = readBounded(env[PARTICIPANT_PREVIEW_EMAIL_FROM_VAR], 254);
   const rawPort = readBounded(env[PARTICIPANT_PREVIEW_EMAIL_SMTP_PORT_VAR], 5);
@@ -86,6 +164,7 @@ export function resolveParticipantPreviewEmailConfig(
 
   return {
     enabled: true,
+    provider: 'smtp',
     smtp: {
       host,
       port,
@@ -95,6 +174,7 @@ export function resolveParticipantPreviewEmailConfig(
       auth: user && password ? { user, password } : null,
       from,
     },
+    fromAddress: from,
   };
 }
 
