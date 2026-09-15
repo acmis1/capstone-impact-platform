@@ -51,6 +51,16 @@ The autonomous coding agent cannot and must not create external accounts or log 
 
 ---
 
+### Recorded TEST qualification result — 2026-09-15
+
+The team-controlled Free account completed the bounded provider qualification sequence. Transactional previews are set to **Never store previews**, log retention is **1 month** (the shortest available), and **Anonymous email tracking? = Yes** is recorded as anonymization rather than tracking disablement. The verified test sender and API key remain outside repository evidence.
+
+The patched verifier returned `SANDBOX_NO_DELIVERY` against Brevo sandbox/drop mode. Exactly one subsequently authorised live synthetic canary was accepted and received by the team-controlled test mailbox. Its expected `https://example.com/pp1-brevo-canary/<runId>` anchor was **rewritten through Brevo tracking infrastructure** rather than preserved byte-for-byte.
+
+Therefore Brevo is **provider-connectivity verified but not qualified for participant capability-bearing preview links** under this runbook. Keep `PARTICIPANT_PREVIEW_EMAIL_ENABLED` disabled for that workflow and retain the manual token/copy fallback until an institutional provider or provider configuration demonstrably preserves the exact capability URL. Do not send another qualification canary merely to repeat this result.
+
+---
+
 ## 4. Environment Variables Reference
 
 | Variable | Required | Default | Description |
