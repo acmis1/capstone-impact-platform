@@ -6,6 +6,7 @@ import {
 } from '../domain/participantPreview';
 import { validateProjectControlledUrl } from '../domain/projectControlledUrl';
 import { MAX_CORRECTION_COMMENT_LENGTH } from './participantPreviewCorrectionComment';
+import { resolvedLayoutConfigSchema, type LayoutSectionId } from '../domain/layoutConfig';
 
 export class ParticipantPreviewMediaAccessibilityError extends Error {
   constructor(message: string) {
@@ -369,6 +370,152 @@ function renderReferences(snapshot: ParticipantPreviewSnapshot): string {
   </section>`;
 }
 
+function renderConfiguredMedia(
+  media: ParticipantPreviewMediaViewRef[],
+  accessibilityText: string | null,
+  kind: 'poster' | 'snapshots' | 'documents',
+  featured = false,
+): string {
+  const available = media.filter((item) => item.signedUrl);
+  const items = kind === 'poster'
+    ? available.filter((item) => item.assetType === 'poster_image')
+    : kind === 'snapshots'
+      ? available.filter((item) => item.assetType === 'snapshot_image')
+      : available.filter((item) => item.assetType !== 'poster_image' && item.assetType !== 'snapshot_image');
+  if (items.length === 0) return '';
+
+  if (kind === 'documents') {
+    return `<section class="review-section media-section" data-layout-evidence="documents">
+      <div class="section-heading"><p class="section-kicker">Visual and document evidence</p><h2>Project documents</h2></div>
+      <div class="document-assets"><ul>${items.map((item) => `<li><a class="document-link" data-media-kind="document" href="${escapeHtml(item.signedUrl as string)}" target="_blank" rel="noopener noreferrer nofollow"><span class="document-link__title">${escapeHtml(item.fileName)}</span><span class="document-link__purpose">Open document in a new tab</span></a></li>`).join('')}</ul></div>
+    </section>`;
+  }
+
+  const heading = kind === 'poster' ? 'Project poster' : 'Supporting images';
+  const figures = items.map((item, index) => renderImageFigure(
+    item,
+    accessibilityText,
+    kind === 'poster' ? 'poster' : 'snapshot',
+    index,
+  )).join('');
+  return `<section class="review-section media-section" data-layout-section="${kind}"${featured ? ' data-layout-featured="true"' : ''}>
+    <div class="section-heading"><p class="section-kicker">${featured ? 'Featured layout media' : 'Visual evidence'}</p><h2>${heading}</h2></div>
+    ${kind === 'poster' ? `<div class="poster-stage">${figures}</div>` : `<div class="supporting-media"><div class="snapshot-gallery">${figures}</div></div>`}
+  </section>`;
+}
+
+function renderConfiguredVideo(snapshot: ParticipantPreviewSnapshot, featured = false): string {
+  if (snapshot.videoUrl === null || snapshot.videoUrl === undefined) return '';
+  const validation = validateProjectControlledUrl(snapshot.videoUrl);
+  if (!validation.valid) {
+    throw new ParticipantPreviewEvidenceError('Participant preview evidence contains an unusable Video link.');
+  }
+  return `<section class="review-section project-links-section" data-layout-section="video"${featured ? ' data-layout-featured="true"' : ''}>
+    <div class="section-heading"><p class="section-kicker">${featured ? 'Featured layout media' : 'Project evidence'}</p><h2>Project video</h2></div>
+    <ul class="reference-list external-links"><li><a href="${escapeHtml(validation.url)}" target="_blank" rel="noopener noreferrer nofollow">Open video<span class="link-purpose"> (opens in a new tab)</span></a></li></ul>
+  </section>`;
+}
+
+function renderConfiguredLinks(snapshot: ParticipantPreviewSnapshot): string {
+  const controlled = [
+    { value: snapshot.demoUrl, label: 'Open live demo / prototype' },
+    { value: snapshot.repositoryUrl, label: 'Open repository' },
+  ].flatMap(({ value, label }) => {
+    if (value === null || value === undefined) return [];
+    const validation = validateProjectControlledUrl(value);
+    if (!validation.valid) {
+      throw new ParticipantPreviewEvidenceError('Participant preview evidence contains an unusable project link.');
+    }
+    return [`<li><a href="${escapeHtml(validation.url)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(label)}<span class="link-purpose"> (opens in a new tab)</span></a></li>`];
+  });
+  const external = renderExternalLinks(snapshot.externalLinks);
+  if (controlled.length === 0 && external.includes('None listed.')) return '';
+  return `<section class="review-section project-links-section" data-layout-section="links">
+    <div class="section-heading"><p class="section-kicker">Project evidence</p><h2>Resources</h2></div>
+    ${controlled.length > 0 ? `<ul class="reference-list external-links">${controlled.join('')}</ul>` : ''}
+    ${!external.includes('None listed.') ? external : ''}
+  </section>`;
+}
+
+function renderConfiguredCitations(snapshot: ParticipantPreviewSnapshot): string {
+  if (snapshot.citations.length === 0) return '';
+  return `<section class="review-section references-section" data-layout-section="citations">
+    <div class="section-heading"><p class="section-kicker">Sources and further reading</p><h2>Citations</h2></div>
+    ${renderList(snapshot.citations, 'reference-list')}
+  </section>`;
+}
+
+function renderConfiguredTextSection(section: 'background' | 'solution', value: string | null): string {
+  if (!value || value.trim() === '') return '';
+  const label = section === 'background' ? 'Background' : 'The solution';
+  return `<section class="review-section overview-section" data-layout-section="${section}">
+    <div class="section-heading"><p class="section-kicker">Project evidence</p><h2>${label}</h2></div>
+    <div class="prose-stack"><div class="prose-field"><p>${renderLongText(value)}</p></div></div>
+  </section>`;
+}
+
+/**
+ * Shows new recipe-backed previews in the same resolved order/visibility/featured-media value
+ * that the maintained public renderer receives. Historical previews take the legacy branch
+ * below unchanged. Required team/context and accessibility evidence are never suppressible.
+ */
+function renderConfiguredParticipantContent(
+  snapshot: ParticipantPreviewSnapshot,
+  media: ParticipantPreviewMediaViewRef[],
+): string {
+  const parsed = resolvedLayoutConfigSchema.safeParse(snapshot.layoutConfig);
+  if (!parsed.success) {
+    throw new ParticipantPreviewEvidenceError('Participant preview layout evidence is malformed.');
+  }
+  const config = parsed.data;
+  const hidden = new Set<LayoutSectionId>(config.hiddenSections);
+  const hasPoster = media.some((item) => item.assetType === 'poster_image' && item.signedUrl);
+  const hasSnapshots = media.some((item) => item.assetType === 'snapshot_image' && item.signedUrl);
+  const hasVideo = !hidden.has('video') && snapshot.videoUrl !== null && snapshot.videoUrl !== undefined;
+
+  let featured: 'poster' | 'snapshots' | 'video' | null = null;
+  if (config.featuredMedia !== 'none') {
+    if (config.featuredMedia === 'poster' && hasPoster) featured = 'poster';
+    else if (config.featuredMedia === 'snapshots' && hasSnapshots) featured = 'snapshots';
+    else if (config.featuredMedia === 'video' && hasVideo) featured = 'video';
+    else if (hasVideo) featured = 'video';
+    else if (hasSnapshots) featured = 'snapshots';
+    else if (hasPoster) featured = 'poster';
+  }
+  if (featured === null && hasPoster && !hasVideo && !hasSnapshots) featured = 'poster';
+
+  const featuredHtml = featured === 'poster'
+    ? renderConfiguredMedia(media, snapshot.accessibilityText, 'poster', true)
+    : featured === 'snapshots'
+      ? renderConfiguredMedia(media, snapshot.accessibilityText, 'snapshots', true)
+      : featured === 'video'
+        ? renderConfiguredVideo(snapshot, true)
+        : '';
+
+  const bySection: Record<LayoutSectionId, () => string> = {
+    background: () => renderConfiguredTextSection('background', snapshot.background),
+    solution: () => renderConfiguredTextSection('solution', snapshot.solution),
+    snapshots: () => featured === 'snapshots'
+      ? ''
+      : renderConfiguredMedia(media, snapshot.accessibilityText, 'snapshots'),
+    video: () => featured === 'video' || hidden.has('video') ? '' : renderConfiguredVideo(snapshot),
+    team: () => `<div data-layout-section="team">${renderProjectContext(snapshot)}</div>`,
+    links: () => hidden.has('links') ? '' : renderConfiguredLinks(snapshot),
+    citations: () => hidden.has('citations') ? '' : renderConfiguredCitations(snapshot),
+    accessibilityText: () => `<div data-layout-section="accessibilityText">${renderAccessibleContent(snapshot)}</div>`,
+  };
+
+  const ordered = config.sectionOrder
+    .map((section) => hidden.has(section) ? '' : bySection[section]())
+    .join('');
+  const remainingPoster = featured === 'poster'
+    ? ''
+    : renderConfiguredMedia(media, snapshot.accessibilityText, 'poster');
+  const documents = renderConfiguredMedia(media, snapshot.accessibilityText, 'documents');
+
+  return `${featuredHtml}${ordered}${remainingPoster}${documents}`;
+}
+
 /** Must match the route header while preserving a real same-origin POST Origin. */
 const PAGE_REFERRER_POLICY = 'strict-origin';
 
@@ -603,6 +750,14 @@ export function renderParticipantPreviewPage(params: {
   correctionForm?: CorrectionFormState;
 }): string {
   const { snapshot, media, responseState } = params;
+  const configuredContent = snapshot.layoutConfig
+    ? renderConfiguredParticipantContent(snapshot, media)
+    : `${renderOverview(snapshot)}
+      ${renderMedia(media, snapshot.accessibilityText)}
+      ${renderAccessibleContent(snapshot)}
+      ${renderProjectContext(snapshot)}
+      ${renderControlledProjectLinks(snapshot)}
+      ${renderReferences(snapshot)}`;
 
   return `<!doctype html>
 <html lang="en">
@@ -630,12 +785,7 @@ export function renderParticipantPreviewPage(params: {
   </header>
   <div class="review-layout">
     <article class="review-content" aria-label="Project information to review">
-      ${renderOverview(snapshot)}
-      ${renderMedia(media, snapshot.accessibilityText)}
-      ${renderAccessibleContent(snapshot)}
-      ${renderProjectContext(snapshot)}
-      ${renderControlledProjectLinks(snapshot)}
-      ${renderReferences(snapshot)}
+      ${configuredContent}
     </article>
     ${renderResponseSection(responseState, params.correctionForm)}
   </div>

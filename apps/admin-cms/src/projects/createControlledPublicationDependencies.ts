@@ -41,7 +41,7 @@ export function createControlledPublicationDependencies(params: {
     }),
     getReadiness: () => previews.getPublicationReadiness({ publicId, adminId, privateBucket }),
     getReconciliationReadiness: () => previews.getReconciliationReadiness({ publicId, adminId, privateBucket }),
-    listProjects: () => projects.listProjects(),
+    getProject: () => projects.getProjectByPublicId(publicId),
     listProjectMedia: () => publication.listProjectMedia(publicId),
     getPublicUrl: (bucket, path) => publication.getPublicUrl(bucket, path),
     downloadObject: (bucket, path) => publication.downloadObject(bucket, path),

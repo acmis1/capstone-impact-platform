@@ -17,15 +17,15 @@ import { collectLocalGate4Evidence } from './checkGate4SchemaEvidence';
 import { MIGRATION_MANAGED_BUCKETS } from '../local-development/localSupabaseFixtures';
 
 /**
- * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 -> 55 -> 56 -> 57 migration transition on a stack this
+ * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 -> 55 -> 56 -> 57 -> 58 migration transition on a stack this
  * verifier owns outright.
  *
  * The known hosted staging-v2 baseline is 48 migrations through
- * 20260831090000_postgres17_maintain_privilege_alignment. A clean 57-migration install proves the
+ * 20260831090000_postgres17_maintain_privilege_alignment. A clean 58-migration install proves the
  * end state but not the transition, and the existing deployment-ledger upgrade proves a different
  * single migration. This rehearsal provisions exactly the 48-migration baseline, seeds the minimum
  * representative synthetic evidence a real 48-state database would hold, applies 0049 through
- * 0057 one at a time in deterministic order, and asserts after each step that nothing existing was
+ * 0058 one at a time in deterministic order, and asserts after each step that nothing existing was
  * rewritten and that the new authority is exactly what the migration declares.
  *
  * Everything is disposable and loopback-only: its own project id, port block, Docker network,
@@ -43,6 +43,7 @@ const RELEASE_MIGRATIONS = [
   { ordinal: 55, version: '20260910120100', file: '20260910120100_participant_preview_access_observations.sql' },
   { ordinal: 56, version: '20260910120200', file: '20260910120200_assistive_worker_production_identity.sql' },
   { ordinal: 57, version: '20260911120000', file: '20260911120000_gallery_full_text_equivalents.sql' },
+  { ordinal: 58, version: '20260914100000', file: '20260914100000_layout_recipe_library.sql' },
 ] as const;
 
 const BASELINE_MIGRATION_COUNT = 48;
@@ -54,6 +55,11 @@ const CORRECTION_TABLES = [
   'participant_correction_prior_revisions',
   'participant_correction_recovery_rows',
   'participant_correction_events',
+] as const;
+
+const LAYOUT_RECIPE_TABLES = [
+  'layout_recipe_versions',
+  'layout_recipe_audit_events',
 ] as const;
 
 const CORRECTION_IMMUTABILITY_TRIGGERS = [
@@ -80,15 +86,16 @@ const CORRECTION_RPC_SIGNATURES = [
  * Rows that must survive 0049 through 0052 byte-identically. Shared taxonomy, publication and
  * deployment-ledger state are included because a release migration must never quietly touch them.
  */
-// The 44-table release inventory minus the four tables first created by 0051 and the three tables
-// first created by 0053/0054/0055 is the exact 37-table public contract at 6125bb56 (0048). Assert the
-// live baseline set before fingerprinting.
+// The 47-table Migration-0058 release inventory minus the two layout-recipe tables, four correction
+// tables and four tables first created by 0053/0054/0055 is the exact 37-table public contract at
+// 6125bb56 (0048). Assert the live baseline set before fingerprinting.
 export const PRESERVED_PUBLIC_TABLES = ALL_REQUIRED_TABLES.filter(
   (table) => table !== 'staff_lifecycle_events'
     && table !== 'participant_preview_access_observations'
     && table !== 'public_feed_rollback_capability_events'
     && table !== 'public_feed_rollback_preparation_capabilities'
-    && !(CORRECTION_TABLES as readonly string[]).includes(table),
+    && !(CORRECTION_TABLES as readonly string[]).includes(table)
+    && !(LAYOUT_RECIPE_TABLES as readonly string[]).includes(table),
 );
 export const PRESERVED_EXECUTION_CONTROL_TABLES = [
   'assistive_execution_control.launch_budget_guard',
@@ -101,14 +108,18 @@ const PRESERVED_TABLES = [
 ];
 const CURRENT_54_TABLES = [
   ...ALL_REQUIRED_TABLES
-    .filter((table) => table !== 'participant_preview_access_observations')
+    .filter((table) => table !== 'participant_preview_access_observations'
+      && !(LAYOUT_RECIPE_TABLES as readonly string[]).includes(table))
     .map((table) => `public.${table}`),
   ...PRESERVED_EXECUTION_CONTROL_TABLES,
 ];
 const CURRENT_55_TABLES = [
-  ...ALL_REQUIRED_TABLES.map((table) => `public.${table}`),
+  ...ALL_REQUIRED_TABLES
+    .filter((table) => !(LAYOUT_RECIPE_TABLES as readonly string[]).includes(table))
+    .map((table) => `public.${table}`),
   ...PRESERVED_EXECUTION_CONTROL_TABLES,
 ];
+const CURRENT_57_TABLES = CURRENT_55_TABLES;
 
 /** Exact overloads of the participant-preview issuance authority and its legacy wrapper. */
 const PREVIEW_ISSUANCE_IDENTITY = 'p_public_id text, p_admin_id uuid, p_token_hash text, p_expires_in_seconds integer, p_private_bucket text, p_is_correction_reissue boolean';
@@ -1295,6 +1306,16 @@ function historicalMediaAssetFingerprint(): string {
   );
 }
 
+/** Digest participant preview rows on their pre-0058 columns so the additive layout snapshot cannot mask drift. */
+function historicalParticipantPreviewFingerprint(): string {
+  return psql(
+    "SELECT pg_catalog.count(*)::text || ':' || pg_catalog.encode(pg_catalog.sha256("
+    + "pg_catalog.convert_to(COALESCE(pg_catalog.string_agg(row_text, chr(10) ORDER BY row_text), ''), 'UTF8')), 'hex')"
+    + " FROM (SELECT (pg_catalog.to_jsonb(preview) - 'layout_config_snapshot')::text AS row_text"
+    + ' FROM public.participant_previews AS preview) AS s;',
+  );
+}
+
 /** Runs a mutation that must be refused by the gallery text-equivalent check constraint. */
 function assertGalleryCheckRefuses(mutation: string, label: string): void {
   const diagnosticLabel = label.replaceAll("'", "''");
@@ -1403,6 +1424,160 @@ function assertAfter57(
   console.log('PASS: Migration 0057 preserved all current 0056 data, performed no backfill, and installed the gallery text-equivalent contract');
 }
 
+function assertAfter58(
+  current57Tables: Record<string, string>,
+  participantPreviewsBefore58: string,
+  publicTableGrantsBefore58: string,
+  untrustedRoutineGrantsBefore58: string,
+): void {
+  assert.equal(Object.keys(current57Tables).length, 47, 'The current 0057 retained-table inventory is incomplete.');
+  assertTablesUnchanged(current57Tables, 'Migration 0058');
+  assert.equal(
+    historicalParticipantPreviewFingerprint(),
+    participantPreviewsBefore58,
+    'Migration 0058 changed historical participant preview fields.',
+  );
+
+  assert.equal(
+    psql("SELECT data_type || '|' || is_nullable FROM information_schema.columns"
+      + " WHERE table_schema='public' AND table_name='participant_previews'"
+      + " AND column_name='layout_config_snapshot';"),
+    'jsonb|YES',
+    'Migration 0058 did not add the nullable JSONB preview layout snapshot exactly.',
+  );
+  assert.equal(
+    psql('SELECT count(*)::text FROM public.participant_previews WHERE layout_config_snapshot IS NOT NULL;'),
+    '0',
+    'Migration 0058 backfilled historical participant preview layout evidence.',
+  );
+  assert.equal(
+    psql("SELECT count(*)::text FROM pg_catalog.pg_trigger"
+      + " WHERE tgrelid='public.participant_previews'::regclass"
+      + " AND tgname IN ('capture_participant_preview_layout_config','participant_preview_layout_config_immutable')"
+      + ' AND NOT tgisinternal;'),
+    '2',
+    'Migration 0058 preview layout capture/immutability triggers are incomplete.',
+  );
+
+  const validStockLayout = JSON.stringify({
+    templateId: 'poster_showcase',
+    featuredMedia: 'poster',
+    sectionOrder: ['background', 'solution', 'snapshots', 'video', 'team', 'links', 'citations', 'accessibilityText'],
+    hiddenSections: [],
+  });
+  const invalidHiddenSnapshotsLayout = JSON.stringify({
+    templateId: 'poster_showcase',
+    featuredMedia: 'poster',
+    sectionOrder: ['background', 'solution', 'snapshots', 'video', 'team', 'links', 'citations', 'accessibilityText'],
+    hiddenSections: ['snapshots'],
+  });
+  assert.equal(psql(`SELECT public.layout_recipe_config_valid('${validStockLayout}'::jsonb)::text;`), 'true');
+  assert.equal(psql(`SELECT public.layout_recipe_config_valid('${invalidHiddenSnapshotsLayout}'::jsonb)::text;`), 'false');
+
+  for (const table of LAYOUT_RECIPE_TABLES) {
+    assert.equal(
+      psql(`SELECT pg_catalog.to_regclass('public.${table}') IS NOT NULL;`),
+      't',
+      `Migration 0058 did not create public.${table}.`,
+    );
+    assert.equal(tableGrantsFor(table), 'service_role:SELECT', `public.${table} grant contract drifted.`);
+    assert.equal(
+      psql(`SELECT relrowsecurity::text FROM pg_catalog.pg_class WHERE oid='public.${table}'::regclass;`),
+      'true',
+      `public.${table} does not have RLS enabled.`,
+    );
+    assert.equal(psql(`SELECT count(*)::text FROM public.${table};`), '0', `Migration 0058 manufactured rows in public.${table}.`);
+  }
+
+  const expectedPublicTableGrants = [
+    ...publicTableGrantsBefore58.split('\n').filter(Boolean),
+    'layout_recipe_audit_events=service_role:SELECT',
+    'layout_recipe_versions=service_role:SELECT',
+  ].sort().join('\n');
+  assert.equal(
+    publicTableGrants(),
+    expectedPublicTableGrants,
+    'Migration 0058 changed direct table grants beyond the two SELECT-only layout recipe tables.',
+  );
+  assert.equal(
+    untrustedRoutineExecuteGrants(),
+    untrustedRoutineGrantsBefore58,
+    'Migration 0058 introduced an unsafe direct routine grant.',
+  );
+
+  for (const signature of [
+    'public.create_layout_recipe(uuid,text,jsonb,uuid)',
+    'public.version_layout_recipe(uuid,uuid,integer,text,jsonb)',
+    'public.retire_layout_recipe(uuid,uuid,integer)',
+  ] as const) {
+    assert.equal(
+      psql(`SELECT has_function_privilege('service_role','${signature}','EXECUTE')::text`
+        + ` || '|' || has_function_privilege('anon','${signature}','EXECUTE')::text`
+        + ` || '|' || has_function_privilege('authenticated','${signature}','EXECUTE')::text;`),
+      'true|false|false',
+      `Migration 0058 public RPC grant contract drifted for ${signature}.`,
+    );
+  }
+
+  assert.equal(
+    psql(`SELECT has_function_privilege('service_role','public.layout_recipe_config_valid(jsonb)','EXECUTE')::text`
+      + ` || '|' || has_function_privilege('anon','public.layout_recipe_config_valid(jsonb)','EXECUTE')::text`
+      + ` || '|' || has_function_privilege('authenticated','public.layout_recipe_config_valid(jsonb)','EXECUTE')::text;`),
+    'true|false|false',
+    'Migration 0058 layout validator must remain service-role-only so CHECK constraints can execute.',
+  );
+
+  for (const signature of [
+    'public.layout_recipe_actor_can_manage(uuid)',
+    'public.get_project_publication_readiness_without_layout_recipe(text,uuid,text)',
+    'public.get_project_reconciliation_readiness_without_layout_recipe(text,uuid,text)',
+    'public.capture_participant_preview_layout_config()',
+    'public.guard_participant_preview_layout_config_immutable()',
+  ] as const) {
+    assert.equal(
+      psql(`SELECT has_function_privilege('service_role','${signature}','EXECUTE')::text`
+        + ` || '|' || has_function_privilege('anon','${signature}','EXECUTE')::text`
+        + ` || '|' || has_function_privilege('authenticated','${signature}','EXECUTE')::text;`),
+      'false|false|false',
+      `Migration 0058 exposed internal helper ${signature}.`,
+    );
+  }
+
+  for (const signature of [
+    'public.get_project_publication_readiness(text,uuid,text)',
+    'public.get_project_reconciliation_readiness(text,uuid,text)',
+  ] as const) {
+    assert.equal(
+      psql(`SELECT has_function_privilege('service_role','${signature}','EXECUTE')::text`
+        + ` || '|' || has_function_privilege('anon','${signature}','EXECUTE')::text`
+        + ` || '|' || has_function_privilege('authenticated','${signature}','EXECUTE')::text;`),
+      'true|false|false',
+      `Migration 0058 readiness wrapper grant contract drifted for ${signature}.`,
+    );
+  }
+
+  let immutableRejected = false;
+  try {
+    psql(`UPDATE public.participant_previews
+      SET layout_config_snapshot='${validStockLayout}'::jsonb
+      WHERE id=(SELECT id FROM public.participant_previews ORDER BY id LIMIT 1);`);
+  } catch {
+    immutableRejected = true;
+  }
+  assert.equal(immutableRejected, true, 'Migration 0058 allowed mutation of historical participant layout evidence.');
+  assert.equal(
+    psql('SELECT count(*)::text FROM public.participant_previews WHERE layout_config_snapshot IS NOT NULL;'),
+    '0',
+    'Migration 0058 immutability refusal still changed historical layout evidence.',
+  );
+
+  assert.equal(
+    psql('SELECT public.get_release_capability_sentinel();'),
+    '20260914100000_layout_recipe_library|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1',
+  );
+  console.log('PASS: Migration 0058 preserved retained rows, kept historical layout evidence null/immutable, and installed service-only bounded layout recipe authority');
+}
+
 async function verifyUpgrade(workdir: string, networkId: string): Promise<void> {
   assertBaseline();
   seedBaselineEvidence();
@@ -1412,7 +1587,7 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   const baselineGate4Errors = gate4ContractErrors();
   assert.ok(
     baselineGate4Errors.length > 0,
-    'The current 57-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
+    'The current 58-migration Gate 4 contract accepted a 48-migration source; the pre-upgrade capture refusal is not real.',
   );
   console.log(
     `PASS: current Gate 4 contract refuses the 48-state source (${baselineGate4Errors.length} findings)`,
@@ -1480,6 +1655,17 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   assertAfter57(current56Tables, mediaAssetsBefore57, publicTableGrantsBefore57, untrustedRoutineGrantsBefore57);
   await assertStorageUnchanged(storageClient, baseline, 'Migration 0057');
 
+  // Migration 0058 adds one nullable participant-preview column plus two new layout-recipe tables.
+  // Fingerprint the retained pre-0058 tables while excluding participant_previews, whose historical
+  // columns are compared separately so the additive NULL column cannot mask row drift.
+  const current57Tables = fingerprintTables(CURRENT_57_TABLES.filter((table) => table !== 'public.participant_previews'));
+  const participantPreviewsBefore58 = historicalParticipantPreviewFingerprint();
+  const publicTableGrantsBefore58 = publicTableGrants();
+  const untrustedRoutineGrantsBefore58 = untrustedRoutineExecuteGrants();
+  applyRelease(workdir, networkId, 58);
+  assertAfter58(current57Tables, participantPreviewsBefore58, publicTableGrantsBefore58, untrustedRoutineGrantsBefore58);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0058');
+
   const applied = appliedMigrations();
   assert.equal(applied.length, RELEASE_MIGRATION_COUNT, 'The upgraded head is not the full release migration set.');
   assert.deepEqual(applied, repositoryMigrationVersions(), 'The upgraded history does not match the repository manifest.');
@@ -1525,7 +1711,7 @@ async function main(): Promise<void> {
     startAttempted = true;
     runSupabase('start', workdir, networkId);
     await verifyUpgrade(workdir, networkId);
-    console.log('PASS: staging migration 0048 -> 0057 upgrade rehearsal');
+    console.log('PASS: staging migration 0048 -> 0058 upgrade rehearsal');
     console.log('HOSTED_SYSTEMS_CONTACTED = NO');
     exitCode = 0;
   } catch (error) {

@@ -21,6 +21,12 @@ COPY apps/assistive-worker apps/assistive-worker
 
 RUN npm ci --ignore-scripts \
     && python3 -m venv /opt/capstone/venv \
+    && curl --fail --location --silent --show-error \
+      https://files.pythonhosted.org/packages/b0/e0/8f5d065ebb2e5941d289c5f653f944318f9e418bc5167bc6a346ab5e0f6a/opencv_contrib_python-4.10.0.84-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl \
+      --output /tmp/opencv_contrib_python-4.10.0.84-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl \
+    && echo 'a261223db41f6e512d76deaf21c8fcfb4fbbcbc2de62ca7f74a05f2c9ee489ef  /tmp/opencv_contrib_python-4.10.0.84-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl' | sha256sum --check --strict \
+    && pip install --no-cache-dir --no-deps /tmp/opencv_contrib_python-4.10.0.84-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl \
+    && rm -f /tmp/opencv_contrib_python-4.10.0.84-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl \
     && pip install --no-cache-dir './apps/assistive-worker[paddle-title]'
 
 RUN mkdir -p /opt/capstone/artifacts/paddle /opt/capstone/artifacts/languagetool \

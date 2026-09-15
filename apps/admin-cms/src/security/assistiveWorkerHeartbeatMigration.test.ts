@@ -21,7 +21,7 @@ describe('assistive worker heartbeat migration and deployment boundary', () => {
   it('preserves the exact migration 1-55 byte manifest before additive migration 56', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(57);
+    expect(files).toHaveLength(58);
     expect(files).toContain(filename);
     // Migrations 1-55 are exactly the files that precede this migration's forward file.
     const historical = files.slice(0, files.indexOf(forwardFilename));

@@ -6,6 +6,7 @@ import {
   getSnapshotTextEquivalentProblem,
 } from '../domain/galleryTextEquivalent';
 import { MAX_GALLERY_IMAGES } from './galleryConvention';
+import { getLayoutConfigWireProblems } from '../domain/layoutConfig';
 
 export interface ValidateImportPackageOptions {
   /**
@@ -56,10 +57,11 @@ export function validateImportPackage(
   }
 
   // layoutConfig check
-  if (!manifest.layoutConfig || typeof manifest.layoutConfig !== 'object' || Array.isArray(manifest.layoutConfig)) {
+  const layoutProblems = getLayoutConfigWireProblems(manifest.layoutConfig);
+  if (layoutProblems.length > 0) {
     errors.push({
       ruleCode: 'METADATA_INVALID_LAYOUT',
-      message: 'Required manifest object "layoutConfig" is missing or invalid.',
+      message: `Required manifest object "layoutConfig" is invalid: ${layoutProblems[0]}.`,
       fieldName: 'layoutConfig'
     });
   }

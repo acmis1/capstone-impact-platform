@@ -10,6 +10,7 @@ describe('ProjectIntakeForm Component', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('renders all primary form sections and input controls including MG-05 gallery fields', () => {
@@ -36,6 +37,8 @@ describe('ProjectIntakeForm Component', () => {
     expect(screen.getByLabelText(/Accessibility Description \(Alt text\)/i)).toBeTruthy();
     expect(screen.getByLabelText(/Poster Image \(poster\.png\)/i)).toBeTruthy();
     expect(screen.getByLabelText(/Poster PDF \(poster\.pdf\)/i)).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Automatic fallback' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'No featured media' })).toBeTruthy();
 
     // MG-05 gallery slot 1 controls
     expect(screen.getByLabelText(/Snapshot 1 alt text/i)).toBeTruthy();
@@ -105,6 +108,38 @@ describe('ProjectIntakeForm Component', () => {
     // Select ordinary
     fireEvent.change(selectEl, { target: { value: 'ordinary' } });
     expect(fullTextEl.disabled).toBe(true);
+  });
+
+  it('reloads and applies a shared recipe by copying its resolved values into this form', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        recipes: [{
+          id: '11111111-1111-4111-8111-111111111111',
+          recipeId: '22222222-2222-4222-8222-222222222222',
+          version: 2,
+          name: 'Team first',
+          status: 'active',
+          sourceVersionId: null,
+          createdAt: '2026-09-14T00:00:00.000Z',
+          config: {
+            templateId: 'poster_showcase', featuredMedia: 'auto',
+            sectionOrder: ['team', 'solution', 'background', 'links', 'citations', 'accessibilityText', 'snapshots', 'video'],
+            hiddenSections: ['video'],
+          },
+        }],
+      }),
+    }));
+
+    render(<ProjectIntakeForm onPackageReady={vi.fn()} />);
+    const selector = await screen.findByLabelText('Reusable layout recipe');
+    expect(screen.getByRole('option', { name: 'Team first (v2)' })).toBeTruthy();
+    fireEvent.change(selector, { target: { value: '11111111-1111-4111-8111-111111111111' } });
+
+    expect((screen.getByLabelText('Main Media to Feature') as HTMLSelectElement).value).toBe('auto');
+    expect(screen.getByText(/Section order:/i).parentElement?.textContent).toContain('team, solution, background');
+    expect(screen.getByText(/Hidden optional sections:/i).parentElement?.textContent).toContain('video');
   });
 
   it('submits valid form data, materializes package, and invokes onPackageReady', async () => {

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { SmtpParticipantPreviewEmailTransport } from '../notifications/smtpParticipantPreviewEmailTransport';
+import { createParticipantPreviewEmailTransport } from '../notifications/participantPreviewEmailTransportFactory';
 import { SupabaseParticipantPreviewReminderRepositoryCore } from '../repositories/SupabaseParticipantPreviewReminderRepositoryCore';
 import {
   resolveHostedParticipantPreviewReminderConfig,
@@ -59,7 +59,7 @@ export async function runHostedParticipantPreviewReminders(
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const notifications = new SupabaseParticipantPreviewReminderRepositoryCore(client);
-  const transport = new SmtpParticipantPreviewEmailTransport(config.smtp);
+  const transport = createParticipantPreviewEmailTransport(config.emailConfig);
 
   console.log(formatHostedParticipantPreviewReminderLog({
     state: 'STARTED',

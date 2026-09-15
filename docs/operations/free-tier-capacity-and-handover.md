@@ -2,7 +2,7 @@
 
 **STATUS:** Current — operations
 **PURPOSE:** Operations
-**LAST VERIFIED:** 2026-08-28
+**LAST VERIFIED:** 2026-09-14
 
 Every free-tier dependency the platform relies on, what happens when each one runs out, and who must
 watch it after handover.
@@ -39,7 +39,7 @@ the build fails.
 | Warning threshold | Any change that pushes computed usage above 85% of either grant |
 | Behaviour when exhausted | Assistive Checks stop. The rest of the platform is unaffected |
 | Monitoring | `npm run check:zero-cost` in CI; the subscription's own cost view for actual spend |
-| Upgrade path | Move to Profile B (School-owned worker, no cloud cost), or fund paid compute |
+| Free-compatible response | Keep Profile A within its verified free grant; if it is insufficient, use institution-provided/School-owned compute (Profile B) or escalate a future institutional decision outside PP1. No paid subscription is required or authorised for PP1 |
 | Institutional owner | Technical maintainer, with the subscription owner |
 
 Worst-case arithmetic, 31-day month:
@@ -75,14 +75,15 @@ preferred arrangement; where that is impossible, the School must monitor aggrega
 | Field | Value |
 | :--- | :--- |
 | Free limit | 500 MB database, 1 GB file storage, 5 GB egress, 5 GB cached egress, 50,000 monthly active users, 2 active projects per organisation |
-| Source | `https://supabase.com/pricing` (verified 2026-08-28) |
+| Source | [`Supabase pricing`](https://supabase.com/pricing) (verified 2026-09-14) |
 | PP1 expected use | Roughly 120 projects per cycle plus private media. Media dominates storage |
 | Warning threshold | 70% of database size or file storage |
-| Behaviour when exhausted | Writes and uploads fail. **Free projects pause after one week of inactivity** and must be resumed |
-| Backups | **Not included on Free.** Backup and restore are operator-driven |
+| Behaviour when exhausted | Free projects enter read-only mode when database usage exceeds 500 MB; storage, Auth, or API operations can also be refused by the affected quota/service |
+| Pause/recovery | Low-activity Free projects may be paused after 7 days; resume in the Dashboard. A paused project can be restored for up to 1 year; after that, export/migrate before the restore window expires |
+| Backups | **Not included on Free.** Supabase recommends scheduled CLI database dumps and off-site retention; Storage objects require a separate export |
 | SLA / support | None. Community support only |
 | Monitoring | Project usage view; storage inventory during the recovery drill |
-| Upgrade path | Paid plan, or archive completed cycles to School storage |
+| Free-compatible response | Archive completed cycles and export/retain database and Storage evidence where valid; if the free envelope is insufficient, escalate an institution-provided hosting/storage decision outside PP1. No paid Supabase plan is required or authorised for PP1 |
 | Institutional owner | Database / infrastructure maintainer |
 
 The one-week pause matters operationally: a project left idle over a semester break will be asleep
@@ -94,17 +95,24 @@ unavailable until it is back.
 | Field | Value |
 | :--- | :--- |
 | Free limit | 750 free instance hours per workspace per calendar month |
-| Source | `https://render.com/docs/free` (verified 2026-08-28) |
+| Source | [`Render Free`](https://render.com/docs/free) (verified 2026-09-14) |
 | Free service types | Web services, static sites, Postgres, Key Value. **Background workers and cron jobs are not available on Free** |
 | Spin-down | Free web services suspend after 15 minutes of inactivity and take about a minute to wake |
-| Behaviour when exhausted | The service stops until the next month |
+| Behaviour when exhausted | Render suspends all Free web services until the next month; outbound bandwidth/build limits can otherwise incur charges when a payment method is present, so this project must not add one or accept paid overage |
 | Monitoring | Workspace usage view |
-| Upgrade path | Paid instance, or host the Admin/CMS on School infrastructure |
+| Production status | Free instances should not be used for production applications; use Render Free only for temporary/demo/test/team-operated hosting. Institutional production hosting is an RMIT/School handoff dependency |
+| Free-compatible response | Keep the current Free service temporary/demo/test/team-operated, or hand the Admin/CMS to RMIT/School-approved infrastructure for production. No paid Render subscription is required or authorised for PP1 |
 | Institutional owner | Technical maintainer |
 
-The absence of a free background worker is precisely why the paid worker was rejected. Note also
-that 24×31 = 744 hours: one always-awake free service consumes essentially the entire workspace
-grant, which is why nothing in this design keeps a web service artificially awake.
+Render's current Free documentation says Free instances should not be used for production
+applications. The current Render Free service is therefore temporary/demo/test/team-operated
+hosting only, not institutional PP1 production acceptance; production hosting remains an
+RMIT/School handoff dependency. The absence of a free background worker is why continuous Profile B
+processing remains School-owned. A Free web service spins down after 15 minutes without inbound
+HTTP traffic or an incoming WebSocket message and takes about a minute to wake. Note also that
+24×31 = 744 hours: one always-awake free service consumes essentially the entire workspace grant,
+which is why nothing in this design keeps a web service artificially awake. No paid Render
+subscription is required or authorised for PP1.
 
 ### GitHub Actions and Container Registry
 
@@ -123,17 +131,25 @@ needs no registry at all.
 
 ---
 
-## 3. Fail-closed behaviour
+## 3. Dependency-specific outage behaviour
 
-Every dependency above degrades the *assistive* layer only.
+The assistive worker is not the same dependency as the Admin/CMS host or Supabase. The recovery
+path must name which boundary failed:
 
-When Assistive Checks are unavailable for any reason — limit reached, worker not ready, provider
-failure, paused database — staff can still import packages, edit metadata, run deterministic
-validation, review, preview, request and resolve corrections, approve, and publish once
-deterministic requirements are met.
+| Failure | What is blocked or degraded | What remains available | Safe operator response |
+| :--- | :--- | :--- | :--- |
+| Profile B worker stopped, stale, incompatible, or unable to process | Assistive checks only; new assistive runs stay unavailable or queued | Admin/CMS, Supabase-backed project data, deterministic validation, review, preview, correction, approval, and publication when their own dependencies are healthy | Stop retrying the worker blindly; inspect bounded logs, correct the reviewed image/configuration, or leave assistive checks disabled while core work continues |
+| Supabase database/Auth/API outage, pause, or database quota read-only mode | Any core action requiring that Supabase boundary, including sign-in, reads, writes, queue/finding persistence, and possibly review/publication | Only already-loaded browser state and truly local evidence; do not claim the application remains operational | Resume/restore through the Supabase operator path, verify backups/exports, and rerun readiness; never delete history/assets to fit a quota |
+| Supabase Storage outage, quota, or object failure | Media upload/download and any workflow step requiring the affected objects | Metadata-only actions that do not need the unavailable object, if the Admin/CMS and database remain healthy | Repair/restore Storage and reconcile object references; do not replace missing media with fabricated content |
+| Render Admin/CMS web service spun down or unavailable | Browser access and all actions that require the web service until it wakes or recovers | A separate healthy Profile B worker cannot substitute for the unavailable Admin/CMS | Wait for the normal wake-up or restore the web host; do not keep it awake with synthetic traffic |
 
-No project becomes stuck. No approval state is corrupted. Nothing is published automatically.
-Historical findings stay readable. **AI availability is never publication authority.**
+Assistive failure remains fail-closed: it cannot approve, publish, or corrupt authoritative workflow
+state. That guarantee does **not** mean a database/Auth/Storage or web-host outage is assistive-only.
+When those core dependencies fail, report the corresponding core outage honestly and resume only
+after the dependency and readiness checks pass.
+
+No project is published automatically. Historical findings remain readable when their database and
+Storage dependencies are healthy. **AI availability is never publication authority.**
 
 ---
 
@@ -182,8 +198,8 @@ breaks one is a release defect.
 **Before each major semester or showcase cycle**, the technical maintainer re-verifies:
 
 1. The Container Apps Consumption free grant and its scope.
-2. Supabase Free limits, pause policy, backup position, and pooler connectivity options.
-3. Render Free limits and which service types remain free.
+2. Supabase Free limits, the 7-day inactivity pause, the 1-year restore window, database read-only threshold, backup position, and pooler connectivity options. Use the [`project pausing`](https://supabase.com/docs/guides/platform/free-project-pausing), [`database size`](https://supabase.com/docs/guides/platform/database-size), and [`backup`](https://supabase.com/docs/guides/platform/backups) pages (verified 2026-09-14).
+3. Render Free limits, 15-minute spin-down, one-minute wake-up, and which service types remain free. Use [`Render Free`](https://render.com/docs/free) (verified 2026-09-14).
 4. GitHub Actions and Packages terms for public repositories.
 5. Third-party licences for the bundled providers.
 

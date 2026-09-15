@@ -28,6 +28,8 @@ describe('formIntakeWorkbookMaterializer', () => {
       year: '2026',
       templateId: 'technical_detail',
       featuredMedia: 'snapshots',
+      sectionOrder: 'team, solution, background, snapshots, video, links, citations, accessibilityText',
+      hiddenSections: 'video, citations',
       posterText: 'Full research transcription for smart grid monitoring.',
       accessibilityText: 'Poster with schematic diagrams of the electrical grid.',
       videoUrl: 'https://youtube.com/watch?v=12345678',
@@ -75,6 +77,12 @@ describe('formIntakeWorkbookMaterializer', () => {
     expect(parseResult.metadata.demoUrl).toBe('https://demo.grid.test/');
     expect(parseResult.metadata.repositoryUrl).toBe('https://github.com/grid/monitor');
     expect(parseResult.metadata.snapshotAltText).toBe('Field test deployment photo');
+    expect(parseResult.metadata.layoutConfig).toEqual({
+      templateId: 'technical_detail',
+      featuredMedia: 'snapshots',
+      sectionOrder: ['team', 'solution', 'background', 'snapshots', 'video', 'links', 'citations', 'accessibilityText'],
+      hiddenSections: ['video', 'citations'],
+    });
 
     // MG-05 gallery text-equivalent verification
     expect(parseResult.metadata.galleryAltTexts).toHaveLength(2);

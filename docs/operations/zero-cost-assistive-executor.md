@@ -2,7 +2,7 @@
 
 **STATUS:** Current — operations and architecture
 **PURPOSE:** Operations
-**LAST VERIFIED:** 2026-08-28
+**LAST VERIFIED:** 2026-09-14
 
 How Assistive Checks are executed without introducing any new recurring cost, how to deploy and
 operate the executor, and what is deliberately *not* promised by it.
@@ -26,7 +26,7 @@ Two supported execution profiles replace it.
 | Profile | Where it runs | When to choose it |
 | :--- | :--- | :--- |
 | **A. Zero-cost on-demand executor** | Container Apps Consumption jobs in a School-controlled cloud subscription | No School server is available, and a free-grant cloud subscription exists |
-| **B. School-owned continuous worker** | Any School Linux server, VM, or managed Docker host | Suitable institutional compute exists. Removes all polling delay and all cloud dependency |
+| **B. School-owned continuous worker** | School-controlled Linux amd64 (`linux/amd64`) server, VM, or managed Docker host | Suitable institutional compute exists. Removes worker compute/dispatcher dependency and polling delay, but still requires the approved Supabase runtime |
 
 Both profiles run the **same container image** and the **same application code**. Neither changes
 OCR, language checking, duplicate detection, queue fencing, review, or publication behaviour.
@@ -226,8 +226,12 @@ or image fails closed.
 
 ## 6. Profile B — School-owned continuous worker
 
-The same image, run continuously on School compute. No cloud subscription, no dispatcher, no launch
-ceiling, and no polling delay.
+The same image, run continuously on School compute. The currently qualified host is Linux amd64
+(`linux/amd64`): the frozen OpenCV wheel and locked PaddlePaddle 3.3.0 path are x86_64-specific.
+ARM, another host architecture, and emulation are not qualified, and the verifier rejects a
+non-amd64 Docker engine before an image build. No worker cloud subscription, dispatcher, or launch
+ceiling is required, and there is no polling delay. The worker still requires outbound HTTPS to the
+approved Supabase project for the existing queue, findings, and heartbeat contracts.
 
 ```bash
 docker build -f apps/assistive-worker/Dockerfile.hosted -t capstone-assistive-worker:<commit> .

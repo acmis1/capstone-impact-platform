@@ -128,7 +128,7 @@ npm run verify:all         # the full quality gate
 Then confirm you can:
 
 - sign in with a synthetic local account;
-- verify the 57-file repository migration manifest (`npm run onboarding:check`), then verify applied history separately through Gate 3 of the staging reconciliation runbook;
+- verify the 58-file repository candidate migration manifest (`npm run onboarding:check`), then verify applied hosted history separately through Gate 3 of the staging reconciliation runbook;
 - build the assistive worker image (`docker build -f apps/assistive-worker/Dockerfile.hosted .`);
 - run the worker locally and watch it process a queued project;
 - read current executor readiness and remaining launch capacity;
@@ -170,7 +170,7 @@ Code cannot complete these. Each needs a person with institutional authority.
 3. Accept transfer of the Supabase organisation and project, or provision a School-controlled one.
 4. Accept transfer of the Admin/CMS hosting, or provision a School-controlled host.
 5. Provide a School-controlled cloud subscription for the on-demand executor, **or** provide a
-   Docker host for the continuous worker.
+   Linux amd64 (`linux/amd64`) Docker host for the continuous worker.
 6. Confirm Duda ownership and publishing authority, and DNS ownership if a custom domain is used.
 7. Approve an institutional email arrangement for participant notifications.
 8. Settle the third-party redistribution position before any image is published publicly.

@@ -45,7 +45,10 @@ export interface ControlledPublicationDependencies {
    * exact participant confirmation instead of weakening the normal gate.
    */
   getReconciliationReadiness(): Promise<ReconciliationReadinessResult>;
-  listProjects(): Promise<Project[]>;
+  /** Exact target read used by production dependencies. */
+  getProject?(): Promise<Project | null>;
+  /** Backward-compatible verifier seam; production callers must provide getProject. */
+  listProjects?(): Promise<Project[]>;
   listProjectMedia(): Promise<PublicationMediaSource[]>;
   getPublicUrl(bucket: string, path: string): string;
   downloadObject(bucket: string, path: string): Promise<Buffer | null>;
@@ -60,6 +63,17 @@ export interface ControlledPublicationBarriers { afterReservation?(): Promise<vo
 
 function sha256(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex');
+}
+
+async function readTargetProject(
+  dependencies: ControlledPublicationDependencies,
+  publicId: string,
+): Promise<Project | null> {
+  if (dependencies.getProject) return dependencies.getProject();
+  if (!dependencies.listProjects) throw new Error('PROJECT_READER_UNAVAILABLE');
+  const targets = (await dependencies.listProjects())
+    .filter((project) => project.publicId === publicId);
+  return targets.length === 1 ? targets[0] : null;
 }
 
 async function captureMediaBindings(
@@ -102,16 +116,14 @@ export async function executeControlledPublication(params: {
   catch { return { resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' }; }
 
   try {
-    const projects = await dependencies.listProjects();
-    const targets = projects.filter((project) => project.publicId === publicId);
-    if (targets.length !== 1) {
+    const inspectedTarget = await readTargetProject(dependencies, publicId);
+    if (!inspectedTarget) {
       return { resultCode: 'NOT_READY', readinessCode: 'PROJECT_NOT_FOUND', blockers: ['Project not found'] };
     }
     // Early inspection only. This read answers "does the publicId exist" and "is it already
     // deployed"; it is deliberately NOT candidate authority, because readiness and reservation
     // both happen after it and a legitimate concurrent workflow may replace the participant-facing
     // representation in between.
-    const inspectedTarget = targets[0];
     if (inspectedTarget.status === 'published') {
       const inspected = await inspectPublicFeedHead(dependencies.supabase, publicFeedBucket, publicFeedPath);
       if (inspected.head && inspected.artifact?.members.some((member) => member.publicId === publicId)) {
@@ -167,10 +179,8 @@ export async function executeControlledPublication(params: {
         // operation, so building the artifact from the earlier object could bind content that the
         // frozen authority does not describe. Re-reading here keeps artifact and authority the
         // same target in both normal and reconciliation modes.
-        const reservedTargets = (await dependencies.listProjects())
-          .filter((project) => project.publicId === publicId);
-        if (reservedTargets.length !== 1) throw new Error('PROJECT_NOT_FOUND');
-        const target = reservedTargets[0];
+        const target = await readTargetProject(dependencies, publicId);
+        if (!target) throw new Error('PROJECT_NOT_FOUND');
         const media = await dependencies.listProjectMedia();
         const plan = planPublicationArtifact({
           projects: [target], targetPublicId: publicId, mediaAssets: media,

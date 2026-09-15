@@ -12,7 +12,7 @@ import { generateRawPreviewToken, hashPreviewToken } from '../../../../../previe
 import { getStagingBuckets } from '../../../../../lib/supabase/buckets';
 import { SupabaseParticipantPreviewNotificationRepository } from '../../../../../repositories/SupabaseParticipantPreviewNotificationRepository';
 import { resolveParticipantPreviewEmailConfig } from '../../../../../notifications/participantPreviewEmailConfig';
-import { SmtpParticipantPreviewEmailTransport } from '../../../../../notifications/smtpParticipantPreviewEmailTransport';
+import { createParticipantPreviewEmailTransport } from '../../../../../notifications/participantPreviewEmailTransportFactory';
 import { executeParticipantPreviewNotification } from '../../../../../notifications/participantPreviewNotificationService';
 import { participantPreviewNotificationMessage } from '../../../../../notifications/participantPreviewNotification';
 import { parseParticipantPreviewRequestBody } from '../../../../../auth/participantPreviewInput';
@@ -144,7 +144,7 @@ export async function POST(
       const notification = await executeParticipantPreviewNotification(
         {
           notifications: notificationRepository,
-          transport: new SmtpParticipantPreviewEmailTransport(emailConfig.smtp),
+          transport: createParticipantPreviewEmailTransport(emailConfig),
         },
         {
           notificationId: preview.notificationId,
@@ -153,7 +153,9 @@ export async function POST(
           projectTitle: preview.projectTitle,
           previewUrl,
           expiresAt: preview.expiresAt,
-          fromAddress: emailConfig.smtp.from,
+          fromAddress:
+            emailConfig.fromAddress ??
+            (emailConfig.provider === 'brevo' ? emailConfig.brevo.from : emailConfig.smtp.from),
         }
       );
 

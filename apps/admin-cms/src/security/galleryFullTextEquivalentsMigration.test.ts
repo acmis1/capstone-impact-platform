@@ -35,9 +35,10 @@ function extractFunction(sql: string, functionName: string): string {
 }
 
 describe('Migration 0057 gallery full-text equivalents', () => {
-  it('is the sole additive migration after the immutable 0056 history', () => {
-    expect(migrationFiles).toHaveLength(57);
-    expect(migrationFiles.at(-1)).toBe(migrationName);
+  it('remains additive Migration 0057 immediately before the additive layout-recipe migration', () => {
+    expect(migrationFiles).toHaveLength(58);
+    expect(migrationFiles.at(-2)).toBe(migrationName);
+    expect(migrationFiles.at(-1)).toBe('20260914100000_layout_recipe_library.sql');
 
     const schemaSection = source.slice(0, source.indexOf('-- 2. finalize_browser_import_media_stage'));
     expect(schemaSection).toContain('ADD COLUMN IF NOT EXISTS image_content_kind text');
@@ -60,7 +61,7 @@ describe('Migration 0057 gallery full-text equivalents', () => {
   it('forward-defines every RPC from its actual latest pre-0057 provenance', () => {
     for (const [functionName, expectedFile] of Object.entries(authoritativeDefinitions)) {
       const definingFiles = migrationFiles
-        .filter((file) => file !== migrationName)
+        .filter((file) => file < migrationName)
         .filter((file) => definesFunction(
           fs.readFileSync(path.join(migrationsDirectory, file), 'utf8'),
           functionName,
@@ -104,7 +105,7 @@ describe('Migration 0057 gallery full-text equivalents', () => {
   it('forward-defines the release sentinel from 0056 without changing its invoker posture', () => {
     const sentinelName = 'get_release_capability_sentinel';
     const definingFiles = migrationFiles
-      .filter((file) => file !== migrationName)
+      .filter((file) => file < migrationName)
       .filter((file) => definesFunction(
         fs.readFileSync(path.join(migrationsDirectory, file), 'utf8'),
         sentinelName,

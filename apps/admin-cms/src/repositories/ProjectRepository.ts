@@ -48,7 +48,8 @@ export interface ReviewActionExecutionResult {
 
 export interface ProjectRepository {
   /**
-   * Retrieves all projects in the database that are not soft-deleted.
+   * Retrieves all projects in the database that are not soft-deleted. The read fails explicitly
+   * if the retained identity set changes while the repository is stabilizing its paginated scan.
    */
   listProjects(): Promise<Project[]>;
 

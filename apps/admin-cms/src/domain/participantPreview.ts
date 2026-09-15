@@ -1,4 +1,5 @@
 import type { SnapshotImageContentKind } from './galleryTextEquivalent';
+import type { ResolvedLayoutConfig } from './layoutConfig';
 export interface ParticipantPreviewExternalLink {
   label?: string;
   url: string;
@@ -44,6 +45,12 @@ export interface ParticipantPreviewSnapshot {
   videoUrl?: string | null;
   demoUrl?: string | null;
   repositoryUrl?: string | null;
+  /**
+   * Resolved layout value captured when this preview was issued. Optional only for historical
+   * previews created before layout recipes; those retain the legacy participant presentation.
+   * Recipe identity/administration data is deliberately never included.
+   */
+  layoutConfig?: ResolvedLayoutConfig;
 }
 
 /**

@@ -2,7 +2,7 @@
 
 This document is the canonical PP1 M6 operational-readiness contract for the active Admin/CMS. It defines what the repository can prove now, what a supervised hosted rehearsal must prove later, and which decisions remain with the institution. It does not authorize a deployment, hosted mutation, restore, rollback, DNS change, Duda change, email, or secret access.
 
-Executable application code, migrations, and tests on the reviewed commit remain the source of truth. The current package contains 57 migration files ending at `20260911120000_gallery_full_text_equivalents`; `npm run check:operational-readiness` verifies that exact manifest and fails closed when it changes unexpectedly.
+Executable application code, migrations, and tests on the reviewed commit remain the source of truth. The current candidate package contains 58 migration files ending at `20260914100000_layout_recipe_library`; hosted staging remains separately verified at 57 until Migration 0058 is authorized and applied; `npm run check:operational-readiness` verifies that exact manifest and fails closed when it changes unexpectedly.
 
 ## Evidence vocabulary
 
@@ -221,7 +221,7 @@ Store values only in institution-owned systems. The repository records names, no
 | Runtime identity | `CAPSTONE_RUNTIME_ENV`, `CAPSTONE_EXPECTED_SUPABASE_HOST`, `CAPSTONE_STAGING_MUTATION_CONFIRMATION`, `RENDER_GIT_COMMIT`, `RENDER_EXTERNAL_URL`. |
 | Application security | `CAPSTONE_AUTH_FLOW_SECRET`; credential ownership, rotation date, and recovery owner without storing the value. |
 | Storage | `SUPABASE_DRAFT_BUCKET`, `SUPABASE_PUBLIC_ASSETS_BUCKET`, `SUPABASE_PUBLIC_FEEDS_BUCKET`, `SUPABASE_PUBLIC_FEED_FILE`. |
-| Participant email | `PARTICIPANT_PREVIEW_EMAIL_ENABLED`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_PORT`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_USER`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD`, `PARTICIPANT_PREVIEW_EMAIL_FROM`, `PARTICIPANT_PREVIEW_REMINDERS_ENABLED`; provider and policy remain institution-dependent. |
+| Participant email | `PARTICIPANT_PREVIEW_EMAIL_ENABLED`, `PARTICIPANT_PREVIEW_EMAIL_PROVIDER`, SMTP compatibility variables, `PARTICIPANT_PREVIEW_EMAIL_BREVO_API_KEY`, `PARTICIPANT_PREVIEW_EMAIL_BREVO_SANDBOX`, `PARTICIPANT_PREVIEW_EMAIL_FROM`, `PARTICIPANT_PREVIEW_EMAIL_FROM_NAME`, and `PARTICIPANT_PREVIEW_REMINDERS_ENABLED`; the temporary Brevo account/sender still needs bounded operator qualification and institutional handoff remains pending. |
 | Supabase Auth leaked-password protection | Hosted Auth password-security setting; repository configuration and SQL migrations cannot enable it. Availability, plan, cost, and activation must be confirmed by the School/project owner. |
 | Staff/publication feature gates | `STAFF_PROVISIONING_ENABLED`, `CAPSTONE_STAGING_PUBLICATION_ENABLED`, `CAPSTONE_STAGING_PUBLIC_FEED_ROLLBACK_ENABLED`, `CAPSTONE_LOCAL_PUBLIC_FEED_ROLLBACK_ENABLED`, and `CAPSTONE_PRODUCTION_PUBLICATION_ENABLED`; each remains fail-closed unless its exact target, authority, and capability contract also passes. Repository configuration names do not prove deployment or enablement. |
 | Publication/Duda | Canonical feed bucket/path variables above, Duda test/live consumer boundary, and the institution-owned location of Duda configuration. No Duda credential belongs in the repository. |
@@ -340,7 +340,7 @@ The authoritative application contract is in [Admin/CMS Hosted Staging Deploymen
 
 1. Record the exact reviewed full SHA, source branch, approval, and clean CI for that SHA.
 2. Run `npm run check:operational-readiness -- --expected-commit=<sha>`.
-3. Record hosted migration history/schema evidence against the exact reviewed repository manifest (currently 57 files). Preserve the earlier hosted 52-file observation as historical evidence, and do not infer the complete applied migration history from `/api/readiness`.
+3. Record hosted migration history/schema evidence against the exact reviewed repository manifest (currently 58 files in this candidate). Preserve the earlier hosted 52-file observation as historical evidence, and do not infer the complete applied migration history from `/api/readiness`.
 4. Confirm backup/recovery evidence required by the change and the last known good release.
 5. Confirm environment variable **names**, target identity, secret ownership, and rotation status without exposing values.
 6. Confirm the Render web service uses the Admin/CMS root/commands and `/api/readiness`, not the Prototype service.
@@ -350,6 +350,8 @@ For the current 53–57 release, the deployed bundle is closed for maintenance b
 continue. Apply missing forward migrations 53–57, then obtain fresh Gate 3, Gate 4, and advisor
 evidence before deploying the exact reviewed SHA. Complete health/readiness/SHA/smoke checks and
 reopen only after those checks pass; `/api/readiness` requires Migration 57's capability sentinel.
+
+That paragraph records the previous hosted 53–57 release. The current repository candidate adds Migration 0058 locally; no hosted Migration 0058 application is claimed. Before deploying this candidate, a separately authorized operator must apply 0058 forward, obtain fresh Gate 3/Gate 4 evidence, and then verify the new Migration 58 release-capability sentinel.
 
 ### Deploy and post-deploy evidence
 

@@ -681,12 +681,77 @@ export async function verifyAccessibilityFullTextRuntime(): Promise<void> {
         ))
       `);
       assert(Array.isArray(snapshotKeys), 'Readiness response was not inspectable.');
-      const definition = executeLocalSql(`
+      const wrapperDefinition = executeLocalSql(`
         SELECT pg_get_functiondef(p.oid) FROM pg_proc p
         WHERE p.proname = 'get_project_publication_readiness' AND p.pronamespace = 'public'::regnamespace
       `);
-      assert(definition.includes("'posterText', p.poster_text_public"), 'posterText left the canonical participant snapshot.');
-      assert(definition.includes("'accessibilityText', p.accessibility_text_public"), 'accessibilityText left the canonical participant snapshot.');
+      const preservedDefinition = executeLocalSql(`
+        SELECT pg_get_functiondef('public.get_project_publication_readiness_without_layout_recipe(text,uuid,text)'::regprocedure)
+      `);
+      assert(
+        wrapperDefinition.includes('public.get_project_publication_readiness_without_layout_recipe('),
+        'The public readiness RPC no longer delegates to the preserved implementation.',
+      );
+      assert(preservedDefinition.includes("'posterText', p.poster_text_public"), 'posterText left the canonical participant snapshot.');
+      assert(preservedDefinition.includes("'accessibilityText', p.accessibility_text_public"), 'accessibilityText left the canonical participant snapshot.');
+      assert(
+        wrapperDefinition.includes('preview.layout_config_snapshot') &&
+          wrapperDefinition.includes('v_current_layout IS DISTINCT FROM v_confirmed_layout') &&
+          wrapperDefinition.includes("'resultCode', 'PROJECT_SNAPSHOT_STALE'"),
+        'The public readiness wrapper no longer enforces layout snapshot freshness.',
+      );
+
+      const privileges = queryLocalJson<{
+        wrapperSecurityDefiner: boolean; helperSecurityDefiner: boolean; sameOwner: boolean;
+        wrapperOwnerCanExecuteHelper: boolean; wrapperPublicExecute: boolean; wrapperAnonExecute: boolean;
+        wrapperAuthenticatedExecute: boolean; wrapperServiceRoleExecute: boolean; helperPublicExecute: boolean;
+        helperAnonExecute: boolean; helperAuthenticatedExecute: boolean; helperServiceRoleExecute: boolean;
+      }>(`
+        WITH wrapper AS (
+          SELECT * FROM pg_catalog.pg_proc
+          WHERE oid = 'public.get_project_publication_readiness(text,uuid,text)'::regprocedure
+        ), helper AS (
+          SELECT * FROM pg_catalog.pg_proc
+          WHERE oid = 'public.get_project_publication_readiness_without_layout_recipe(text,uuid,text)'::regprocedure
+        )
+        SELECT pg_catalog.jsonb_build_object(
+          'wrapperSecurityDefiner', wrapper.prosecdef,
+          'helperSecurityDefiner', helper.prosecdef,
+          'sameOwner', wrapper.proowner = helper.proowner,
+          'wrapperOwnerCanExecuteHelper', pg_catalog.has_function_privilege(
+            pg_catalog.pg_get_userbyid(wrapper.proowner), helper.oid, 'EXECUTE'
+          ),
+          'wrapperPublicExecute', EXISTS (
+            SELECT 1 FROM pg_catalog.aclexplode(COALESCE(wrapper.proacl, pg_catalog.acldefault('f', wrapper.proowner))) acl
+            WHERE acl.grantee = 0 AND acl.privilege_type = 'EXECUTE'
+          ),
+          'wrapperAnonExecute', pg_catalog.has_function_privilege('anon', wrapper.oid, 'EXECUTE'),
+          'wrapperAuthenticatedExecute', pg_catalog.has_function_privilege('authenticated', wrapper.oid, 'EXECUTE'),
+          'wrapperServiceRoleExecute', pg_catalog.has_function_privilege('service_role', wrapper.oid, 'EXECUTE'),
+          'helperPublicExecute', EXISTS (
+            SELECT 1 FROM pg_catalog.aclexplode(COALESCE(helper.proacl, pg_catalog.acldefault('f', helper.proowner))) acl
+            WHERE acl.grantee = 0 AND acl.privilege_type = 'EXECUTE'
+          ),
+          'helperAnonExecute', pg_catalog.has_function_privilege('anon', helper.oid, 'EXECUTE'),
+          'helperAuthenticatedExecute', pg_catalog.has_function_privilege('authenticated', helper.oid, 'EXECUTE'),
+          'helperServiceRoleExecute', pg_catalog.has_function_privilege('service_role', helper.oid, 'EXECUTE')
+        ) FROM wrapper, helper
+      `);
+      assert(
+        privileges.wrapperSecurityDefiner && privileges.helperSecurityDefiner && privileges.sameOwner &&
+          privileges.wrapperOwnerCanExecuteHelper,
+        'The SECURITY DEFINER wrapper owner cannot reach the preserved readiness implementation.',
+      );
+      assert(
+        privileges.wrapperServiceRoleExecute && !privileges.wrapperPublicExecute &&
+          !privileges.wrapperAnonExecute && !privileges.wrapperAuthenticatedExecute,
+        'The public readiness RPC execution boundary changed.',
+      );
+      assert(
+        !privileges.helperPublicExecute && !privileges.helperAnonExecute &&
+          !privileges.helperAuthenticatedExecute && !privileges.helperServiceRoleExecute,
+        'An external role can bypass the public readiness wrapper.',
+      );
     });
 
     // ---------------------------------------------------------------- Publication readiness

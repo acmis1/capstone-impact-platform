@@ -28,11 +28,25 @@ export interface ControlledPublicRemovalDependencies {
   feedBucket: string;
   feedPath: string;
   assertExecutionEnvironment(): void;
-  listProjects(): Promise<Project[]>;
+  /** Exact target read used by production dependencies. */
+  getProject?(): Promise<Project | null>;
+  /** Backward-compatible verifier seam; production callers must provide getProject. */
+  listProjects?(): Promise<Project[]>;
 }
 
 export type PublicRemovalFailurePoint = 'after_reservation' | 'after_feed_write' | 'before_finalize';
 export interface PublicRemovalBarriers { afterReservation?(): Promise<void> }
+
+async function readTargetProject(
+  dependencies: ControlledPublicRemovalDependencies,
+  publicId: string,
+): Promise<Project | null> {
+  if (dependencies.getProject) return dependencies.getProject();
+  if (!dependencies.listProjects) throw new Error('PROJECT_READER_UNAVAILABLE');
+  const targets = (await dependencies.listProjects())
+    .filter((project) => project.publicId === publicId);
+  return targets.length === 1 ? targets[0] : null;
+}
 
 export async function executeControlledPublicRemoval(params: {
   permissions: AdminPermission[];
@@ -48,12 +62,10 @@ export async function executeControlledPublicRemoval(params: {
   catch { return { resultCode: 'EXECUTION_FAILED', failureCode: 'NON_LOCAL_ENVIRONMENT' }; }
 
   try {
-    const projects = await dependencies.listProjects();
-    const targets = projects.filter((project) => project.publicId === publicId);
-    if (targets.length !== 1 || !['published', 'archived'].includes(targets[0].status)) {
+    const target = await readTargetProject(dependencies, publicId);
+    if (!target || !['published', 'archived'].includes(target.status)) {
       return { resultCode: 'NOT_PUBLISHED' };
     }
-    const target = targets[0];
     if (target.status === 'archived') {
       const inspected = await inspectPublicFeedHead(
         dependencies.supabase, dependencies.feedBucket, dependencies.feedPath,

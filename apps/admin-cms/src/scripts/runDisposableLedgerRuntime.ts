@@ -38,6 +38,8 @@ const RUNTIME_SCRIPTS: Record<string, RuntimeScript> = {
   publication: { file: 'verifyControlledPublicationRuntime.ts' },
   'annual-publication': { file: 'verifyAnnualPublicationEvidenceRuntime.ts' },
   'integrated-cohort': { file: 'verifyIntegratedCohortRuntime.ts', timeoutMs: 1_200_000 },
+  'deadline-capacity': { file: 'verifyDeadlineRetainedCapacityRuntime.ts', timeoutMs: 3_600_000 },
+  'retained-project-reads': { file: 'verifyRetainedProjectReadsRuntime.ts' },
   removal: { file: 'verifyControlledPublicRemovalRuntime.ts' },
   'preview-access': { file: 'verifyParticipantPreviewAccessRuntime.ts' },
   'browser-media': { file: 'verifyBrowserImportMediaStageRuntime.ts' },
@@ -59,10 +61,11 @@ const CORRECTION_MIGRATIONS = [
   '20260910120100_participant_preview_access_observations.sql',
   '20260910120200_assistive_worker_production_identity.sql',
   '20260911120000_gallery_full_text_equivalents.sql',
+  '20260914100000_layout_recipe_library.sql',
 ];
 
 const PRE_CORRECTION_MIGRATION_COUNT = 51;
-const CURRENT_MAIN_MIGRATION_COUNT = 57;
+const CURRENT_MAIN_MIGRATION_COUNT = 58;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -122,6 +125,7 @@ async function assertPortBlockAvailable(): Promise<void> {
 function createWorkdir(
   excludeMigrations: readonly string[] = [],
   annualPublicationMode = false,
+  apiMaxRows = 1000,
 ): string {
   const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'capstone-ledger-runtime-'));
   const source = path.join(repositoryRoot, 'infra', 'supabase');
@@ -132,6 +136,7 @@ function createWorkdir(
   }
   const configPath = path.join(destination, 'config.toml');
   let config = configurePorts(fs.readFileSync(configPath, 'utf8'));
+  config = config.replace(/^max_rows = \d+$/m, `max_rows = ${apiMaxRows}`);
   if (annualPublicationMode) {
     // The repository seed contains one published demonstration project. The annual verifier owns
     // an empty disposable publication universe so its 120-record head cannot include unrelated
@@ -464,7 +469,12 @@ function runSupabase(command: 'start' | 'stop' | 'migrate', workdir: string, net
 async function main(): Promise<void> {
   const upgradeRequested = selected.includes(UPGRADE_MODE);
   const scriptModes = selected.filter((name) => name !== UPGRADE_MODE);
-  const emptyPublicationUniverseRequested = scriptModes.includes('annual-publication') || scriptModes.includes('integrated-cohort');
+  const retainedProjectReadsRequested = scriptModes.includes('retained-project-reads');
+  const deadlineCapacityRequested = scriptModes.includes('deadline-capacity');
+  const emptyPublicationUniverseRequested = scriptModes.includes('annual-publication')
+    || scriptModes.includes('integrated-cohort')
+    || deadlineCapacityRequested
+    || retainedProjectReadsRequested;
   if (emptyPublicationUniverseRequested && scriptModes.length !== 1) {
     console.error('The annual/integrated publication run needs its own empty disposable stack; run it as a separate invocation.');
     process.exitCode = 1;
@@ -481,6 +491,7 @@ async function main(): Promise<void> {
   const workdir = createWorkdir(
     upgradeRequested ? CORRECTION_MIGRATIONS : [],
     emptyPublicationUniverseRequested,
+    retainedProjectReadsRequested ? 37 : deadlineCapacityRequested ? 500 : 1000,
   );
   let networkId = '';
   let networkCreateAttempted = false;
@@ -506,7 +517,7 @@ async function main(): Promise<void> {
           VALUES ('57b00000-0000-4000-8000-000000000001', 'admin')
           ON CONFLICT DO NOTHING;`);
       }
-      const runtimeArguments = name === 'integrated-cohort'
+      const runtimeArguments = name === 'integrated-cohort' || name === 'deadline-capacity'
         ? ['--conditions=react-server', '--import', 'tsx', path.join(__dirname, script.file)]
         : [path.join(repositoryRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'), path.join(__dirname, script.file)];
       const runtime = spawnSync(process.execPath, runtimeArguments, {

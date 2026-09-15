@@ -4,6 +4,10 @@ import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 import { PROJECT_CONTROLLED_URL_MAX_LENGTH } from '../domain/projectControlledUrl';
 import { MAX_PARTICIPANT_CONTACT_EMAIL_LENGTH } from '../domain/participantContactEmail';
 import type { SnapshotImageContentKind } from '../domain/galleryTextEquivalent';
+import { createLayoutConfigFromStock, resolvedLayoutConfigSchema } from '../domain/layoutConfig';
+
+const DEFAULT_FORM_LAYOUT = createLayoutConfigFromStock('poster_showcase');
+const DEFAULT_FORM_SECTION_ORDER = DEFAULT_FORM_LAYOUT.sectionOrder.join(', ');
 
 /**
  * Metadata fields captured by the standardized project intake form.
@@ -26,6 +30,8 @@ export interface FormIntakeMetadata {
   year: string;
   templateId?: string; // 'poster_showcase' | 'technical_detail' | 'media_rich'
   featuredMedia?: string; // 'poster' | 'snapshots' | 'video'
+  sectionOrder?: string; // comma-separated renderer section IDs, materialized into the workbook
+  hiddenSections?: string; // comma-separated optional renderer section IDs
   posterText: string;
   accessibilityText: string;
   videoUrl?: string;
@@ -101,6 +107,8 @@ export function createInitialFormIntakeMetadata(): FormIntakeMetadata {
     year: new Date().getFullYear().toString(),
     templateId: 'poster_showcase',
     featuredMedia: 'poster',
+    sectionOrder: DEFAULT_FORM_SECTION_ORDER,
+    hiddenSections: '',
     posterText: '',
     accessibilityText: '',
     videoUrl: '',
@@ -180,6 +188,8 @@ export const formIntakeMetadataSchema = z.object({
   year: z.string().min(1).max(10),
   templateId: z.string().max(50).optional().default('poster_showcase'),
   featuredMedia: z.string().max(50).optional().default('poster'),
+  sectionOrder: z.string().max(500).optional().default(DEFAULT_FORM_SECTION_ORDER),
+  hiddenSections: z.string().max(500).optional().default(''),
   posterText: z.string().min(1).max(ACCESSIBLE_CONTENT_LIMITS.posterText),
   accessibilityText: z.string().min(1).max(ACCESSIBLE_CONTENT_LIMITS.accessibilityText),
   videoUrl: z.string().max(PROJECT_CONTROLLED_URL_MAX_LENGTH).optional().default(''),
@@ -215,4 +225,19 @@ export const formIntakeMetadataSchema = z.object({
   snapshot8FullText: z.string().max(ACCESSIBLE_CONTENT_LIMITS.snapshotFullText).optional().default(''),
   snapshot9FullText: z.string().max(ACCESSIBLE_CONTENT_LIMITS.snapshotFullText).optional().default(''),
   snapshot10FullText: z.string().max(ACCESSIBLE_CONTENT_LIMITS.snapshotFullText).optional().default(''),
-}).strict();
+}).strict().superRefine((metadata, context) => {
+  const split = (value: string) => value.split(/[,;\r\n]+/u).map((section) => section.trim()).filter(Boolean);
+  const parsed = resolvedLayoutConfigSchema.safeParse({
+    templateId: metadata.templateId,
+    featuredMedia: metadata.featuredMedia,
+    sectionOrder: split(metadata.sectionOrder),
+    hiddenSections: split(metadata.hiddenSections),
+  });
+  if (!parsed.success) {
+    context.addIssue({
+      code: 'custom',
+      path: ['sectionOrder'],
+      message: 'Layout configuration must use a complete supported section order and safe visibility choices.',
+    });
+  }
+});

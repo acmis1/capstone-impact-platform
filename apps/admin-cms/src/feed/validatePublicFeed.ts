@@ -6,6 +6,7 @@ import {
   isSnapshotImageContentKind,
 } from '../domain/galleryTextEquivalent';
 import { STORAGE_POLICIES } from '../storage/storageRules';
+import { getLayoutConfigWireProblems } from '../domain/layoutConfig';
 
 export interface FeedValidationResult {
   valid: boolean;
@@ -547,8 +548,11 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
         } else {
           const configObj = val as Record<string, unknown>;
           const tId = configObj.templateId;
+          const layoutProblems = getLayoutConfigWireProblems(configObj);
           if (!tId || typeof tId !== 'string' || !validTemplates.includes(tId)) {
             errors.push(`${prefix} Layout error: "templateId" must be one of [${validTemplates.join(', ')}]. Received "${String(tId)}".`);
+          } else if (layoutProblems.length > 0) {
+            errors.push(`${prefix} Layout error: ${layoutProblems[0]}.`);
           }
         }
       }

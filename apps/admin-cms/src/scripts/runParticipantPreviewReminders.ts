@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { parseSupabaseCliEnv, isLoopbackUrl } from '../local-development/localEnvironmentFile';
 import { resolveParticipantPreviewEmailConfig } from '../notifications/participantPreviewEmailConfig';
-import { SmtpParticipantPreviewEmailTransport } from '../notifications/smtpParticipantPreviewEmailTransport';
+import { createParticipantPreviewEmailTransport } from '../notifications/participantPreviewEmailTransportFactory';
 import { SupabaseParticipantPreviewReminderRepositoryCore } from '../repositories/SupabaseParticipantPreviewReminderRepositoryCore';
 import { isParticipantPreviewRemindersEnabled } from '../reminders/participantPreviewReminderConfig';
 import { runParticipantPreviewReminders } from '../reminders/participantPreviewReminderRunner';
@@ -44,8 +44,8 @@ export async function runLocalParticipantPreviewReminders(repoRoot = path.resolv
   return runParticipantPreviewReminders({
     enabled: true,
     notifications: repository,
-    transport: new SmtpParticipantPreviewEmailTransport(email.smtp),
-    fromAddress: email.smtp.from,
+    transport: createParticipantPreviewEmailTransport(email),
+    fromAddress: email.fromAddress,
   });
 }
 if (require.main === module) {

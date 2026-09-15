@@ -5,6 +5,7 @@ import { ProjectDetailsWorkbookError, COLUMN_DEFINITIONS } from '../projectDetai
 import { buildImportPackageManifestFromWorkbook } from '../workbookManifestAdapter';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../../domain/accessibleContent';
 import { PROJECT_CONTROLLED_URL_MAX_LENGTH } from '../../domain/projectControlledUrl';
+import { resolvedLayoutConfigSchema, STOCK_LAYOUT_CONFIGS } from '../../domain/layoutConfig';
 async function createWorkbookBuffer(options: {
   sheetName?: string;
   extraSheets?: { name: string; rows: (string | number | boolean | null | undefined)[][] }[];
@@ -95,6 +96,48 @@ describe('parseProjectDetailsWorkbook', () => {
     'Solar Power Optimizer. Problem: high energy loss in distributed solar grids. Method: smart dynamic micro-inverter controller. Results: 12% yield improvement across six test sites.',
     'Poster shows solar inverter architecture diagram.'
   ];
+
+  it('0. round-trips a complete recipe value and rejects malformed authoring columns', async () => {
+    const headers = [...defaultCanonicalHeaders, 'Section order', 'Hidden sections'];
+    const sectionOrder = 'team, background, solution, snapshots, video, links, citations, accessibilityText';
+    const valid = await parseProjectDetailsWorkbook(await createWorkbookBuffer({
+      headers,
+      dataRows: [[...defaultCanonicalData, sectionOrder, 'video, citations']],
+    }));
+    expect(valid.metadata.layoutConfig.sectionOrder).toEqual(sectionOrder.split(', '));
+    expect(valid.metadata.layoutConfig.hiddenSections).toEqual(['video', 'citations']);
+
+    for (const [order, hidden] of [
+      ['team, background', ''],
+      ['team, team, background, solution, snapshots, video, links, citations', ''],
+      [sectionOrder, 'team'],
+      [sectionOrder, 'snapshots'],
+      [sectionOrder, 'video, video'],
+    ]) {
+      await expect(parseProjectDetailsWorkbook(await createWorkbookBuffer({
+        headers,
+        dataRows: [[...defaultCanonicalData, order, hidden]],
+      }))).rejects.toMatchObject({ name: 'ProjectDetailsWorkbookError' });
+    }
+  });
+
+  it.each([
+    { workbookTemplate: 'Poster showcase', workbookMedia: 'Poster', templateId: 'poster_showcase' as const },
+    { workbookTemplate: 'Technical report', workbookMedia: 'Gallery', templateId: 'technical_detail' as const },
+    { workbookTemplate: 'Media-rich showcase', workbookMedia: 'Video', templateId: 'media_rich' as const },
+  ])('0b. resolves a new standard $templateId XLSX without recipe columns to its complete stock value', async ({ workbookTemplate, workbookMedia, templateId }) => {
+    const data = [...defaultCanonicalData];
+    data[12] = workbookTemplate;
+    data[13] = workbookMedia;
+
+    const result = await parseProjectDetailsWorkbook(await createWorkbookBuffer({
+      headers: defaultCanonicalHeaders,
+      dataRows: [data],
+    }));
+
+    expect(result.metadata.layoutConfig).toEqual(STOCK_LAYOUT_CONFIGS[templateId]);
+    expect(resolvedLayoutConfigSchema.safeParse(result.metadata.layoutConfig).success).toBe(true);
+  });
 
   // 1. Valid workbook using canonical staff headers
   it('1. parses a valid workbook using canonical staff headers', async () => {

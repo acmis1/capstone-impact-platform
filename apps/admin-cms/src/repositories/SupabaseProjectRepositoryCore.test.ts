@@ -22,8 +22,10 @@ interface QueryExecutionLog {
   orClause?: string;
   eqFilters?: Record<string, unknown>;
   inFilters?: Record<string, unknown[]>;
+  gtFilters?: Record<string, unknown>;
   orders: OrderCall[];
   ranges: RangeCall[];
+  limits?: number[];
 }
 
 function createSequentialMockSupabaseClient(responses: Array<{ data: unknown[]; count?: number }>) {
@@ -96,6 +98,93 @@ function createSequentialMockSupabaseClient(responses: Array<{ data: unknown[]; 
 
   return client as unknown as import('@supabase/supabase-js').SupabaseClient & {
     _executionLogs: QueryExecutionLog[];
+  };
+}
+
+function createCappedKeysetMockSupabaseClient(
+  initialRows: DatabaseProjectRow[],
+  serverCap: number,
+  options: {
+    failQuery?: number;
+    mutateBeforeQuery?: (queryNumber: number, rows: DatabaseProjectRow[]) => DatabaseProjectRow[];
+  } = {},
+) {
+  let rows = [...initialRows];
+  let queryNumber = 0;
+  const executionLogs: QueryExecutionLog[] = [];
+
+  const client = {
+    from: vi.fn().mockImplementation((table: string) => {
+      const currentLog: QueryExecutionLog = { table, orders: [], ranges: [], limits: [] };
+      executionLogs.push(currentLog);
+      const builder: Record<string, unknown> = {
+        select: vi.fn().mockImplementation((fields) => {
+          currentLog.selectFields = fields;
+          return builder;
+        }),
+        is: vi.fn().mockImplementation((column, value) => {
+          currentLog.isCol = column;
+          currentLog.isVal = value;
+          return builder;
+        }),
+        gt: vi.fn().mockImplementation((column, value) => {
+          currentLog.gtFilters = { [column]: value };
+          return builder;
+        }),
+        order: vi.fn().mockImplementation((column, optionsValue) => {
+          currentLog.orders.push({ column, options: optionsValue });
+          return builder;
+        }),
+        limit: vi.fn().mockImplementation((value) => {
+          currentLog.limits?.push(value);
+          return builder;
+        }),
+        then: vi.fn().mockImplementation((resolve) => {
+          queryNumber += 1;
+          rows = options.mutateBeforeQuery?.(queryNumber, rows) ?? rows;
+          if (queryNumber === options.failQuery) {
+            resolve({ data: null, count: null, error: { message: 'late page failed' } });
+            return;
+          }
+          const cursor = currentLog.gtFilters?.public_id;
+          const data = rows
+            .filter((row) => typeof cursor !== 'string' || row.public_id > cursor)
+            .sort((left, right) => left.public_id.localeCompare(right.public_id))
+            .slice(0, serverCap);
+          resolve({ data, count: null, error: null });
+        }),
+      };
+      return builder;
+    }),
+    _executionLogs: executionLogs,
+  };
+
+  return client as unknown as import('@supabase/supabase-js').SupabaseClient & {
+    _executionLogs: QueryExecutionLog[];
+  };
+}
+
+function createExactLookupMockSupabaseClient(data: DatabaseProjectRow | null) {
+  const log: QueryExecutionLog = { orders: [], ranges: [] };
+  const builder: Record<string, unknown> = {
+    select: vi.fn().mockImplementation((fields) => {
+      log.selectFields = fields;
+      return builder;
+    }),
+    eq: vi.fn().mockImplementation((column, value) => {
+      log.eqFilters = { [column]: value };
+      return builder;
+    }),
+    is: vi.fn().mockImplementation((column, value) => {
+      log.isCol = column;
+      log.isVal = value;
+      return builder;
+    }),
+    maybeSingle: vi.fn().mockResolvedValue({ data, error: null }),
+  };
+  return {
+    client: { from: vi.fn().mockReturnValue(builder) } as unknown as import('@supabase/supabase-js').SupabaseClient,
+    log,
   };
 }
 
@@ -199,16 +288,94 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
     expect(new Set(technology.projects.map((project) => project.publicId)).size).toBe(25);
   });
 
-  it('lists lifecycle projects with the unique public ID as a deterministic timestamp tie-breaker', async () => {
-    const mockClient = createSequentialMockSupabaseClient([{ data: [], count: 0 }]);
+  it.each([0, 1, 120, 999, 1000, 1001, 1500, 3000])(
+    'retrieves all %i retained projects across the configured 1000-row response cap',
+    async (rowCount) => {
+      const rows = Array.from({ length: rowCount }, (_, index) => ({
+        id: `uuid-${index}`,
+        public_id: `project-${String(index).padStart(5, '0')}`,
+        created_at: '2026-09-14T00:00:00.000Z',
+      }));
+      const mockClient = createCappedKeysetMockSupabaseClient(rows, 1000);
+      const repo = new SupabaseProjectRepositoryCore(mockClient);
+
+      const projects = await repo.listProjects();
+
+      expect(projects.map((project) => project.publicId)).toEqual(rows.map((row) => row.public_id));
+      expect(new Set(projects.map((project) => project.publicId)).size).toBe(rowCount);
+      expect(mockClient._executionLogs.every((log) => log.limits?.[0] === 1000)).toBe(true);
+      expect(mockClient._executionLogs.every((log) =>
+        log.orders[0]?.column === 'public_id' && log.orders[0]?.options?.ascending === true,
+      )).toBe(true);
+    },
+  );
+
+  it('continues after short server-capped pages and returns the complete identity set', async () => {
+    const rows = Array.from({ length: 120 }, (_, index) => ({
+      id: `uuid-${index}`,
+      public_id: `project-${String(index).padStart(5, '0')}`,
+    }));
+    const mockClient = createCappedKeysetMockSupabaseClient(rows, 37);
     const repo = new SupabaseProjectRepositoryCore(mockClient);
 
-    await repo.listProjects();
+    const projects = await repo.listProjects();
 
-    expect(mockClient._executionLogs[0].orders).toEqual([
-      { column: 'created_at', options: { ascending: false } },
-      { column: 'public_id', options: { ascending: true } },
-    ]);
+    expect(projects.map((project) => project.publicId)).toEqual(rows.map((row) => row.public_id));
+    expect(mockClient._executionLogs).toHaveLength(10);
+  });
+
+  it('fails explicitly instead of returning a partial list when a late page errors', async () => {
+    const rows = Array.from({ length: 120 }, (_, index) => ({
+      id: `uuid-${index}`,
+      public_id: `project-${String(index).padStart(5, '0')}`,
+    }));
+    const repo = new SupabaseProjectRepositoryCore(
+      createCappedKeysetMockSupabaseClient(rows, 37, { failQuery: 2 }),
+    );
+
+    await expect(repo.listProjects()).rejects.toThrow('late page failed');
+  });
+
+  it('fails explicitly when concurrent insert/delete activity changes the retained identity set', async () => {
+    const rows = Array.from({ length: 120 }, (_, index) => ({
+      id: `uuid-${index}`,
+      public_id: `project-${String(index).padStart(5, '0')}`,
+    }));
+    const repo = new SupabaseProjectRepositoryCore(createCappedKeysetMockSupabaseClient(rows, 1000, {
+      mutateBeforeQuery: (queryNumber, currentRows) => queryNumber === 3
+        ? [...currentRows.slice(1), { id: 'uuid-new', public_id: 'project-new' }]
+        : currentRows,
+    }));
+
+    await expect(repo.listProjects()).rejects.toThrow('changed during pagination');
+  });
+
+  it('fails explicitly when duplicate public IDs make keyset progress ambiguous', async () => {
+    const repo = new SupabaseProjectRepositoryCore(createCappedKeysetMockSupabaseClient([
+      { id: 'uuid-1', public_id: 'duplicate' },
+      { id: 'uuid-2', public_id: 'duplicate' },
+    ], 1000));
+
+    await expect(repo.listProjects()).rejects.toThrow('non-unique or out-of-order public_id');
+  });
+
+  it('uses the exact public-ID lookup while preserving the soft-deletion filter', async () => {
+    const { client, log } = createExactLookupMockSupabaseClient({
+      id: 'uuid-target', public_id: 'target', title: 'Exact target',
+    });
+
+    await expect(new SupabaseProjectRepositoryCore(client).getProjectByPublicId('target'))
+      .resolves.toMatchObject({ publicId: 'target', title: 'Exact target' });
+    expect(log.eqFilters).toEqual({ public_id: 'target' });
+    expect(log.isCol).toBe('deleted_at');
+    expect(log.isVal).toBeNull();
+  });
+
+  it('maps an absent or soft-deleted exact public-ID lookup to null', async () => {
+    const { client } = createExactLookupMockSupabaseClient(null);
+
+    await expect(new SupabaseProjectRepositoryCore(client).getProjectByPublicId('deleted-target'))
+      .resolves.toBeNull();
   });
 
   // ============================================================

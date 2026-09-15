@@ -28,6 +28,6 @@ export function createControlledPublicRemovalDependencies(params: {
       supabaseUrl: params.supabaseUrl,
       env: params.executionEnvironment,
     }),
-    listProjects: () => projects.listProjects(),
+    getProject: () => projects.getProjectByPublicId(params.publicId),
   };
 }

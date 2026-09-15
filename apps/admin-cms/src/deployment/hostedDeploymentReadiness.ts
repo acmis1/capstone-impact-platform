@@ -5,7 +5,7 @@
  * deployment readiness separately executes one immutable, read-only capability sentinel.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 57;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 58;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -65,10 +65,11 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260910120100_participant_preview_access_observations.sql',
   '20260910120200_assistive_worker_production_identity.sql',
   '20260911120000_gallery_full_text_equivalents.sql',
+  '20260914100000_layout_recipe_library.sql',
 ] as const;
 
 export const RELEASE_CAPABILITY_SENTINEL =
-  '20260911120000_gallery_full_text_equivalents|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1';
+  '20260914100000_layout_recipe_library|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1';
 
 export const REQUIRED_CORE_TABLES = [
   'programs',
@@ -137,6 +138,11 @@ export const REQUIRED_NOTIFICATION_TABLES = [
   'participant_preview_reminder_schedules',
 ] as const;
 
+export const REQUIRED_LAYOUT_RECIPE_TABLES = [
+  'layout_recipe_versions',
+  'layout_recipe_audit_events',
+] as const;
+
 export const ALL_REQUIRED_TABLES = [
   ...REQUIRED_CORE_TABLES,
   ...REQUIRED_IMPORT_LEDGER_TABLES,
@@ -146,6 +152,7 @@ export const ALL_REQUIRED_TABLES = [
   ...REQUIRED_AUTH_PROVENANCE_TABLES,
   ...REQUIRED_NOTIFICATION_TABLES,
   ...REQUIRED_ASSISTIVE_TABLES,
+  ...REQUIRED_LAYOUT_RECIPE_TABLES,
 ] as const;
 
 export type RequiredRpcSignature = {
@@ -165,6 +172,10 @@ function rpc(
 /** Final application RPC signatures granted to service_role by the repository migrations. */
 export const REQUIRED_RPC_SIGNATURES = [
   rpc('get_release_capability_sentinel', [], []),
+  rpc('layout_recipe_config_valid', ['p_config'], ['jsonb']),
+  rpc('create_layout_recipe', ['p_actor_admin_id', 'p_name', 'p_layout_config', 'p_source_version_id'], ['uuid', 'text', 'jsonb', 'uuid']),
+  rpc('version_layout_recipe', ['p_actor_admin_id', 'p_source_version_id', 'p_expected_version', 'p_name', 'p_layout_config'], ['uuid', 'uuid', 'integer', 'text', 'jsonb']),
+  rpc('retire_layout_recipe', ['p_actor_admin_id', 'p_recipe_version_id', 'p_expected_version'], ['uuid', 'uuid', 'integer']),
   rpc('bootstrap_initial_admin', ['p_auth_user_id', 'p_email', 'p_full_name'], ['uuid', 'text', 'text']),
   rpc('register_password_recovery_session', ['p_session_id', 'p_auth_user_id'], ['uuid', 'uuid']),
   rpc('perform_project_review_action', ['p_public_id', 'p_action', 'p_comments', 'p_admin_id'], ['text', 'text', 'text', 'uuid']),

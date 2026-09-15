@@ -128,6 +128,40 @@ describe('validatePublicFeed', () => {
     });
   });
 
+  it('accepts a complete recipe value and rejects unknown, duplicate or incompatible sections', () => {
+    const recipeProject = createMockProject({
+      status: 'published',
+      layoutConfig: {
+        templateId: 'poster_showcase', featuredMedia: 'poster',
+        sectionOrder: ['team', 'background', 'solution', 'snapshots', 'video', 'links', 'citations', 'accessibilityText'],
+        hiddenSections: ['video'],
+      },
+    });
+    expect(validatePublicFeed(compilePublicFeed([recipeProject])).valid).toBe(true);
+
+    for (const mutation of [
+      { sectionOrder: ['team', 'team'] },
+      { sectionOrder: ['arbitraryHtml'] },
+      { featuredMedia: 'video', hiddenSections: ['video'] },
+    ]) {
+      const compiled = compilePublicFeed([recipeProject]);
+      Object.assign(compiled[0].layoutConfig, mutation);
+      expect(validatePublicFeed(compiled).valid).toBe(false);
+    }
+  });
+
+  it('keeps bounded historical feed configs with hidden snapshots interpretable', () => {
+    const historical = createMockProject({
+      status: 'published',
+      layoutConfig: {
+        templateId: 'poster_showcase', featuredMedia: 'poster',
+        sectionOrder: ['background', 'solution', 'snapshots', 'video', 'links'],
+        hiddenSections: ['snapshots'],
+      },
+    });
+    expect(validatePublicFeed(compilePublicFeed([historical])).valid).toBe(true);
+  });
+
   it('creates warnings but remains valid for missing recommended indexing fields', () => {
     const projectMissingRecommended = createMockProject({
       status: 'published',
