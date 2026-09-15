@@ -225,12 +225,12 @@ npm run verify:all
 
 ## 10. Database Migration Rules
 
-1. **Append-Only Policy**: The current repository candidate contains 58 append-only migrations in `infra/supabase/migrations/`. **Never modify, rename, or delete an existing migration.** Migrations `0001`-`0057` retain their historical bytes; the candidate adds Migration `0058`, `20260914100000_layout_recipe_library.sql`.
+1. **Append-Only Policy**: Current `main` contains 58 append-only migrations in `infra/supabase/migrations/`. **Never modify, rename, or delete an existing migration.** Migrations `0001`-`0058` retain their historical bytes through `20260914100000_layout_recipe_library.sql`.
 2. **New Migrations**: If your feature requires schema, index, RLS, or function changes:
    - Create a new 14-digit timestamped file: `infra/supabase/migrations/YYYYMMDDHHMMSS_description.sql`.
    - Replay locally using `npm run supabase:reset`.
    - Add static contract tests in `apps/admin-cms/src/security/`.
-3. **Local/Repo Scope**: Local reset replays all 58 repository migrations through `20260914100000_layout_recipe_library`. Current hosted staging evidence remains at 57 migrations through `20260911120000_gallery_full_text_equivalents`; Migration 0058 has not been applied to hosted staging by this candidate. Earlier 52-migration evidence remains historical.
+3. **Local/Repo Scope**: Local reset replays all 58 repository migrations through `20260914100000_layout_recipe_library`. Hosted staging is also verified at 58 migrations through that canonical Migration 0058; earlier 52- and 57-migration evidence remains historical.
 
 ---
 
@@ -296,7 +296,7 @@ Do not select broad roadmap topics directly from `docs/implementation-backlog.md
 - ❌ **DO NOT** hardcode or commit API keys, secrets, credentials, passwords, or connection strings.
 - ❌ **DO NOT** use real participant, staff, or supervisor personal identity data (use synthetic data only).
 - ❌ **DO NOT** modify, delete, or redirect current checks to historical `Prototype/` material; maintain the Duda presentation layer under `apps/public-layer/`.
-- ❌ **DO NOT** edit, rename, or delete any of the 58 repository migration files through candidate `0058`; migrations are append-only. Migrations `0001`–`0057` retain their historical bytes, and current hosted staging is separately verified only through `0057`; this does not authorize routine hosted mutation.
+- ❌ **DO NOT** edit, rename, or delete any of the 58 repository migration files through `0058`; migrations are append-only. Migrations `0001`–`0057` retain their historical bytes, and hosted staging is verified through `0058`; this does not authorize routine hosted mutation.
 - ❌ **DO NOT** self-merge Pull Requests without maintainer sign-off.
 
 ---

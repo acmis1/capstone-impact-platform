@@ -445,6 +445,41 @@ function harnessDriver() {
     const requestedWidth = window.__CAPSTONE_HARNESS_VIEWPORT?.width;
     const actualInnerWidth = window.innerWidth;
     const actualClientWidth = document.documentElement.clientWidth;
+    const overflowDiagnostics = Array.from(document.querySelectorAll('#project-detail, #project-detail *'))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        const computed = window.getComputedStyle(element);
+        const overflow = Math.max(0, rect.right - actualClientWidth, element.scrollWidth - element.clientWidth);
+        return {
+          tag: element.tagName.toLowerCase(),
+          selector: element.id ? `#${element.id}` : `.${String(element.className).trim().split(/\s+/).filter(Boolean).join('.')}`,
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+          boundingWidth: Number(rect.width.toFixed(2)),
+          right: Number(rect.right.toFixed(2)),
+          overflow: Number(overflow.toFixed(2)),
+          width: computed.width,
+          minWidth: computed.minWidth,
+          maxWidth: computed.maxWidth,
+          padding: computed.padding,
+          margin: computed.margin,
+          display: computed.display,
+          gridTemplateColumns: computed.gridTemplateColumns,
+          whiteSpace: computed.whiteSpace,
+          overflowX: computed.overflowX,
+          boxSizing: computed.boxSizing,
+        };
+      })
+      .filter(item => item.scrollWidth > item.clientWidth + 1 || item.right > actualClientWidth + 1)
+      .sort((a, b) => b.overflow - a.overflow);
+
+    results.responsive = {
+      requestedWidth,
+      innerWidth: actualInnerWidth,
+      clientWidth: actualClientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      overflowDiagnostics,
+    };
 
     if (requestedWidth) {
       check(
@@ -524,6 +559,13 @@ function harnessDriver() {
         '.metadata-list dd',
         '.lead-summary',
         '.section-text',
+        '.poster-wall',
+        '.poster-hero-shell',
+        '.poster-hero-image',
+        '.hero-right-col',
+        '.metadata-chips',
+        '.exhibition-strip',
+        '.poster-body',
         '.detail-content-grid',
         '.snapshot-grid',
         '.snapshot-card',
@@ -665,7 +707,7 @@ function harnessDriver() {
       return;
     }
 
-    if (scenario === 'detail-poster' || scenario === 'detail-poster-long') {
+    if (scenario === 'detail-poster' || scenario === 'detail-poster-long' || scenario === 'detail-poster-duda-wrapper') {
       const isLong = scenario === 'detail-poster-long';
       const project = window.__CAPSTONE_HARNESS_FIXTURE.find(p => p.id === (isLong ? 202691 : 202601));
       check(Boolean(document.querySelector('.layout-preset-poster_showcase')), 'poster_showcase preset renders');
@@ -716,6 +758,21 @@ function harnessDriver() {
       check(document.getElementById('capstone-lightbox')?.style.display === 'none', 'backdrop closes the lightbox');
       check(document.activeElement === backdropOpener, 'backdrop close restores focus to the exact snapshot opener');
       verifyExternalLinkSecurity();
+      if (scenario === 'detail-poster') {
+        const headings = Array.from(document.querySelectorAll('.poster-body > .detail-section h2')).map(heading => heading.textContent.trim());
+        check(
+          JSON.stringify(headings) === JSON.stringify(['Background', 'The Solution', 'The Team', 'Resources', 'Citations', 'Accessibility Text']),
+          `stock poster section order remains compatible (${headings.join(' > ')})`,
+        );
+      }
+      if (scenario === 'detail-poster-duda-wrapper') {
+        const interactionTargets = Array.from(document.querySelectorAll('.cip-back, .poster-download, .exhibition-strip button, .cip-links a'));
+        check(interactionTargets.length > 0, 'responsive poster renders its interactive controls');
+        check(
+          interactionTargets.every(target => target.getBoundingClientRect().height >= 44),
+          'responsive poster keeps every button and link target at least 44px high',
+        );
+      }
       finish();
       return;
     }
@@ -749,6 +806,13 @@ function harnessDriver() {
       verifyRendererHeadingHierarchy();
       verifyRenderedSnapshotAlts(2);
       verifyExternalLinkSecurity();
+      if (!isLong) {
+        const headings = Array.from(document.querySelectorAll('.detail-main > .detail-section h2')).map(heading => heading.textContent.trim());
+        check(
+          JSON.stringify(headings) === JSON.stringify(['Background', 'The Solution', 'Project Video', 'Resources', 'Citations', 'The Team', 'Accessibility Text']),
+          `stock technical section order remains compatible (${headings.join(' > ')})`,
+        );
+      }
       finish();
       return;
     }
@@ -766,6 +830,13 @@ function harnessDriver() {
       verifyRendererHeadingHierarchy();
       verifyRenderedSnapshotAlts(2);
       verifyExternalLinkSecurity();
+      if (!isLong) {
+        const headings = Array.from(document.querySelectorAll('.detail-main > .detail-section h2')).map(heading => heading.textContent.trim());
+        check(
+          JSON.stringify(headings) === JSON.stringify(['Project Snapshots', 'Background', 'The Solution', 'Project Launchpad', 'The Team', 'Citations', 'Accessibility Text']),
+          `stock media-rich section order remains compatible (${headings.join(' > ')})`,
+        );
+      }
       finish();
       return;
     }
@@ -860,6 +931,38 @@ function harnessDriver() {
       check(fullTextDisclosure?.tagName === 'DETAILS', 'recipe keeps the text-bearing snapshot disclosure available');
       check(fullTextBody?.textContent === project.snapshotMedia[0].fullText, 'recipe renders the exact snapshot full text');
       check(fullTextBody?.getAttribute('aria-hidden') === null, 'recipe snapshot full text remains available to assistive technology');
+      finish();
+      return;
+    }
+
+    if (scenario === 'detail-media-recipe-b' || scenario === 'detail-media-external-links-alias') {
+      const expectedOrder = ['The Solution', 'Project Launchpad', 'Project Snapshots', 'The Team', 'Project Video', 'Accessibility Text'];
+      const headings = Array.from(document.querySelectorAll('.detail-main > .detail-section h2'))
+        .map(heading => heading.textContent.trim());
+      const project = window.__CAPSTONE_HARNESS_FIXTURE[0];
+      const externalHrefs = [project.demoUrl, project.repositoryUrl, ...project.externalLinks.map(link => link.url)];
+
+      check(Boolean(document.querySelector('.layout-preset-media_rich')), 'Recipe B keeps the media_rich renderer preset');
+      check(JSON.stringify(headings) === JSON.stringify(expectedOrder), `Recipe B visible section order follows configuration (${headings.join(' > ')})`);
+      check(document.querySelectorAll('.media-launchpad').length === 1, 'Recipe B renders Project Launchpad exactly once');
+      externalHrefs.forEach((href) => {
+        check(Array.from(document.querySelectorAll('a')).filter(link => link.href === href).length === 1, `Recipe B renders ${href} exactly once`);
+      });
+      check(!headings.includes('Background') && !headings.includes('Citations'), 'Recipe B keeps hidden background and citations absent');
+      if (scenario === 'detail-media-recipe-b') {
+        check(!document.body.textContent.includes(window.__CAPSTONE_RECIPE_ADMIN_MARKER), 'Recipe B does not expose administrative recipe metadata');
+      }
+      finish();
+      return;
+    }
+
+    if (scenario === 'detail-media-hidden-links') {
+      const project = window.__CAPSTONE_HARNESS_FIXTURE[0];
+      const externalHrefs = [project.demoUrl, project.repositoryUrl, ...project.externalLinks.map(link => link.url)];
+      externalHrefs.forEach((href) => {
+        check(Array.from(document.querySelectorAll('a')).filter(link => link.href === href).length === 0, `hidden links suppresses ${href}`);
+      });
+      check(Array.from(document.querySelectorAll('a')).filter(link => link.href === project.posterPdf).length === 1, 'hidden links preserves the independently allowed poster action');
       finish();
       return;
     }
@@ -1174,6 +1277,9 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases, runt
   if (scenario === 'detail-featured-gallery') {
     payload[2].layoutConfig.featuredMedia = 'snapshots';
   }
+  if (scenario === 'detail-poster-duda-wrapper') {
+    payload[0].layoutConfig.featuredMedia = 'poster';
+  }
   if (scenario === 'detail-layout-recipe') {
     payload = [structuredClone(fixtureCopy[0])];
     payload[0].layoutConfig = {
@@ -1183,6 +1289,39 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases, runt
       hiddenSections: ['video'],
     };
     fixtureCopy[0].layoutConfig = structuredClone(payload[0].layoutConfig);
+  }
+  if (scenario === 'detail-media-recipe-b') {
+    payload = [structuredClone(fixtureCopy[2])];
+    payload[0].layoutConfig = {
+      templateId: 'media_rich',
+      featuredMedia: 'poster',
+      sectionOrder: ['solution', 'links', 'snapshots', 'team', 'video', 'background', 'citations', 'accessibilityText'],
+      hiddenSections: ['background', 'citations'],
+    };
+    payload[0].layoutRecipeVersionId = 'administrative-recipe-marker-must-not-render';
+    fixtureCopy.length = 0;
+    fixtureCopy.push(structuredClone(payload[0]));
+  }
+  if (scenario === 'detail-media-external-links-alias') {
+    payload = [structuredClone(fixtureCopy[2])];
+    payload[0].layoutConfig = {
+      templateId: 'media_rich',
+      featuredMedia: 'poster',
+      sectionOrder: ['solution', 'externalLinks', 'snapshots', 'team', 'video', 'background', 'citations', 'accessibilityText'],
+      hiddenSections: ['background', 'citations'],
+    };
+    fixtureCopy.length = 0;
+    fixtureCopy.push(structuredClone(payload[0]));
+  }
+  if (scenario === 'detail-media-hidden-links') {
+    payload = [structuredClone(fixtureCopy[2])];
+    payload[0].layoutConfig = {
+      ...payload[0].layoutConfig,
+      sectionOrder: ['solution', 'externalLinks', 'snapshots', 'team'],
+      hiddenSections: ['links'],
+    };
+    fixtureCopy.length = 0;
+    fixtureCopy.push(structuredClone(payload[0]));
   }
   if (scenario === 'unsafe-record') {
     const unsafe = structuredClone(fixtureCopy[0]);
@@ -1268,6 +1407,7 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases, runt
     window.__CAPSTONE_HARNESS_VIEWPORT = { width: ${targetWidth}, height: ${targetHeight} };
     window.__CAPSTONE_HARNESS_CONTRACT_CASE = ${escapeInlineJson(harnessContractCase)};
     window.__CAPSTONE_HARNESS_MIXED_FEED = ${escapeInlineJson(harnessMixedFeed)};
+    window.__CAPSTONE_RECIPE_ADMIN_MARKER = 'administrative-recipe-marker-must-not-render';
     window.__CAPSTONE_HARNESS_SECRET = ['DISTINCTIVE', 'SECRET', 'LIKE', 'MARKER', '91f2c7'].join('_');
     window.__CAPSTONE_HARNESS_CONTROL_MARKER = ['CAPSTONE', 'HARNESS', 'POSITIVE', 'CONTROL', '4d17be'].join('_');
     window.__CAPSTONE_HARNESS_CONTROLS_VERIFIED = false;
@@ -1294,17 +1434,21 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases, runt
     };
   `;
 
+  const detailMarkup = scenario === 'detail-poster-duda-wrapper'
+    ? `<div class="duda-host-wrapper">${detailHtml}</div>`
+    : detailHtml;
+
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Duda current-feed local harness</title>
-  <style>html, body { margin: 0; width: 100%; min-height: 100%; background: #0f172a; } ${listingCss}\n${detailCss}</style>
+  <style>html, body { margin: 0; width: 100%; min-height: 100%; background: #0f172a; } .duda-host-wrapper { display: table; margin-left: 2.75rem; } ${listingCss}\n${detailCss}</style>
   <script>${harnessSetup}</script>
 </head>
 <body>
-  ${pathIsDetail ? detailHtml : listingHtml}
+  ${pathIsDetail ? detailMarkup : listingHtml}
   ${bodyEndHtml}
   <script>(${harnessDriver.toString()})();</script>
 </body>
@@ -1353,6 +1497,11 @@ const scenarios = [
   ['detail-poster', '/project-detail?id=202601', 390, 844],
   ['detail-poster', '/project-detail?id=202601', 375, 812],
   ['detail-poster', '/project-detail?id=202601', 320, 568],
+  ['detail-poster-duda-wrapper', '/project-detail?id=202601', 1440, 1000],
+  ['detail-poster-duda-wrapper', '/project-detail?id=202601', 768, 1024],
+  ['detail-poster-duda-wrapper', '/project-detail?id=202601', 390, 844],
+  ['detail-poster-duda-wrapper', '/project-detail?id=202601', 375, 812],
+  ['detail-poster-duda-wrapper', '/project-detail?id=202601', 320, 568],
   ['detail-poster-long', '/project-detail?id=202691', 390, 844],
   ['detail-poster-long', '/project-detail?id=202691', 375, 812],
   ['detail-poster-long', '/project-detail?id=202691', 320, 568],
@@ -1371,6 +1520,9 @@ const scenarios = [
   ['detail-media-long', '/project-detail?id=202493', 390, 844],
   ['detail-media-long', '/project-detail?id=202493', 375, 812],
   ['detail-media-long', '/project-detail?id=202493', 320, 568],
+  ['detail-media-recipe-b', '/project-detail?id=202403', 1440, 1000],
+  ['detail-media-external-links-alias', '/project-detail?id=202403', 1440, 1000],
+  ['detail-media-hidden-links', '/project-detail?id=202403', 1440, 1000],
   ['detail-featured-gallery', '/project-detail?id=202403', 1440, 1000],
   ['detail-layout-recipe', '/project-detail?id=202601', 1440, 1000],
   ['detail-layout-recipe', '/project-detail?id=202601', 768, 1024],
@@ -1518,6 +1670,9 @@ try {
         result,
         `${scenario} at ${width}px did not return browser evidence within timeout.`,
       );
+      if (scenario === 'detail-poster-duda-wrapper') {
+        console.log(`RESPONSIVE ${scenario} at ${width}px: ${JSON.stringify(result.responsive)}`);
+      }
       assert.equal(result.ok, true, `${scenario} at ${width}px failed: ${result.failures.join('; ')}`);
       console.log(`PASS ${scenario} at ${width}x${height}: ${result.checks.length} browser checks (innerWidth=${width}, clientWidth=${width})`);
     } finally {

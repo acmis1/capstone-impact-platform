@@ -165,6 +165,7 @@ export async function runBrevoEmailTransportVerification(
   // Assemble safe synthetic message
   const timestamp = new Date().toISOString();
   const runId = crypto.randomBytes(6).toString('hex');
+  const expectedCanaryUrl = `https://example.com/pp1-brevo-canary/${runId}`;
   const syntheticMessage: ParticipantPreviewEmailMessage = {
     recipient,
     subject: `[Operator Verification ${runId}] Capstone Platform Email Delivery Check`,
@@ -176,6 +177,7 @@ export async function runBrevoEmailTransportVerification(
       `Target: ${recipient}`,
       '',
       'This is an operator verification check for Brevo HTTPS email delivery.',
+      `Expected synthetic canary URL: ${expectedCanaryUrl}`,
       'If you received this message, please verify that sender details are as expected.',
     ].join('\n'),
     html: [
@@ -185,6 +187,7 @@ export async function runBrevoEmailTransportVerification(
       `<p><strong>Timestamp:</strong> ${timestamp}</p>`,
       `<p><strong>Target Recipient:</strong> ${recipient}</p>`,
       '<p>This email confirms connectivity and dispatch through Brevo HTTPS transactional transport.</p>',
+      `<p><a href="${expectedCanaryUrl}">Open the synthetic Brevo tracking canary</a></p>`,
       '</body></html>',
     ].join('\n'),
     messageId: `<operator-verify-${runId}@${emailConfig.fromAddress.split('@')[1] ?? 'capstone.internal'}>`,
@@ -215,6 +218,7 @@ export async function runBrevoEmailTransportVerification(
         referenceFingerprint,
         details: {
           deliveryEffect: 'SANDBOX_DROPPED_NO_DELIVERY',
+          expectedCanaryUrl,
         },
       };
     }
@@ -225,6 +229,7 @@ export async function runBrevoEmailTransportVerification(
       referenceFingerprint,
       details: {
         deliveryEffect: 'ACCEPTED_FOR_TRANSMISSION',
+        expectedCanaryUrl,
       },
     };
   }
