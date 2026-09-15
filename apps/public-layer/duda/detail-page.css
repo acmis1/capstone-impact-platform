@@ -1,5 +1,7 @@
 #project-detail {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 0;
   color: #f8fafc;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
@@ -831,6 +833,9 @@
 }
 
 #project-detail .exhibition-strip {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin-top: 2rem;
   padding: 1rem;
   border-radius: 18px;
@@ -1071,6 +1076,12 @@
 }
 
 @media (max-width: 768px) {
+  /* Duda's narrow widget wrapper can otherwise size this preset from its intrinsic content. */
+  #project-detail .layout-preset-poster_showcase {
+    width: 100%;
+    max-width: calc(100vw - 2.75rem);
+  }
+
   #project-detail .cip-module {
     padding: 2rem 1.25rem;
     border-radius: 18px;

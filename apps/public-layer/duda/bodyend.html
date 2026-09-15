@@ -999,7 +999,7 @@
                 `;
             }
             if (sec === "video" && project.videoUrl) return renderVideo(project.videoUrl);
-            if (sec === "links" || sec === "externalLinks") return renderLinks(false);
+            if (sec === "links" || sec === "externalLinks") return renderLinks(templateId === "media_rich");
             if (sec === "accessibilityText" && project.accessibilityText) return `<p class="section-text">${escapeHTML(project.accessibilityText)}</p>`;
             if (sec === "team") return renderTeam(templateId === "technical_detail");
             if (sec === "citations") return renderCitations(templateId === "technical_detail");
@@ -1029,6 +1029,15 @@
             if (!content) return "";
 
             const sectionIndex = activeNumberedSections.indexOf(sec) + 1;
+            const isMediaLaunchpad = templateId === "media_rich" && (sec === "links" || sec === "externalLinks");
+            if (isMediaLaunchpad) {
+                return `
+                    <section class="detail-section media-launchpad">
+                        <h2>Project Launchpad</h2>
+                        ${content}
+                    </section>
+                `;
+            }
             return `
                 <section class="detail-section ${numbered ? "report-row" : ""}">
                     ${numbered && sectionIndex > 0 ? `<span class="report-number">${sectionIndex}</span>` : ""}
@@ -1050,7 +1059,7 @@
             }
         });
 
-        const consumedSections = templateId === "media_rich" ? ["links", "externalLinks"] : [];
+        const consumedSections = [];
         if (elevatedMedia === "video") consumedSections.push("video");
         if (elevatedMedia === "snapshots") consumedSections.push("snapshots");
         if (elevatedMedia === "poster") consumedSections.push("poster");
@@ -1203,7 +1212,6 @@
         }
 
         if (templateId === "media_rich") {
-            const launchpadHTML = renderLinks(true);
             return `
                 <div class="cip-module layout-preset-media_rich">
                         <button class="cip-back" onclick="goBack()">
@@ -1216,7 +1224,6 @@
                             ${project.summary ? `<p class="lead-summary section-text">${escapeHTML(project.summary)}</p>` : ""}
                         </div>
                         ${heroMediaHTML ? `<section class="media-hero-shell">${heroMediaHTML}</section>` : ""}
-                        ${launchpadHTML ? `<section class="media-launchpad"><h2>Project Launchpad</h2>${launchpadHTML}</section>` : ""}
                         <div class="detail-content-grid media-grid">
                             <main class="detail-main">
                                 ${posterTextHTML}
