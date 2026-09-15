@@ -30,7 +30,7 @@ describe('participant preview response-observation migration', () => {
     expect(files.at(-2)).toBe('20260911120000_gallery_full_text_equivalents.sql');
     expect(files.at(-1)).toBe('20260914100000_layout_recipe_library.sql');
     expect(REQUIRED_RPC_NAMES).toContain('record_participant_preview_response_prepared');
-    expect(REQUIRED_RPC_SIGNATURES).toHaveLength(95);
+    expect(REQUIRED_RPC_SIGNATURES).toHaveLength(96);
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'HEAD', '--',
       ...files.slice(0, -1).map((file) => `infra/supabase/migrations/${file}`),

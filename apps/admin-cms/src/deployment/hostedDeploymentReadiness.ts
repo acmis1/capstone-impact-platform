@@ -172,6 +172,7 @@ function rpc(
 /** Final application RPC signatures granted to service_role by the repository migrations. */
 export const REQUIRED_RPC_SIGNATURES = [
   rpc('get_release_capability_sentinel', [], []),
+  rpc('layout_recipe_config_valid', ['p_config'], ['jsonb']),
   rpc('create_layout_recipe', ['p_actor_admin_id', 'p_name', 'p_layout_config', 'p_source_version_id'], ['uuid', 'text', 'jsonb', 'uuid']),
   rpc('version_layout_recipe', ['p_actor_admin_id', 'p_source_version_id', 'p_expected_version', 'p_name', 'p_layout_config'], ['uuid', 'uuid', 'integer', 'text', 'jsonb']),
   rpc('retire_layout_recipe', ['p_actor_admin_id', 'p_recipe_version_id', 'p_expected_version'], ['uuid', 'uuid', 'integer']),

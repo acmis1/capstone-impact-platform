@@ -216,8 +216,9 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches every final service-role application RPC signature and isolates the one internal helper', () => {
       const contracts = migrationServiceRoleContracts();
       expect(contracts.application.map(contractKey).sort()).toEqual(REQUIRED_RPC_SIGNATURES.map(contractKey).sort());
-      expect(contracts.application).toHaveLength(95);
+      expect(contracts.application).toHaveLength(96);
       expect(REQUIRED_RPC_NAMES).toContain('get_release_capability_sentinel');
+      expect(REQUIRED_RPC_NAMES).toContain('layout_recipe_config_valid');
       expect(REQUIRED_RPC_NAMES).toContain('manage_staff_lifecycle');
       expect(REQUIRED_RPC_NAMES).toContain('claim_staff_provider_reconciliation');
       expect(REQUIRED_RPC_NAMES).toContain('complete_staff_provider_reconciliation');
@@ -348,7 +349,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const inspected = inspectPostgrestOpenApi(openApiDocument());
       expect(inspected?.publicRelations).toEqual([...ALL_REQUIRED_TABLES].sort());
       expect(inspected?.rpcNames).toEqual([...REQUIRED_RPC_NAMES].sort());
-      expect(inspected?.rpcSignatures).toHaveLength(94);
+      expect(inspected?.rpcSignatures).toHaveLength(95);
       expect(inspected?.rpcSignatures.some((signature) => signature.name === 'execute_controlled_publication')).toBe(false);
     });
 
