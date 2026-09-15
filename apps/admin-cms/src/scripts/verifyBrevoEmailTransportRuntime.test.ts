@@ -17,6 +17,8 @@ describe('verifyBrevoEmailTransportRuntime', () => {
       expect(isAllowlistedRecipient('staff@rmit.edu.vn', [], false)).toBe(false);
       expect(isAllowlistedRecipient('participant@rmit.edu.vn', [], false)).toBe(false);
       expect(isAllowlistedRecipient('random-user@gmail.com', [], false)).toBe(false);
+      expect(isAllowlistedRecipient('staff@rmit.edu.vn', ['@rmit.edu.vn'], false)).toBe(false);
+      expect(isAllowlistedRecipient('staff@rmit.edu.vn', ['*.rmit.edu.vn'], false)).toBe(false);
     });
 
     it('permits specific email addresses provided via explicit allowlist for live sends', () => {
@@ -37,11 +39,14 @@ describe('verifyBrevoEmailTransportRuntime', () => {
 
   describe('runBrevoEmailTransportVerification safety gates', () => {
     it('blocks execution in CI environments when skipCiCheck is false', async () => {
+      const mockFetch = vi.fn();
       const result = await runBrevoEmailTransportVerification({
         env: { ...VALID_BREVO_ENV, CI: 'true' },
         args: ['--opt-in-real-send'],
+        fetchFn: mockFetch as unknown as typeof fetch,
       });
       expect(result.outcome).toBe('BLOCKED_IN_CI');
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('requires explicit command-line --opt-in-real-send for live sending', async () => {
@@ -112,6 +117,19 @@ describe('verifyBrevoEmailTransportRuntime', () => {
       expect(result.outcome).toBe('SANDBOX_NO_DELIVERY');
       expect(result.referenceFingerprint).toBeDefined();
       expect(result.message).toContain('delivery dropped at provider per sandbox configuration');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      const request = mockFetch.mock.calls[0]?.[1] as unknown as RequestInit;
+      const body = JSON.parse(request.body as string) as {
+        textContent: string;
+        htmlContent: string;
+        headers: Record<string, string>;
+      };
+      const expectedCanaryUrl = result.details?.expectedCanaryUrl;
+      expect(typeof expectedCanaryUrl).toBe('string');
+      expect(body.textContent).toContain(expectedCanaryUrl);
+      expect(body.htmlContent).toContain(`href="${expectedCanaryUrl}"`);
+      expect(body.headers['X-Sib-Sandbox']).toBe('drop');
       // Does not expose raw message ID in result
       expect(JSON.stringify(result)).not.toContain('<sandbox-msg-id-777>');
     });
@@ -137,7 +155,35 @@ describe('verifyBrevoEmailTransportRuntime', () => {
       });
 
       expect(result.outcome).toBe('ACCEPTED');
-      expect(result.referenceFingerprint).toBeDefined();
+      expect(result.referenceFingerprint).toMatch(/^[0-9a-f]{12}$/);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      const request = mockFetch.mock.calls[0]?.[1] as unknown as RequestInit;
+      const body = JSON.parse(request.body as string) as {
+        subject: string;
+        textContent: string;
+        htmlContent: string;
+      };
+      const runId = body.subject.match(/^\[Operator Verification ([0-9a-f]{12})\]/)?.[1];
+      expect(runId).toBeDefined();
+
+      const textCanaryUrls = body.textContent.match(
+        /https:\/\/example\.com\/pp1-brevo-canary\/[0-9a-f]{12}/g,
+      );
+      expect(textCanaryUrls).toHaveLength(1);
+      const expectedCanaryUrl = textCanaryUrls?.[0];
+      expect(expectedCanaryUrl).toBe(`https://example.com/pp1-brevo-canary/${runId}`);
+      expect(body.htmlContent).toContain(`href="${expectedCanaryUrl}"`);
+
+      const parsedCanaryUrl = new URL(expectedCanaryUrl as string);
+      expect(parsedCanaryUrl.origin).toBe('https://example.com');
+      expect(parsedCanaryUrl.pathname).toBe(`/pp1-brevo-canary/${runId}`);
+      expect(parsedCanaryUrl.search).toBe('');
+      expect(parsedCanaryUrl.hash).toBe('');
+      expect(expectedCanaryUrl).not.toMatch(/participant|preview|token|capability/i);
+      expect(expectedCanaryUrl).not.toContain(approvedMailbox);
+      expect(result.details?.expectedCanaryUrl).toBe(expectedCanaryUrl);
+
       // Output privacy: Result object JSON must not leak recipient or raw provider messageId
       const serialized = JSON.stringify(result);
       expect(serialized).not.toContain(approvedMailbox);

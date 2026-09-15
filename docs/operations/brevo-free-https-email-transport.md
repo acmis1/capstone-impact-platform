@@ -40,12 +40,14 @@ The autonomous coding agent cannot and must not create external accounts or log 
    - *Note on Free Email Domains*: Free public domains (such as `@gmail.com` or `@yahoo.com`) cannot have DKIM/SPF authenticated by the team. Brevo may temporarily rewrite the sender to a provider-owned address (e.g. `@brevo.com` or `@mailin.fr`) to prevent upstream rejection by DMARC policies.
 4. **Mandatory Privacy and Retention Controls**:
    - *Third-Party Processing*: Brevo necessarily processes recipient addresses and email body content to perform delivery. Absolute provider secrecy cannot be claimed.
-   - *Per-Contact Open-Pixel Anonymization*: The application passes `contactPixelTrackingConsent: false` in every API payload. This flag controls identifiable open-pixel behavior/anonymization when the account feature is enabled; it is **not** a per-recipient click-tracking opt-out. The separate dashboard requirement to disable click tracking in Brevo remains mandatory.
+   - *Observed Tracking UI*: The current test account exposed **Anonymous email tracking?**, initially set to **No**, rather than separate Open Tracking and Click Tracking on/off controls. Brevo documents **Yes** as anonymizing open/click engagement tracking. Anonymized tracking is still tracking and must not be described as tracking disabled.
+   - *Per-Contact Tracking Consent*: The application passes `contactPixelTrackingConsent: false` in every API payload. This value is not proof that click tracking is disabled or that a capability-bearing link will be preserved byte-for-byte.
    - *Required Dashboard Configuration*: Before any REAL capability-bearing preview email is enabled:
      1. Verify in Brevo dashboard settings that transactional email previews are configured as **Never store previews**.
      2. Configure transactional log retention to the minimum duration permitted by the plan.
-     3. Review and disable open and click tracking in **Transactional > Settings > Configuration**.
-     4. Conduct a synthetic canary email test to confirm that the received link URL in the team mailbox is byte-for-byte identical to the original URL and has not been rewritten through a tracking redirect domain.
+     3. Where the current UI exposes **Anonymous email tracking?**, set it to **Yes** before the live canary and record that this anonymizes engagement tracking. Do not claim that tracking is fully disabled unless the actual provider configuration proves it.
+     4. If a future Brevo UI exposes true open/click disable controls, disable them as an additional privacy control.
+     5. Independently conduct the synthetic canary test below. Exact link preservation is mandatory because neither anonymous tracking nor `contactPixelTrackingConsent: false` proves that Brevo will preserve a click URL.
 
 ---
 
@@ -114,11 +116,11 @@ apps/admin-cms/src/scripts/verifyBrevoEmailTransportRuntime.ts
 - Blocked in CI environments (`CI=true` or `GITHUB_ACTIONS=true`).
 - Requires explicit command-line opt-in flag `--opt-in-real-send` for live sends.
 - Rejects broad domain wildcards (e.g. `@rmit.edu.vn`). Live sending requires an **exact explicit mailbox allowlist** (`BREVO_VERIFICATION_ALLOWLIST`). A typo to an unapproved address will fail closed.
-- Output privacy: Does NOT print recipient email addresses, preview bearer URLs, API keys, or raw provider message IDs in console or status outputs. Returns bounded status and a one-way `referenceFingerprint`.
+- Output privacy: Does NOT print recipient email addresses, preview bearer URLs, API keys, or raw provider message IDs in console or status outputs. Returns bounded status, a one-way `referenceFingerprint`, and `details.expectedCanaryUrl`. The expected URL is safe to expose because it contains only a public reserved host and the synthetic verifier run ID.
 - Strictly limits send volume to 1 message per execution.
 
-### Step 1: Sandbox Validation (Zero Email, Zero Quota Consumption)
-Verify credentials and API reachability without sending real mail:
+### Step 1: Sandbox Validation (Zero Delivery)
+Verify credentials and API reachability with Brevo's provider-side drop behavior, without delivering mail:
 ```bash
 PARTICIPANT_PREVIEW_EMAIL_ENABLED=true \
 PARTICIPANT_PREVIEW_EMAIL_PROVIDER=brevo \
@@ -134,13 +136,16 @@ Expected output:
   "message": "Brevo sandbox accepted the request; delivery dropped at provider per sandbox configuration.",
   "referenceFingerprint": "...",
   "details": {
-    "deliveryEffect": "SANDBOX_DROPPED_NO_DELIVERY"
+    "deliveryEffect": "SANDBOX_DROPPED_NO_DELIVERY",
+    "expectedCanaryUrl": "https://example.com/pp1-brevo-canary/0123456789ab"
   }
 }
 ```
 
+The 12-character hexadecimal suffix is generated for each verifier run. The same exact URL appears once in the text content and as the HTML anchor `href`. Sandbox still returns `SANDBOX_NO_DELIVERY`: including the URL in dropped content does not create a live send, prove inbox delivery, or prove that Brevo preserves links in delivered mail.
+
 ### Step 2: Single Live Send to Team-Owned Mailbox
-Verify end-to-end receipt in a real inbox:
+After sandbox succeeds and the privacy controls above are recorded, manually run at most one live canary to the exact team-owned mailbox allowlist. The verifier makes one send attempt per invocation and must not be placed in an automated retry loop:
 ```bash
 PARTICIPANT_PREVIEW_EMAIL_ENABLED=true \
 PARTICIPANT_PREVIEW_EMAIL_PROVIDER=brevo \
@@ -156,13 +161,30 @@ Expected output:
   "message": "Brevo transactional HTTPS transport accepted the message for delivery.",
   "referenceFingerprint": "...",
   "details": {
-    "deliveryEffect": "ACCEPTED_FOR_TRANSMISSION"
+    "deliveryEffect": "ACCEPTED_FOR_TRANSMISSION",
+    "expectedCanaryUrl": "https://example.com/pp1-brevo-canary/0123456789ab"
   }
 }
 ```
 
-### Step 3: End-to-End Workflow Verification
-1. Complete canary verification showing that the URL received in the team mailbox is intact and un-rewritten.
+`ACCEPTED` proves only that Brevo accepted the HTTPS request. It does not prove inbox receipt or exact URL preservation.
+
+### Step 3: URL-Rewrite Qualification Decision
+
+Participant capability email is provider-qualified only when all of these conditions pass:
+
+1. The verifier result is `ACCEPTED`.
+2. The test mailbox receives the one synthetic message.
+3. The received HTML anchor's `href` is byte-for-byte identical to `details.expectedCanaryUrl`.
+4. No Brevo redirect or tracking domain replaces that `href`.
+
+If Brevo accepts the message but rewrites the synthetic link, the provider is **not qualified for participant capability email** under the current privacy contract. Keep participant email disabled, retain the manual token/copy workflow, and document Brevo as provider-accepted but unsuitable for capability-bearing preview links. Wait for an institutional provider or a provider configuration that demonstrably preserves the exact URL. Free-provider acceptance is not grounds to weaken this requirement.
+
+### Step 4: End-to-End Workflow Verification
+
+Only after Step 3 passes:
+
+1. Record the canary evidence showing that the received URL is intact and un-rewritten.
 2. Log into Admin CMS as an authorized staff member (`projects.review` permission).
 3. Open a test project in staging.
 4. Trigger **Generate Participant Preview** with email delivery enabled.
