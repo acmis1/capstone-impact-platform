@@ -74,7 +74,7 @@ npm run supabase:stop
 
 ## E. Database & Migration Governance
 
-1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete an existing migration. In this candidate, Migrations `0001` through `0057` are historical immutable bytes and Migration `0058` is the new additive migration.
+1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete an existing migration. Migrations `0001` through `0058` are historical immutable bytes on current `main`.
 2. **New Schema Changes**: Any schema, policy, or grant change requires a new 14-digit timestamped migration file in `infra/supabase/migrations/` (`YYYYMMDDHHMMSS_description.sql`).
 3. **Local Replay & Reset Verification**: Verify all schema changes locally by running `npm run supabase:reset` to replay migrations from zero in strict timestamp order.
 4. **Static Contract Tests**: Add static contract tests in `apps/admin-cms/src/security/` for any new database migration file.
@@ -86,8 +86,8 @@ npm run supabase:stop
 
 ### Migration Inventory (58 Timestamped Migrations)
 
-The current repository candidate contains 58 migrations through
-`20260914100000_layout_recipe_library.sql`. Hosted staging remains separately verified at 57 through Migration 0057 until an authorized forward application. See the
+The current repository and hosted staging contain 58 migrations through
+`20260914100000_layout_recipe_library.sql`; Migration 0058 was applied and verified on staging on 15 September 2026. See the
 [selected migration inventory](infra/supabase/README.md#selected-migration-inventory-58-migrations-total)
 and [local development guide](infra/supabase/local-development.md) for current replay and bucket
 ownership. The first nine migrations below are historical milestones, not the complete inventory.

@@ -158,13 +158,11 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
 
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
-      // Migration 0058 is the only migration added on this integration branch. Every historical
-      // Migration 0001-0057 byte must stay identical to the verified origin/main base.
-      const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
-        (migration) => migration !== '20260914100000_layout_recipe_library.sql',
-      );
+      // Every merged migration through 0058 is immutable and must stay byte-identical to
+      // the verified origin/main base.
+      const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS;
 
-      expect(historicalMigrations).toHaveLength(57);
+      expect(historicalMigrations).toHaveLength(58);
 
       expect(() =>
         execFileSync(

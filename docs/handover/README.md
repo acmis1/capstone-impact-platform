@@ -82,7 +82,7 @@ Read in this order:
 ### I need to deploy the Admin/CMS or reconcile the database
 
 - **[Admin/CMS Hosted Deployment Guide](../admin-cms-hosted-deployment.md)**
-- **[Staging-57 Deployment Evidence](../staging-57-deployment-evidence-2026-09-13.md)** — current hosted migration, Gate 4, Render, smoke, side-effect, and qualification evidence.
+- **[Staging-57 Deployment Evidence](../staging-57-deployment-evidence-2026-09-13.md)** — historical M57 hosted migration, Gate 4, Render, smoke, side-effect, and qualification evidence.
 - **[Staging Migration Reconciliation Runbook](../../infra/supabase/staging-reconciliation-runbook.md)**
 - **[Local Supabase Development Guide](../../infra/supabase/local-development.md)**
 

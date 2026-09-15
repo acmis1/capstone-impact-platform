@@ -202,11 +202,10 @@ npm run capture:recovery-backup -- \
 Required terminal evidence includes `SOURCE_CAPTURE_COMPLETE`, the exact reviewed SHA and its
 matching migration manifest, bounded database/Auth/execution-control counts, canonical bucket
 summaries, `SOURCE_MUTATIONS = NONE`, and `PRIVATE_RECOVERY_EVIDENCE_NEVER_COMMIT`. The current
-repository candidate contains 58 migrations through
-`20260914100000_layout_recipe_library.sql`; active staging-v2 remains verified at 57 migrations through Migration 0057,
-with four buckets and fresh 57-migration Gate 4 evidence. A hosted-origin capture from this 58-migration candidate must fail closed until source parity is re-established by a separately authorized Migration 0058 application and fresh schema evidence. Historical 48/48 and 52-row evidence
-through `20260906120000` remains historical. The current staging deployment and its qualification
-boundaries are recorded in [Staging-57 Deployment Evidence](../staging-57-deployment-evidence-2026-09-13.md).
+repository contains 58 migrations through
+`20260914100000_layout_recipe_library.sql`; active staging-v2 is also verified at 58 migrations through Migration 0058. The four buckets and exact 57-migration Gate 4 totals remain historical evidence, while M58 preservation checks separately verified the empty layout-recipe tables and bounded readiness/helper authority. Any hosted-origin capture must still fail closed unless source parity is freshly established for its exact candidate. Historical 48/48 and 52-row evidence
+through `20260906120000` remains historical. The prior 57-migration deployment and its qualification
+boundaries remain recorded in [Staging-57 Deployment Evidence](../staging-57-deployment-evidence-2026-09-13.md).
 Source parity must still be separately verified before any authorized hosted-origin capture.
 
 Stop if the target guard, migration history, source Gate 4 contract, Auth integrity, cost fence,
