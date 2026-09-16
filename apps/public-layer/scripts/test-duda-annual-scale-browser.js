@@ -162,13 +162,24 @@ const representativeIndexes = templates.map((template) => fixture.findIndex((rec
 assert.ok(representativeIndexes.every((index) => index >= 0), 'all three layout presets have a representative');
 
 async function findBrowser() {
-  const candidates = process.platform === 'win32'
-    ? [
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-      ]
-    : ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'];
-  for (const candidate of candidates) {
+  const chromeCandidates =
+    process.platform === 'win32'
+      ? [
+          'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+          'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+        ]
+      : process.platform === 'darwin'
+        ? [
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+            '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+          ]
+        : [
+            '/usr/bin/google-chrome',
+            '/usr/bin/chromium',
+            '/usr/bin/chromium-browser',
+          ];
+
+  for (const candidate of chromeCandidates) {
     try {
       await access(candidate);
       return candidate;
@@ -176,7 +187,10 @@ async function findBrowser() {
       // Try the next known browser location.
     }
   }
-  throw new Error('Chrome or Edge was not found in a supported local browser location.');
+
+  throw new Error(
+    'Chrome or Edge was not found in a supported local browser location.',
+  );
 }
 
 function harnessDriver() {
