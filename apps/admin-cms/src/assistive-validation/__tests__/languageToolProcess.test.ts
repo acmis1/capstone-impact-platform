@@ -87,8 +87,9 @@ describe('local LanguageTool process boundary', () => {
     expect(fetchMock.mock.calls[0][0]).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v2\/check$/);
   });
 
-  it('does not pass service credentials to the Java child process', async () => {
+  it('does not pass service credentials or preload hooks to the Java child process', async () => {
     vi.stubEnv('SUPABASE_SECRET_KEY', 'sb_secret_must-not-reach-java');
+    vi.stubEnv('LD_PRELOAD', '/app/libcapstone_credential_boundary.so');
     const provider = runnableProvider();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response()));
 
@@ -96,6 +97,7 @@ describe('local LanguageTool process boundary', () => {
 
     const options = vi.mocked(spawn).mock.calls[0][2];
     expect(options?.env?.SUPABASE_SECRET_KEY).toBeUndefined();
+    expect(options?.env?.LD_PRELOAD).toBeUndefined();
   });
 
   it('fails closed when the provider process has crashed', async () => {

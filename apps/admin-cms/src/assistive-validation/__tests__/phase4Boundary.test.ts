@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { buildPythonWorkerEnvironment } from '../services/pythonWorkerProcess';
+
 describe('Phase 4 coordinator authority and process boundary', () => {
   const root = join(process.cwd(), 'src', 'assistive-validation');
   const read = (relative: string) => readFileSync(join(root, relative), 'utf8');
@@ -64,6 +66,25 @@ describe('Phase 4 coordinator authority and process boundary', () => {
     expect(processSource).toContain('MAX_STDERR_BYTES');
     expect(processSource).toContain("spawn('taskkill', ['/pid', String(child.pid), '/t', '/f']");
     expect(processSource).toContain("process.kill(-child.pid, 'SIGKILL')");
+  });
+
+  it('constructs the Python environment from an allowlist, not coordinator credentials', () => {
+    const environment = buildPythonWorkerEnvironment('/worker', {
+      NODE_ENV: 'test',
+      PATH: '/bin',
+      LANG: 'en_AU.UTF-8',
+      LD_PRELOAD: '/app/libcapstone_credential_boundary.so',
+      SUPABASE_SECRET_KEY: 'must-not-reach-child',
+      CAPSTONE_ASSISTIVE_SUPABASE_URL: 'https://private.invalid',
+    });
+    expect(environment).toMatchObject({
+      PATH: '/bin',
+      LANG: 'en_AU.UTF-8',
+      PYTHONIOENCODING: 'utf-8',
+    });
+    expect(environment.SUPABASE_SECRET_KEY).toBeUndefined();
+    expect(environment.CAPSTONE_ASSISTIVE_SUPABASE_URL).toBeUndefined();
+    expect(environment.LD_PRELOAD).toBeUndefined();
   });
 
   it('has no authoritative mutation, publication, hosted AI, or external queue dependency', () => {

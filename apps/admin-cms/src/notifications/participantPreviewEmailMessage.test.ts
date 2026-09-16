@@ -104,6 +104,7 @@ describe('message rendering', () => {
 
     expect(text).toContain(CONTENT.previewUrl);
     expect(html).toContain(CONTENT.previewUrl);
+    expect(html).toContain(`<a href="${CONTENT.previewUrl}" data-no-track `);
     expect(text).toContain(expiry);
     expect(html).toContain(expiry);
     expect(text).toContain('confirm');

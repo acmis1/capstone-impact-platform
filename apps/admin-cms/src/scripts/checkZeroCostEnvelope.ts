@@ -166,6 +166,10 @@ function checkInfrastructureAsCode(failures: string[], lines: string[]): void {
     ['a digest-pinned worker image', /workerImageDigest/],
     ['a schedule bound to the reviewed cadence parameter', /cronExpression:\s*dispatcherCronExpression/],
     ['single-replica job configuration', /parallelism:\s*1/],
+    [
+      'the credential-guarded bundled on-demand worker entry point',
+      /command:\s*\[\s*'capstone-credential-boundary'\s*'\/usr\/bin\/tini'\s*'--'\s*'node'\s*'apps\/admin-cms\/src\/scripts\/assistive-worker-on-demand\.cjs'\s*\]/,
+    ],
   ];
   for (const [label, pattern] of requiredBicep) {
     if (!pattern.test(bicep)) failures.push(`Executor template no longer declares ${label}.`);

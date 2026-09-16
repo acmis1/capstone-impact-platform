@@ -65,7 +65,7 @@ describe('participant preview email enablement', () => {
       PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD: 'secret',
     });
     expect(result.enabled).toBe(true);
-    if (!result.enabled || result.provider === 'brevo') throw new Error('expected enabled SMTP configuration');
+    if (!result.enabled || result.provider !== 'smtp') throw new Error('expected enabled SMTP configuration');
     expect(result.smtp.auth).toEqual({ user: 'mailer', password: 'secret' });
   });
 
@@ -161,6 +161,54 @@ describe('participant preview email enablement', () => {
         PARTICIPANT_PREVIEW_EMAIL_FROM: 'not-an-email',
       }),
     ).toEqual({ enabled: false });
+  });
+
+  it('keeps SMTP2GO disabled until the operator-confirmed exact-link qualification flag is true', () => {
+    const base = {
+      PARTICIPANT_PREVIEW_EMAIL_ENABLED: 'true',
+      PARTICIPANT_PREVIEW_EMAIL_PROVIDER: 'smtp2go',
+      PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_API_KEY: 'api-mock-test-key-12345',
+      PARTICIPANT_PREVIEW_EMAIL_FROM: 'sender@capstone.test',
+    };
+
+    expect(resolveParticipantPreviewEmailConfig(base)).toEqual({ enabled: false });
+    for (const value of ['false', 'TRUE', ' true ', 'true ']) {
+      expect(
+        resolveParticipantPreviewEmailConfig({
+          ...base,
+          PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_EXACT_LINK_QUALIFIED: value,
+        }),
+      ).toEqual({ enabled: false });
+    }
+    expect(
+      resolveParticipantPreviewEmailConfig({
+        ...base,
+        PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_EXACT_LINK_QUALIFIED: 'true',
+      }),
+    ).toMatchObject({
+      enabled: true,
+      provider: 'smtp2go',
+      fromAddress: 'sender@capstone.test',
+    });
+  });
+
+  it('ignores an obsolete local SMTP2GO sandbox flag instead of inferring provider state', () => {
+    const result = resolveParticipantPreviewEmailConfig({
+      PARTICIPANT_PREVIEW_EMAIL_ENABLED: 'true',
+      PARTICIPANT_PREVIEW_EMAIL_PROVIDER: 'smtp2go',
+      PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_API_KEY: 'api-mock-test-key-12345',
+      PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_SANDBOX: 'true',
+      PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_EXACT_LINK_QUALIFIED: 'true',
+      PARTICIPANT_PREVIEW_EMAIL_FROM: 'sender@capstone.test',
+    });
+
+    expect(result.enabled).toBe(true);
+    if (!result.enabled || result.provider !== 'smtp2go') throw new Error('expected SMTP2GO configuration');
+    expect(result.smtp2go).toEqual({
+      apiKey: 'api-mock-test-key-12345',
+      from: 'sender@capstone.test',
+    });
+    expect(result.smtp2go).not.toHaveProperty('sandbox');
   });
 
   it('fails closed when an unknown provider is specified', () => {

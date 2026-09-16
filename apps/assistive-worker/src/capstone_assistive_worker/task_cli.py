@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import os
 import sys
@@ -29,6 +30,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--tesseract-executable", type=Path)
     parser.add_argument("--paddle-models-dir", type=Path)
     parser.add_argument("--health", action="store_true")
+    parser.add_argument("--require-parent-credential-boundary", action="store_true")
     return parser
 
 
@@ -68,6 +70,25 @@ def _start_parent_watchdog() -> None:
     threading.Thread(target=watch, name="assistive-parent-watchdog", daemon=True).start()
 
 
+def _parent_credentials_are_isolated(
+    raw_parent_pid: str | None,
+    proc_root: Path = Path("/proc"),
+) -> bool:
+    if sys.platform != "linux" or raw_parent_pid is None:
+        return False
+    try:
+        parent_pid = int(raw_parent_pid)
+    except ValueError:
+        return False
+    if parent_pid < 1:
+        return False
+    try:
+        (proc_root / str(parent_pid) / "environ").read_bytes()
+        return False
+    except OSError as error:
+        return error.errno in {errno.EACCES, errno.EPERM}
+
+
 def _read_task() -> WorkerTask:
     payload = sys.stdin.buffer.read(MAX_TASK_BYTES + 1)
     if not payload or len(payload) > MAX_TASK_BYTES:
@@ -84,10 +105,13 @@ def _read_task() -> WorkerTask:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.health:
-        provider_ready = args.paddle_models_dir is None or (
+        boundary_ready = not args.require_parent_credential_boundary or (
+            _parent_credentials_are_isolated(os.environ.get("CAPSTONE_ASSISTIVE_PARENT_PID"))
+        )
+        provider_ready = boundary_ready and (args.paddle_models_dir is None or (
             PaddleTitleOcrProvider(models_dir=args.paddle_models_dir).availability().state
             is OcrAvailabilityState.AVAILABLE
-        )
+        ))
         _write_json({
             "schema_version": "assistive-worker-health/v1",
             "status": "OK" if provider_ready else "UNHEALTHY",

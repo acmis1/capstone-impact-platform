@@ -88,7 +88,8 @@ const ENVIRONMENT_VARIABLE_FIELDS = new Set(['name', 'value', 'secretRef']);
 const RESOURCE_FIELDS = new Set(['cpu', 'memory', 'ephemeralStorage']);
 
 const EXPECTED_WORKER_COMMAND = [
-  'npm', 'run', 'run:assistive-worker:on-demand', '--workspace=apps/admin-cms',
+  'capstone-credential-boundary', '/usr/bin/tini', '--',
+  'node', 'apps/admin-cms/src/scripts/assistive-worker-on-demand.cjs',
 ] as const;
 
 function hasValue(container: JobExecutionContainerForStart, name: string, expected: string): boolean {

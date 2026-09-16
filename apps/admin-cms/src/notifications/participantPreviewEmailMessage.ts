@@ -132,7 +132,7 @@ export function renderParticipantPreviewEmailHtml(content: ParticipantPreviewEma
     '<p>Hello,</p>',
     `<p>Your project information for &ldquo;${title}&rdquo; has been prepared for the ${school} and is ready for you to review.</p>`,
     '<p>Open your secure preview link to see exactly what would be shown:</p>',
-    `<p><a href="${url}" style="color:#1D4ED8;">${url}</a></p>`,
+    `<p><a href="${url}" data-no-track style="color:#1D4ED8;">${url}</a></p>`,
     `<p>This link is personal to your group and stops working after <strong>${expiry} (UTC)</strong>.</p>`,
     '<p>On that page you can either confirm the details are correct, or request corrections by describing what needs to change. Nothing is published until your group has confirmed.</p>',
     '<p>If you were not expecting this message, you can safely ignore it.</p>',

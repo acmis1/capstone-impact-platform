@@ -480,19 +480,31 @@ export function ProjectAssistiveChecks({
               />
             )}
 
-            {/* Zero Findings in Completed/Partial Run */}
-            {(state.inspection.runStatus === 'COMPLETED' || state.inspection.runStatus === 'PARTIAL') &&
-              state.inspection.findings.length === 0 && (
-                <div className="flex items-center gap-3 rounded-lg border border-success/30 bg-success/8 p-4 text-sm text-foreground">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-success" aria-hidden="true" />
-                  <div>
-                    <p className="font-medium">All checks evaluated cleanly</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      No discrepancies or title formatting issues were identified.
-                    </p>
-                  </div>
+            {/* Zero Findings in Completed Run */}
+            {state.inspection.runStatus === 'COMPLETED' && state.inspection.findings.length === 0 && (
+              <div className="flex items-center gap-3 rounded-lg border border-success/30 bg-success/8 p-4 text-sm text-foreground">
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+                <div>
+                  <p className="font-medium">All checks evaluated cleanly</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    No discrepancies or title formatting issues were identified.
+                  </p>
                 </div>
-              )}
+              </div>
+            )}
+
+            {/* Zero Findings in Partial Run */}
+            {state.inspection.runStatus === 'PARTIAL' && state.inspection.findings.length === 0 && (
+              <div className="flex items-center gap-3 rounded-lg border border-information/30 bg-information/8 p-4 text-sm text-foreground">
+                <Info className="h-5 w-5 shrink-0 text-information" aria-hidden="true" />
+                <div>
+                  <p className="font-medium">No findings from the checks that completed</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    At least one check could not be evaluated. Review the partial-results notice above before relying on this run.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Findings List */}
             {state.inspection.findings.length > 0 && (

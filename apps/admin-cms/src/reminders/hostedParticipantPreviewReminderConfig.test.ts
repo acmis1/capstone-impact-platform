@@ -269,4 +269,28 @@ describe('hosted participant preview reminder configuration', () => {
     expect(result.emailConfig.provider).toBe('brevo');
     expect(result.emailConfig.brevo?.apiKey).toBe('xkeysib-reminder-key-99');
   });
+
+  it('accepts qualified SMTP2GO without SMTP variables or a local sandbox assertion', () => {
+    const result = resolveHostedParticipantPreviewReminderConfig({
+      ...VALID,
+      PARTICIPANT_PREVIEW_EMAIL_PROVIDER: 'smtp2go',
+      PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_API_KEY: 'api-reminder-test-key-99',
+      PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_EXACT_LINK_QUALIFIED: 'true',
+      PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_SANDBOX: 'true',
+      PARTICIPANT_PREVIEW_EMAIL_FROM: 'reminders@capstone.test',
+      PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST: undefined,
+      PARTICIPANT_PREVIEW_EMAIL_SMTP_PORT: undefined,
+      PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE: undefined,
+    });
+
+    expect(result.state).toBe('READY');
+    if (result.state !== 'READY') throw new Error('expected READY');
+    expect(result.fromAddress).toBe('reminders@capstone.test');
+    expect(result.emailConfig.provider).toBe('smtp2go');
+    expect(result.emailConfig.smtp2go).toEqual({
+      apiKey: 'api-reminder-test-key-99',
+      from: 'reminders@capstone.test',
+    });
+    expect(result.emailConfig.smtp2go).not.toHaveProperty('sandbox');
+  });
 });

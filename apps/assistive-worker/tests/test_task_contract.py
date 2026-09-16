@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import errno
 import json
 import os
 import subprocess
@@ -8,7 +9,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from capstone_assistive_worker.task_cli import _parent_credentials_are_isolated
 from capstone_assistive_worker.task_contract import WorkerTask
 from tests.fixture_support import generate_fixtures
 
@@ -147,6 +150,51 @@ class TaskCliTests(unittest.TestCase):
             {"schema_version": "assistive-worker-health/v1", "status": "OK"},
         )
         self.assertEqual(result.stderr, "")
+
+    def test_required_parent_credential_boundary_fails_closed_without_parent_identity(self) -> None:
+        env = copy.copy(os.environ)
+        env.pop("CAPSTONE_ASSISTIVE_PARENT_PID", None)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "capstone_assistive_worker.task_cli",
+                "--health",
+                "--require-parent-credential-boundary",
+            ],
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=False,
+            env=env,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(
+            json.loads(result.stdout),
+            {"schema_version": "assistive-worker-health/v1", "status": "UNHEALTHY"},
+        )
+        self.assertEqual(result.stderr, "")
+
+    def test_parent_credential_boundary_rejects_readable_environment(self) -> None:
+        if sys.platform != "linux":
+            self.skipTest("The hosted credential boundary is Linux-only.")
+        with tempfile.TemporaryDirectory(prefix="capstone-proc-test-") as root:
+            environ = Path(root) / "123" / "environ"
+            environ.parent.mkdir()
+            environ.write_bytes(b"SUPABASE_SECRET_KEY=redacted\0")
+            self.assertFalse(_parent_credentials_are_isolated("123", Path(root)))
+
+    def test_parent_credential_boundary_accepts_os_denial(self) -> None:
+        if sys.platform != "linux":
+            self.skipTest("The hosted credential boundary is Linux-only.")
+        with patch.object(Path, "read_bytes", side_effect=PermissionError(errno.EACCES, "denied")):
+            self.assertTrue(_parent_credentials_are_isolated("123"))
+
+    def test_parent_credential_boundary_rejects_missing_parent(self) -> None:
+        if sys.platform != "linux":
+            self.skipTest("The hosted credential boundary is Linux-only.")
+        with patch.object(Path, "read_bytes", side_effect=FileNotFoundError(errno.ENOENT, "missing")):
+            self.assertFalse(_parent_credentials_are_isolated("123"))
 
 
 if __name__ == "__main__":

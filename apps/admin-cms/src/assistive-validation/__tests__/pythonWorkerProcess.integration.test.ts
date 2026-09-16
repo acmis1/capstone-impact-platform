@@ -127,6 +127,31 @@ describe.skipIf(!enabled)('Node-to-Python assistive task boundary', () => {
     });
   });
 
+  it('does not inherit coordinator database credentials or URL', async () => {
+    const previous = {
+      secret: process.env.SUPABASE_SECRET_KEY,
+      serviceRole: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      url: process.env.CAPSTONE_ASSISTIVE_SUPABASE_URL,
+    };
+    process.env.SUPABASE_SECRET_KEY = 'sb_secret_must-not-reach-python';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-must-not-reach-python';
+    process.env.CAPSTONE_ASSISTIVE_SUPABASE_URL = 'https://private.invalid';
+    try {
+      const result = await expectStagingCleanup(() => shimWorker('environment-probe').run({
+        content,
+        documentType: 'PNG',
+      }));
+      expect(result.error).toBeNull();
+    } finally {
+      if (previous.secret === undefined) delete process.env.SUPABASE_SECRET_KEY;
+      else process.env.SUPABASE_SECRET_KEY = previous.secret;
+      if (previous.serviceRole === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+      else process.env.SUPABASE_SERVICE_ROLE_KEY = previous.serviceRole;
+      if (previous.url === undefined) delete process.env.CAPSTONE_ASSISTIVE_SUPABASE_URL;
+      else process.env.CAPSTONE_ASSISTIVE_SUPABASE_URL = previous.url;
+    }
+  });
+
   it('rejects success-shaped JSON when the process exits nonzero', async () => {
     await expect(expectStagingCleanup(() => shimWorker('success-exit-one').run({
       content,

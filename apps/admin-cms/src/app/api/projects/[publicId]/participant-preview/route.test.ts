@@ -357,4 +357,53 @@ describe('POST /api/projects/[publicId]/participant-preview Route Handler Tests'
     expect(input.recipient).toBe('participant-brevo@example.test');
     expect(context.transport.constructor.name).toBe('BrevoParticipantPreviewEmailTransport');
   });
+
+  it('14. Routes qualified SMTP2GO server-side without exposing its API key', async () => {
+    const apiKey = 'api-route-test-key-12345';
+    vi.mocked(resolveCanonicalPublicOrigin).mockReturnValue(
+      'https://capstone-admin-cms-staging-v2.onrender.com',
+    );
+    vi.mocked(resolveParticipantPreviewEmailConfig).mockReturnValue({
+      enabled: true,
+      provider: 'smtp2go',
+      smtp2go: {
+        apiKey,
+        from: 'smtp2go-sender@capstone.test',
+        fromName: 'Capstone Impact',
+      },
+      fromAddress: 'smtp2go-sender@capstone.test',
+    });
+    vi.mocked(requireAdmin).mockResolvedValue({
+      adminUserId: mockAdminId,
+      permissions: ['projects.review'],
+    } as never);
+    vi.spyOn(
+      SupabaseParticipantPreviewNotificationRepository.prototype,
+      'generatePreviewWithNotification',
+    ).mockResolvedValue({
+      resultCode: 'SUCCESS',
+      value: {
+        previewId: 'prev-smtp2go-test', publicId: mockPublicId,
+        createdAt: '2026-08-17T03:43:43.849Z', expiresAt: '2026-08-24T03:43:43.849Z',
+        projectTitle: 'SMTP2GO Project', notificationId: 'notification-smtp2go-1',
+        executionToken: 'token-smtp2go-1', recipient: 'participant-smtp2go@example.test',
+        requestedAt: '2026-08-17T03:43:43.849Z',
+      },
+    });
+    vi.mocked(executeParticipantPreviewNotification).mockResolvedValue({
+      code: 'SENT', message: 'Sent.', failureCode: null,
+    });
+
+    const res = await previewPOST(createRequest({ body: { sendEmail: true } }), {
+      params: Promise.resolve({ publicId: mockPublicId }),
+    });
+    const responseText = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(responseText).not.toContain(apiKey);
+    const [context, input] = vi.mocked(executeParticipantPreviewNotification).mock.calls.at(-1)!;
+    expect(input.fromAddress).toBe('smtp2go-sender@capstone.test');
+    expect(input.recipient).toBe('participant-smtp2go@example.test');
+    expect(context.transport.constructor.name).toBe('Smtp2goParticipantPreviewEmailTransport');
+  });
 });

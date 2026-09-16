@@ -2,6 +2,7 @@ import type { ParticipantPreviewEmailConfigResult } from './participantPreviewEm
 import type { ParticipantPreviewEmailTransport } from './participantPreviewEmailTransport';
 import { SmtpParticipantPreviewEmailTransport } from './smtpParticipantPreviewEmailTransport';
 import { BrevoParticipantPreviewEmailTransport } from './brevoParticipantPreviewEmailTransport';
+import { Smtp2goParticipantPreviewEmailTransport } from './smtp2goParticipantPreviewEmailTransport';
 
 export interface ParticipantPreviewEmailTransportInstance {
   transport: ParticipantPreviewEmailTransport;
@@ -13,7 +14,7 @@ export interface ParticipantPreviewEmailTransportInstance {
  *
  * Fails closed if delivery is not enabled or if configuration is invalid.
  * Preserves existing SMTP and Local sink implementations while providing
- * seamless instantiate-time routing to Brevo HTTPS transport when configured.
+ * seamless instantiate-time routing to a configured provider-specific HTTPS transport.
  */
 export function createParticipantPreviewEmailTransport(
   config: ParticipantPreviewEmailConfigResult,
@@ -24,6 +25,10 @@ export function createParticipantPreviewEmailTransport(
 
   if (config.provider === 'brevo') {
     return new BrevoParticipantPreviewEmailTransport(config.brevo);
+  }
+
+  if (config.provider === 'smtp2go') {
+    return new Smtp2goParticipantPreviewEmailTransport(config.smtp2go);
   }
 
   // Default to SMTP provider

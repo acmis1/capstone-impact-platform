@@ -2,7 +2,7 @@
  * Server-side operational enablement and transport configuration for participant preview email.
  *
  * Fails closed in every direction. Real delivery happens only when the enablement flag is set to
- * exactly `true` AND a complete, syntactically valid SMTP configuration is present. Absent, empty,
+ * exactly `true` AND a complete, syntactically valid selected transport configuration is present. Absent, empty,
  * partial or unparseable configuration all mean disabled — never "try anyway and see".
  *
  * None of these variables is `NEXT_PUBLIC_`-prefixed, so the browser can neither read them nor
@@ -11,7 +11,7 @@
  *
  * Production rollout is deliberately NOT covered by this module. Choosing an institutional provider,
  * obtaining credentials and agreeing an approved From address remain open decisions; until they are
- * made, the shipped default is disabled and the only verified target is the Local email sink.
+ * made, the shipped default is disabled and SMTP2GO remains an unqualified candidate path.
  */
 
 export const PARTICIPANT_PREVIEW_EMAIL_ENABLED_VAR = 'PARTICIPANT_PREVIEW_EMAIL_ENABLED';
@@ -24,16 +24,19 @@ export const PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE_VAR = 'PARTICIPANT_PREVIEW_EM
 export const PARTICIPANT_PREVIEW_EMAIL_SMTP_USER_VAR = 'PARTICIPANT_PREVIEW_EMAIL_SMTP_USER';
 export const PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD_VAR = 'PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD';
 
-// Shared and Brevo HTTPS transport variables
+// Shared, Brevo and SMTP2GO HTTPS transport variables
 export const PARTICIPANT_PREVIEW_EMAIL_FROM_VAR = 'PARTICIPANT_PREVIEW_EMAIL_FROM';
 export const PARTICIPANT_PREVIEW_EMAIL_FROM_NAME_VAR = 'PARTICIPANT_PREVIEW_EMAIL_FROM_NAME';
 export const PARTICIPANT_PREVIEW_EMAIL_BREVO_API_KEY_VAR = 'PARTICIPANT_PREVIEW_EMAIL_BREVO_API_KEY';
 export const PARTICIPANT_PREVIEW_EMAIL_BREVO_SANDBOX_VAR = 'PARTICIPANT_PREVIEW_EMAIL_BREVO_SANDBOX';
+export const PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_API_KEY_VAR = 'PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_API_KEY';
+export const PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_EXACT_LINK_QUALIFIED_VAR =
+  'PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_EXACT_LINK_QUALIFIED';
 
 /** A plain environment view, so the resolver stays a pure function that tests can drive directly. */
 export type ParticipantPreviewEmailEnv = Record<string, string | undefined>;
 
-export type ParticipantPreviewEmailProvider = 'smtp' | 'brevo';
+export type ParticipantPreviewEmailProvider = 'smtp' | 'brevo' | 'smtp2go';
 
 export interface ParticipantPreviewEmailSmtpConfig {
   host: string;
@@ -58,12 +61,22 @@ export interface ParticipantPreviewEmailBrevoConfig {
   sandbox: boolean;
 }
 
+export interface ParticipantPreviewEmailSmtp2goConfig {
+  /** SMTP2GO API key (api-...). Never logged or returned to clients. */
+  apiKey: string;
+  /** Verified sender email address. */
+  from: string;
+  /** Optional display name for the sender. */
+  fromName?: string;
+}
+
 export type ParticipantPreviewEmailConfigResult =
   | {
       enabled: true;
       provider?: 'smtp';
       smtp: ParticipantPreviewEmailSmtpConfig;
       brevo?: never;
+      smtp2go?: never;
       fromAddress: string;
     }
   | {
@@ -71,9 +84,18 @@ export type ParticipantPreviewEmailConfigResult =
       provider: 'brevo';
       brevo: ParticipantPreviewEmailBrevoConfig;
       smtp?: never;
+      smtp2go?: never;
       fromAddress: string;
     }
-  | { enabled: false; provider?: never; smtp?: never; brevo?: never; fromAddress?: never };
+  | {
+      enabled: true;
+      provider: 'smtp2go';
+      smtp2go: ParticipantPreviewEmailSmtp2goConfig;
+      smtp?: never;
+      brevo?: never;
+      fromAddress: string;
+    }
+  | { enabled: false; provider?: never; smtp?: never; brevo?: never; smtp2go?: never; fromAddress?: never };
 
 /** Only this exact value enables delivery; everything else — including absent — is disabled. */
 export function isParticipantPreviewEmailEnabledValue(raw: string | undefined | null): boolean {
@@ -115,7 +137,14 @@ export function resolveParticipantPreviewEmailConfig(
   }
 
   const rawProvider = env[PARTICIPANT_PREVIEW_EMAIL_PROVIDER_VAR]?.trim().toLowerCase();
-  const provider = !rawProvider || rawProvider === 'smtp' ? 'smtp' : rawProvider === 'brevo' ? 'brevo' : null;
+  const provider =
+    !rawProvider || rawProvider === 'smtp'
+      ? 'smtp'
+      : rawProvider === 'brevo'
+        ? 'brevo'
+        : rawProvider === 'smtp2go'
+          ? 'smtp2go'
+          : null;
 
   if (provider === null) {
     // Unsupported or malformed provider specified
@@ -142,6 +171,32 @@ export function resolveParticipantPreviewEmailConfig(
         from,
         ...(fromName ? { fromName } : {}),
         sandbox,
+      },
+      fromAddress: from,
+    };
+  }
+
+  if (provider === 'smtp2go') {
+    const apiKey = readBounded(env[PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_API_KEY_VAR], 512);
+    const from = readBounded(env[PARTICIPANT_PREVIEW_EMAIL_FROM_VAR], 254);
+    const fromName = readBounded(env[PARTICIPANT_PREVIEW_EMAIL_FROM_NAME_VAR], 70) ?? undefined;
+    const exactLinkQualified =
+      env[PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_EXACT_LINK_QUALIFIED_VAR] === 'true';
+
+    // This is only an operator attestation that the external exact-link canary passed. It can
+    // become stale and does not prove the provider's current API-key settings or recipient-mailbox
+    // behaviour, so the provider must still be configured separately with click tracking disabled.
+    if (!apiKey || !from || !isValidEmailAddress(from) || !exactLinkQualified) {
+      return { enabled: false };
+    }
+
+    return {
+      enabled: true,
+      provider: 'smtp2go',
+      smtp2go: {
+        apiKey,
+        from,
+        ...(fromName ? { fromName } : {}),
       },
       fromAddress: from,
     };

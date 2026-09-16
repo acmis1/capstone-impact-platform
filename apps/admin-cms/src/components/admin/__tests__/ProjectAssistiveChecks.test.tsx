@@ -256,6 +256,40 @@ describe('ProjectAssistiveChecks Component', () => {
     expect(screen.getAllByText(/Assistive checks are temporarily unavailable because the processing worker is not ready/i).length).toBeGreaterThan(0);
   });
 
+  it('does not report a clean result when a partial run has zero findings', () => {
+    renderWithNavigation(
+      <ProjectAssistiveChecks
+        publicId={PUBLIC_ID}
+        canEditMetadata={true}
+        canReview={true}
+        initialInspection={sampleInspection({
+          runStatus: 'PARTIAL',
+          jobStatus: 'PARTIAL',
+          failureCode: 'OCR_PROVIDER_UNAVAILABLE',
+          findings: [],
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Partial check results')).toBeTruthy();
+    expect(screen.getByText('No findings from the checks that completed')).toBeTruthy();
+    expect(screen.queryByText('All checks evaluated cleanly')).toBeNull();
+  });
+
+  it('reserves the clean zero-findings message for a completed run', () => {
+    renderWithNavigation(
+      <ProjectAssistiveChecks
+        publicId={PUBLIC_ID}
+        canEditMetadata={true}
+        canReview={true}
+        initialInspection={sampleInspection({ findings: [] })}
+      />,
+    );
+
+    expect(screen.getByText('All checks evaluated cleanly')).toBeTruthy();
+    expect(screen.queryByText('No findings from the checks that completed')).toBeNull();
+  });
+
   it('triggers runAssistiveChecksAction when Run checks button is clicked', async () => {
     vi.mocked(assistiveActions.runAssistiveChecksAction).mockResolvedValueOnce({
       ok: true,

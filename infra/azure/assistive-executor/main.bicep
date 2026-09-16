@@ -159,10 +159,11 @@ resource assistiveWorkerJob 'Microsoft.App/jobs@2026-01-01' = {
           name: 'assistive-worker'
           image: workerImage
           command: [
-            'npm'
-            'run'
-            'run:assistive-worker:on-demand'
-            '--workspace=apps/admin-cms'
+            'capstone-credential-boundary'
+            '/usr/bin/tini'
+            '--'
+            'node'
+            'apps/admin-cms/src/scripts/assistive-worker-on-demand.cjs'
           ]
           resources: {
             cpu: json('2.0')

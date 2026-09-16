@@ -70,6 +70,11 @@ cannot represent, including volumes, probes, volume mounts, or any unmodelled te
 closed before a launch is reserved. If future executor IaC needs one of those features, reevaluate the
 execution-override strategy before deploying it.
 
+Azure treats the Job `command` as the container start command, so the reviewed worker command
+explicitly preserves `capstone-credential-boundary -> tini -> node -> assistive-worker-on-demand.cjs`.
+Do not shorten it to the Node command: that would replace the image entrypoint and expose the
+secret-bearing coordinator environment to same-UID provider processes.
+
 There is no public execution endpoint, no worker URL, no health-check path, and no command payload.
 Container Apps jobs do not support ingress at all.
 
@@ -238,6 +243,9 @@ docker build -f apps/assistive-worker/Dockerfile.hosted -t capstone-assistive-wo
 
 docker run --rm --name capstone-assistive-worker \
   --cpus 2 --memory 4g \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=1073741824,uid=1000,gid=1000,mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 256 \
   --env-file <approved-secret-env-file-outside-the-repository> \
   -e CAPSTONE_RUNTIME_ENV=staging \
   -e CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED=true \
@@ -259,6 +267,10 @@ is decommissioned.
 Requirements: 2 CPU and 4 GB RAM minimum, outbound HTTPS to the approved Supabase host only, and a
 graceful stop (`docker stop`, default SIGTERM) so the worker can finish its fenced operation and
 publish `STOPPING`. Run **exactly one instance**: horizontal scaling has not been capacity-qualified.
+
+The worker image does not enforce an outbound hostname allowlist. Apply the approved Supabase-only
+egress policy at the School host/firewall boundary; do not describe the shared container network as
+processor isolation.
 
 Because a continuous worker publishes a heartbeat every 15 seconds, Admin reports it as ready
 directly and never consults the launch ceiling. Building locally from this repository also avoids

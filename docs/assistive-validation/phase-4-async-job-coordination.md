@@ -57,6 +57,14 @@ cancellation, or claim loss. Every operation after temporary-directory creation 
 cleanup scope. Recursive removal is limited to a verified direct child of the system temp
 directory whose name begins with `capstone-assistive-`.
 
+In the hosted Linux image, an image-owned `tini`, launcher, and post-exec runtime shim make PID 1
+and the coordinator non-dumpable with `no_new_privs`. Its preflight child must prove that
+`/proc/<parent>/environ` is inaccessible;
+missing parent identity or a readable parent environment reports unhealthy, so the hosted loop
+cannot publish READY or claim work. Both Python and LanguageTool still run under the coordinator's
+container UID and network namespace. Local Windows/macOS development keeps the portable filtered
+environment boundary and does not claim this Linux OS control.
+
 OCR remains explicit. The production coordinator selects `NONE`; Tesseract is available only when
 trusted configuration explicitly selects it. No LLM, VLM, embedding, grammar, duplicate-detection,
 or hosted OCR path is present.

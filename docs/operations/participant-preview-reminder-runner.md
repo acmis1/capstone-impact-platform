@@ -59,11 +59,17 @@ The runner is send-capable only when all of the following are true:
 - `SUPABASE_SECRET_KEY` is the approved modern server secret. The legacy service-role variable is
   not accepted in this dedicated runner profile.
 - `PARTICIPANT_PREVIEW_REMINDERS_ENABLED=true`.
-- `PARTICIPANT_PREVIEW_EMAIL_ENABLED=true` and the complete existing participant SMTP configuration
-  is present: host, port, secure flag, From address, and either both SMTP auth values or neither.
-  Hosted transport always requires encryption: `PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE=true` uses
-  implicit TLS, while `false` is accepted only with Nodemailer `requireTLS` STARTTLS enforcement
-  (ordinary institutional port 587 remains supported).
+- `PARTICIPANT_PREVIEW_EMAIL_ENABLED=true` and a complete selected participant email configuration
+  is present. The existing SMTP path requires host, port, secure flag, From address, and either
+  both SMTP auth values or neither. Hosted SMTP always requires encryption:
+  `PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE=true` uses implicit TLS, while `false` is accepted only
+  with Nodemailer `requireTLS` STARTTLS enforcement (ordinary institutional port 587 remains
+  supported). The candidate SMTP2GO HTTPS path additionally requires its API key, verified From
+  address and `PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_EXACT_LINK_QUALIFIED=true`; the flag records an
+  operator-reviewed external canary, can become stale and does not prove current provider settings.
+  SMTP2GO sandbox status is configured on the provider API key and is not represented by a local
+  flag, because `/email/send` cannot enforce or verify that state. Reset qualification to false
+  before any API-key, sender, tracking/status, permission or account change, then requalify.
 
 Those bullets remain the unchanged staging profile. Production uses the additive
 `compose.production.yaml` and `participant-reminders.production.env.example`, with:

@@ -1,8 +1,18 @@
-FROM node:24.14.1-bookworm-slim
+FROM node:24.14.1-bookworm-slim AS coordinator-build
 
-ARG CAPSTONE_DEPLOYMENT_VERSION=""
+WORKDIR /app
 
-LABEL org.opencontainers.image.revision="${CAPSTONE_DEPLOYMENT_VERSION}"
+COPY package.json package-lock.json ./
+COPY apps/admin-cms/package.json apps/admin-cms/package.json
+
+RUN npm ci --ignore-scripts
+
+COPY apps/admin-cms apps/admin-cms
+COPY apps/assistive-worker/tests/fixtures/phase-2-consumer-native-pdf.json apps/assistive-worker/tests/fixtures/phase-2-consumer-native-pdf.json
+
+RUN npm run build:assistive-worker --workspace=apps/admin-cms
+
+FROM node:24.14.1-bookworm-slim AS provider-build
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/opt/capstone/venv/bin:$PATH \
@@ -10,16 +20,21 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      ca-certificates curl libgl1 libgomp1 openjdk-17-jre-headless python3 python3-pip python3-venv tar unzip \
+      ca-certificates curl gcc libc6-dev libgl1 libglib2.0-0 libgomp1 python3 python3-pip python3-venv tar unzip \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-COPY apps/admin-cms/package.json apps/admin-cms/package.json
 COPY apps/assistive-worker apps/assistive-worker
 
-RUN npm ci --ignore-scripts \
+RUN mkdir -p /opt/capstone/bin \
+    && cc -std=c17 -O2 -Wall -Wextra -Werror \
+      apps/assistive-worker/credential_boundary.c \
+      -o /opt/capstone/bin/capstone-credential-boundary \
+    && cc -std=c17 -O2 -Wall -Wextra -Werror -fPIC -shared \
+      -DCAPSTONE_CREDENTIAL_BOUNDARY_PRELOAD \
+      apps/assistive-worker/credential_boundary.c \
+      -o /opt/capstone/bin/libcapstone-credential-boundary.so \
     && python3 -m venv /opt/capstone/venv \
     && curl --fail --location --silent --show-error \
       https://files.pythonhosted.org/packages/b0/e0/8f5d065ebb2e5941d289c5f653f944318f9e418bc5167bc6a346ab5e0f6a/opencv_contrib_python-4.10.0.84-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl \
@@ -48,10 +63,47 @@ RUN mkdir -p /opt/capstone/artifacts/paddle /opt/capstone/artifacts/languagetool
     && echo 'f5279d946d901c90c0bb09cddaa6fdea8b26db9c548145d09041e8d1ac2d2b45  /opt/capstone/artifacts/languagetool/LanguageTool-6.6/languagetool-server.jar' | sha256sum --check --strict \
     && rm -f /tmp/PP-OCRv6_small_det_infer.tar /tmp/PP-OCRv6_small_rec_infer.tar
 
-RUN python3 -c "from capstone_assistive_worker.ocr.contract import OcrAvailabilityState; from capstone_assistive_worker.ocr.paddle_title import PaddleTitleOcrProvider; availability = PaddleTitleOcrProvider(models_dir='/opt/capstone/artifacts/paddle').availability(); assert availability.state is OcrAvailabilityState.AVAILABLE, availability.message"
+RUN python3 -c "import paddle; import paddleocr; import paddlex; from capstone_assistive_worker.ocr.contract import OcrAvailabilityState; from capstone_assistive_worker.ocr.paddle_title import PaddleTitleOcrProvider; availability = PaddleTitleOcrProvider(models_dir='/opt/capstone/artifacts/paddle').availability(); assert availability.state is OcrAvailabilityState.AVAILABLE, availability.message"
 
-COPY apps/admin-cms apps/admin-cms
+FROM node:24.14.1-bookworm-slim
+
+ARG CAPSTONE_DEPLOYMENT_VERSION=""
+
+LABEL org.opencontainers.image.revision="${CAPSTONE_DEPLOYMENT_VERSION}"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    HOME=/tmp/capstone-home \
+    NODE_ENV=production \
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
+    PATH=/opt/capstone/venv/bin:$PATH \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    XDG_CACHE_HOME=/tmp/capstone-cache
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      ca-certificates libgl1 libglib2.0-0 libgomp1 openjdk-17-jre-headless python3 tini \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=provider-build /opt/capstone/venv /opt/capstone/venv
+COPY --from=provider-build /opt/capstone/artifacts /opt/capstone/artifacts
+COPY --from=provider-build /opt/capstone/bin/capstone-credential-boundary /usr/local/bin/capstone-credential-boundary
+COPY --from=provider-build /opt/capstone/bin/libcapstone-credential-boundary.so /usr/local/lib/libcapstone-credential-boundary.so
+COPY --from=coordinator-build /app/apps/admin-cms/dist/assistive-worker.cjs /app/apps/admin-cms/src/scripts/assistive-worker.cjs
+COPY --from=coordinator-build /app/apps/admin-cms/dist/assistive-worker-on-demand.cjs /app/apps/admin-cms/src/scripts/assistive-worker-on-demand.cjs
+
+RUN mkdir -p /app/apps/assistive-worker
+
+ENV LD_PRELOAD=/usr/local/lib/libcapstone-credential-boundary.so
 
 USER node
 
-CMD ["node", "--import", "tsx", "apps/admin-cms/src/scripts/runHostedAssistiveCoordinator.ts"]
+RUN node --check apps/admin-cms/src/scripts/assistive-worker.cjs \
+    && node --check apps/admin-cms/src/scripts/assistive-worker-on-demand.cjs \
+    && capstone-credential-boundary --self-test \
+    && capstone-credential-boundary node -e "const { spawnSync } = require('node:child_process'); const result = spawnSync('/bin/cat', ['/proc/' + process.pid + '/environ'], { stdio: 'ignore' }); process.exit(result.error || result.status === null ? 126 : result.status === 0 ? 1 : 0)"
+
+ENTRYPOINT ["capstone-credential-boundary", "/usr/bin/tini", "--"]
+CMD ["node", "apps/admin-cms/src/scripts/assistive-worker.cjs"]
