@@ -19,6 +19,7 @@ interface AssistiveCoordinatorRuntimeConfig {
   paddleModelsDir?: string;
   languageToolArchive?: string;
   languageToolJar?: string;
+  requireParentCredentialBoundary?: boolean;
   heartbeatIdentity?: {
     environment: AssistiveWorkerEnvironment;
     workerInstanceId: string;
@@ -38,6 +39,7 @@ export function createAssistiveCoordinatorRuntime(config: AssistiveCoordinatorRu
   const worker = new PythonAssistiveWorkerProcess({
     workerRoot: path.resolve(config.workerRoot),
     paddleModelsDir: config.paddleModelsDir,
+    requireParentCredentialBoundary: config.requireParentCredentialBoundary,
   });
   const language = config.languageToolArchive && config.languageToolJar
     ? new LocalLanguageToolProcess({

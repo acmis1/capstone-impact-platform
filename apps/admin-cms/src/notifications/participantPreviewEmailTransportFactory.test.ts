@@ -5,6 +5,7 @@ import {
 } from './participantPreviewEmailTransportFactory';
 import { SmtpParticipantPreviewEmailTransport } from './smtpParticipantPreviewEmailTransport';
 import { BrevoParticipantPreviewEmailTransport } from './brevoParticipantPreviewEmailTransport';
+import { Smtp2goParticipantPreviewEmailTransport } from './smtp2goParticipantPreviewEmailTransport';
 import type { ParticipantPreviewEmailConfigResult } from './participantPreviewEmailConfig';
 
 const SMTP_CONFIG: ParticipantPreviewEmailConfigResult = {
@@ -30,6 +31,17 @@ const BREVO_CONFIG: ParticipantPreviewEmailConfigResult = {
     sandbox: false,
   },
   fromAddress: 'brevo-sender@capstone.test',
+};
+
+const SMTP2GO_CONFIG: ParticipantPreviewEmailConfigResult = {
+  enabled: true,
+  provider: 'smtp2go',
+  smtp2go: {
+    apiKey: 'api-test-12345',
+    from: 'smtp2go-sender@capstone.test',
+    fromName: 'Capstone Impact',
+  },
+  fromAddress: 'smtp2go-sender@capstone.test',
 };
 
 describe('participantPreviewEmailTransportFactory', () => {
@@ -59,5 +71,14 @@ describe('participantPreviewEmailTransportFactory', () => {
     const withFrom = createParticipantPreviewEmailTransportWithFrom(BREVO_CONFIG);
     expect(withFrom.transport).toBeInstanceOf(BrevoParticipantPreviewEmailTransport);
     expect(withFrom.fromAddress).toBe('brevo-sender@capstone.test');
+  });
+
+  it('creates an Smtp2goParticipantPreviewEmailTransport for SMTP2GO config', () => {
+    const transport = createParticipantPreviewEmailTransport(SMTP2GO_CONFIG);
+    expect(transport).toBeInstanceOf(Smtp2goParticipantPreviewEmailTransport);
+
+    const withFrom = createParticipantPreviewEmailTransportWithFrom(SMTP2GO_CONFIG);
+    expect(withFrom.transport).toBeInstanceOf(Smtp2goParticipantPreviewEmailTransport);
+    expect(withFrom.fromAddress).toBe('smtp2go-sender@capstone.test');
   });
 });

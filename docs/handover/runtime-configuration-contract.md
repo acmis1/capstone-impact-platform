@@ -183,20 +183,31 @@ replicas.
 | `CAPSTONE_PRODUCTION_REMINDERS_ACKNOWLEDGEMENT` | Production only; valid lower-case bounded acknowledgement label. | Production reminder-runner profile, independently injected. |
 
 Email transport values are `PARTICIPANT_PREVIEW_EMAIL_ENABLED`,
-`PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_PORT`,
-`PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_USER`,
-`PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD` and `PARTICIPANT_PREVIEW_EMAIL_FROM`.
+`PARTICIPANT_PREVIEW_EMAIL_PROVIDER`, the existing SMTP variables
+(`PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_PORT`,
+`PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_USER` and
+`PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD`), shared From values, and the selected HTTPS
+provider's credentials. The candidate SMTP2GO path uses
+`PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_API_KEY`,
+`PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_EXACT_LINK_QUALIFIED`.
 
 - Email enablement is trimmed and case-normalized `true`; absent/false is disabled.
+- The provider defaults to `smtp`; unsupported provider values fail closed.
 - Host, From, username and password are bounded, trimmed and control-character-free.
 - Port is required integer text from 1 to 65535; there is no inferred SMTP port.
 - SMTP username and password must be supplied together or both omitted.
-- The hosted runner requires the secure flag to be explicitly trimmed/case-normalized `true` or
-  `false`; it always sets `requireTLS: true`, so `false` means enforced STARTTLS rather than
-  unencrypted delivery.
+- SMTP2GO requires a bounded API key, a valid From address and exact `true` on
+  `PARTICIPANT_PREVIEW_EMAIL_SMTP2GO_EXACT_LINK_QUALIFIED`. That flag records completion of an
+  external exact-link canary; it can become stale and is not proof of current provider
+  click-tracking settings. SMTP2GO sandbox status is provider-side API-key state and cannot be
+  asserted by a local flag or the `/email/send` request. Reset qualification to false before any
+  API-key, sender, tracking/status, permission or provider-account change, then run a new canary.
+- For SMTP, the hosted runner requires the secure flag to be explicitly trimmed/case-normalized
+  `true` or `false`; it always sets `requireTLS: true`, so `false` means enforced STARTTLS rather
+  than unencrypted delivery. SMTP2GO uses its HTTPS API and does not consume SMTP settings.
 
-The production runner is send-capable only when the reminder flag, email flag, complete SMTP
-configuration, modern `SUPABASE_SECRET_KEY`, exact production runtime/host/ref/URL identity,
+The production runner is send-capable only when the reminder flag, email flag, complete selected
+email configuration, modern `SUPABASE_SECRET_KEY`, exact production runtime/host/ref/URL identity,
 production capability and production acknowledgement all pass. Disabled reminders or disabled
 email are idle non-sending states and return before creating a Supabase client. Enabled-but-invalid
 configuration returns a bounded reason and exits without sending. Logs do not include credentials,

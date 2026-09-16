@@ -182,7 +182,10 @@ describe('cloud execution adapter', () => {
         containers: [{
           name: 'assistive-worker',
           image: `ghcr.io/example/capstone-assistive-worker@${DIGEST}`,
-          command: ['npm', 'run', 'run:assistive-worker:on-demand', '--workspace=apps/admin-cms'],
+          command: [
+            'capstone-credential-boundary', '/usr/bin/tini', '--',
+            'node', 'apps/admin-cms/src/scripts/assistive-worker-on-demand.cjs',
+          ],
           args: ['--quiet'],
           resources: { cpu: 2, memory: '4.0Gi' },
           env: [

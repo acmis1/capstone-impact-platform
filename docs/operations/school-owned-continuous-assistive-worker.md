@@ -196,8 +196,8 @@ requires the running container's Docker `.Image` ID and revision label to match.
 does not call Supabase and does not equate a running container with application readiness.
 
 The worker performs its existing database/Python/LanguageTool preflight before publishing `READY`.
-It then publishes a compatible heartbeat every 15 seconds. On `docker compose stop`, SIGTERM reaches
-the Node coordinator directly; it stops claiming work, finishes the current fenced operation,
+It then publishes a compatible heartbeat every 15 seconds. On `docker compose stop`, the image-owned
+credential-protected `tini` forwards SIGTERM to the Node coordinator; it stops claiming work, finishes the current fenced operation,
 publishes `STOPPING`, and exits within the ten-minute Compose grace period. `unless-stopped` restarts
 the worker after a host or process failure but respects an intentional operator stop.
 

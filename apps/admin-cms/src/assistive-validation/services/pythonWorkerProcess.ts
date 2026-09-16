@@ -32,6 +32,7 @@ export interface PythonWorkerOptions {
   workerRoot?: string;
   pythonExecutable?: string;
   pythonPrefixArguments?: string[];
+  requireParentCredentialBoundary?: boolean;
   timeoutMs?: number;
   pulseIntervalMs?: number;
   tesseractExecutable?: string;
@@ -63,14 +64,17 @@ function stagedFileName(documentType: AssistiveDocumentType): string {
   return 'document.jpg';
 }
 
-function safeEnvironment(workerRoot: string): NodeJS.ProcessEnv {
+export function buildPythonWorkerEnvironment(
+  workerRoot: string,
+  sourceEnvironment: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
   const allowed = [
     'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR',
     'HOME', 'LANG', 'LC_ALL',
   ];
-  const env: NodeJS.ProcessEnv = { NODE_ENV: process.env.NODE_ENV };
+  const env: NodeJS.ProcessEnv = { NODE_ENV: sourceEnvironment.NODE_ENV };
   for (const key of allowed) {
-    if (process.env[key] !== undefined) env[key] = process.env[key];
+    if (sourceEnvironment[key] !== undefined) env[key] = sourceEnvironment[key];
   }
   env.PYTHONPATH = resolve(workerRoot, 'src');
   env.PYTHONIOENCODING = 'utf-8';
@@ -147,7 +151,7 @@ export class PythonAssistiveWorkerProcess implements AssistiveWorkerRunner {
       }
       const child = spawn(this.executable, args, {
         cwd: this.workerRoot,
-        env: safeEnvironment(this.workerRoot),
+        env: buildPythonWorkerEnvironment(this.workerRoot),
         shell: false,
         windowsHide: true,
         detached: process.platform !== 'win32',
@@ -207,9 +211,12 @@ export class PythonAssistiveWorkerProcess implements AssistiveWorkerRunner {
     if (this.options.paddleModelsDir) {
       args.push('--paddle-models-dir', this.options.paddleModelsDir);
     }
+    if (this.options.requireParentCredentialBoundary) {
+      args.push('--require-parent-credential-boundary');
+    }
     const child = spawn(this.executable, args, {
       cwd: this.workerRoot,
-      env: safeEnvironment(this.workerRoot),
+      env: buildPythonWorkerEnvironment(this.workerRoot),
       shell: false,
       windowsHide: true,
       detached: process.platform !== 'win32',

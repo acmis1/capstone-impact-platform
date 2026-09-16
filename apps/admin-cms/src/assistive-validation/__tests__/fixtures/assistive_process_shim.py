@@ -74,6 +74,16 @@ def main() -> int:
         sys.stdout.write("x" * ((4 * 1024 * 1024) + 1))
         sys.stdout.flush()
         return 0
+    if scenario == "environment-probe":
+        forbidden = (
+            "SUPABASE_SECRET_KEY",
+            "SUPABASE_SERVICE_ROLE_KEY",
+            "CAPSTONE_ASSISTIVE_SUPABASE_URL",
+        )
+        if any(os.environ.get(name) for name in forbidden):
+            return 7
+        _write(_task_result(task_id))
+        return 0
     if scenario == "hang":
         marker = Path(sys.argv[2])
         subprocess.Popen(

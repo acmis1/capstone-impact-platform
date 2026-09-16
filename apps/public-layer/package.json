@@ -8,8 +8,9 @@
     "npm": ">=11.11.0 <12"
   },
   "scripts": {
-    "test": "npm run test:duda-feed-url-validator && npm run test:duda-current-feed-browser && npm run test:duda-annual-scale-browser",
+    "test": "npm run test:duda-feed-url-validator && npm run test:duda-query-preservation && npm run test:duda-current-feed-browser && npm run test:duda-annual-scale-browser",
     "test:duda-feed-url-validator": "node scripts/test-duda-feed-url-validator.js",
+    "test:duda-query-preservation": "node scripts/test-duda-query-preservation.js",
     "test:duda-current-feed-browser": "node scripts/test-duda-current-feed-browser.js",
     "test:duda-annual-scale-browser": "node scripts/test-duda-annual-scale-browser.js"
   }

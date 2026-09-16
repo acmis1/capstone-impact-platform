@@ -155,7 +155,11 @@ export async function POST(
           expiresAt: preview.expiresAt,
           fromAddress:
             emailConfig.fromAddress ??
-            (emailConfig.provider === 'brevo' ? emailConfig.brevo.from : emailConfig.smtp.from),
+            (emailConfig.provider === 'brevo'
+              ? emailConfig.brevo.from
+              : emailConfig.provider === 'smtp2go'
+                ? emailConfig.smtp2go.from
+                : emailConfig.smtp.from),
         }
       );
 

@@ -24,8 +24,18 @@ services:
       CAPSTONE_ASSISTIVE_PADDLE_MODELS_DIR: /opt/capstone/artifacts/paddle
       CAPSTONE_ASSISTIVE_LANGUAGETOOL_ARCHIVE: /opt/capstone/artifacts/languagetool/LanguageTool-stable.zip
       CAPSTONE_ASSISTIVE_LANGUAGETOOL_JAR: /opt/capstone/artifacts/languagetool/LanguageTool-6.6/languagetool-server.jar
-    init: true
+    # The image-owned tini is launched inside the non-dumpable credential boundary. Docker's
+    # injected init would inherit the secret outside that boundary.
+    init: false
     user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=1073741824,uid=1000,gid=1000,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    pids_limit: 256
     restart: unless-stopped
     stop_grace_period: 10m
     cpus: 2

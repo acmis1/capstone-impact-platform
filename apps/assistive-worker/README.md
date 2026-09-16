@@ -55,12 +55,23 @@ deployed; neither is ever referenced by a mutable tag.
 
 | Dockerfile | Contents | Used by |
 | --- | --- | --- |
-| `Dockerfile.hosted` | Node, Python, Java 17, the qualified PP-OCRv6 Small model trees, and LanguageTool 6.6, each verified against a frozen SHA-256 during the build | Both execution profiles: the scale-to-zero heavy worker and the School-owned continuous worker |
+| `Dockerfile.hosted` | Bundled continuous and on-demand Node coordinator entry points without runtime `node_modules`/`tsx`, Python, Java 17, the qualified PP-OCRv6 Small model trees, and LanguageTool 6.6, each verified against a frozen SHA-256 during the build | Both execution profiles: the scale-to-zero heavy worker and the School-owned continuous worker |
 | `Dockerfile.dispatcher` | A single bundled Node entry point and nothing else. No Paddle, no Java, no LanguageTool, no model artifacts | The scheduled dispatcher, which must start quickly inside a 15-second timeout |
 
 The dispatcher deliberately shares no runtime with the worker: it reaches only the execution-control
 database role and the cloud control plane, never project content, and it exposes no inbound
 interface.
+
+The hosted image starts an image-owned `tini` and the secret-bearing coordinator through a Linux
+credential-boundary guard, with a minimal preloaded shim that reapplies the guard after each
+`exec`. Together they make PID 1 and the Node parent
+non-dumpable and enable `no_new_privs`; the image build verifies both the launcher and post-exec
+boundary. Hosted preflight also requires the Python child to prove that the parent environment is
+unreadable before READY or queue claims.
+The Compose profiles add a read-only root filesystem, a bounded writable `/tmp`, all-capability
+drop, and a PID limit. These controls protect the parent credential and container integrity, but
+they do not create a separate UID, PID namespace, filesystem namespace, or egress policy for each
+processor.
 
 Building either image locally requires no registry. Publishing them is a separate, deliberate
 decision — read [`docs/handover/third-party-licences.md`](../../docs/handover/third-party-licences.md)

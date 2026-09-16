@@ -111,6 +111,27 @@
         return params.get(name);
     };
 
+    // Duda only needs these preview/device flags to keep responsive route state stable.
+    const DUDA_DEVICE_VALUES = new Set(['desktop', 'tablet', 'mobile']);
+
+    const getDudaNavigationParams = () => {
+        const currentParams = new URLSearchParams(window.location.search);
+        const navigationParams = new URLSearchParams();
+        const device = currentParams.get('dm_device');
+
+        if (DUDA_DEVICE_VALUES.has(device)) navigationParams.set('dm_device', device);
+        if (currentParams.get('preview') === 'true') navigationParams.set('preview', 'true');
+
+        return navigationParams;
+    };
+
+    const buildDudaNavigationUrl = (path, projectId = null) => {
+        const params = getDudaNavigationParams();
+        if (projectId !== null) params.set('id', String(projectId));
+        const query = params.toString();
+        return `${path}${query ? `?${query}` : ''}`;
+    };
+
     const parseProjectId = (value) => {
         if (Number.isSafeInteger(value) && value > 0) return value;
         if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return null;
@@ -119,9 +140,8 @@
     };
 
     const buildDetailUrl = (projectId) => {
-        // Standardizing on /project-detail?id=...
         const path = window.location.pathname.includes('project-detail') ? '' : 'project-detail';
-        return `${path}?id=${projectId}`;
+        return buildDudaNavigationUrl(path, projectId);
     };
 
     const saveSelectedProject = (id) => {
@@ -1436,7 +1456,7 @@
     };
 
     const goBack = () => {
-        window.location.href = 'sst-school-projects';
+        window.location.href = buildDudaNavigationUrl('sst-school-projects');
     };
 
     const handleFilterChange = (type, value) => {

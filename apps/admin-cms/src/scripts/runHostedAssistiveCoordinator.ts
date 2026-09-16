@@ -13,6 +13,7 @@ const runtime = createAssistiveCoordinatorRuntime({
   paddleModelsDir: config.paddleModelsDir,
   languageToolArchive: config.languageToolArchive,
   languageToolJar: config.languageToolJar,
+  requireParentCredentialBoundary: true,
   heartbeatIdentity: {
     environment: config.runtimeEnvironment,
     workerInstanceId: config.workerInstanceId,
