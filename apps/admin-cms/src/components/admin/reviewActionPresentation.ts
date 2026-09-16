@@ -23,6 +23,10 @@ export const REVIEW_ACTION_PRESENTATIONS: Record<string, ReviewActionPresentatio
     label: 'Archive project',
     variant: 'destructive',
   },
+  restore: {
+    label: 'Restore project',
+    variant: 'outline',
+  },
 };
 
 export function getReviewActionPresentation(action: string): ReviewActionPresentation {

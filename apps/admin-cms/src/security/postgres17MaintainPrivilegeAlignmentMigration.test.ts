@@ -111,18 +111,19 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
     expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
     expect(files).toHaveLength(EXPECTED_REPOSITORY_MIGRATION_COUNT);
-    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(58);
-    expect(files.at(-1)).toBe('20260914100000_layout_recipe_library.sql');
-    expect(files.at(-2)).toBe('20260911120000_gallery_full_text_equivalents.sql');
-    expect(files.at(-3)).toBe('20260910120200_assistive_worker_production_identity.sql');
-    expect(files.at(-4)).toBe('20260910120100_participant_preview_access_observations.sql');
-    expect(files.at(-5)).toBe('20260910120000_public_feed_rollback_capability.sql');
-    expect(files.at(-6)).toBe('20260909120000_staff_lifecycle_readiness.sql');
-    expect(files.at(-7)).toBe('20260906120000_public_removal_completion_reconciliation.sql');
-    expect(files.at(-9)).toBe('20260903120000_participant_preview_controlled_links.sql');
-    expect(files.at(-10)).toBe('20260902010606_controlled_project_links_import.sql');
-    expect(files.at(-11)).toBe(filename);
-    expect(files.at(-12)).toBe('20260828170000_assistive_execution_control.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(59);
+    expect(files.at(-1)).toBe('20260916120000_archived_project_restore.sql');
+    expect(files.at(-2)).toBe('20260914100000_layout_recipe_library.sql');
+    expect(files.at(-3)).toBe('20260911120000_gallery_full_text_equivalents.sql');
+    expect(files.at(-4)).toBe('20260910120200_assistive_worker_production_identity.sql');
+    expect(files.at(-5)).toBe('20260910120100_participant_preview_access_observations.sql');
+    expect(files.at(-6)).toBe('20260910120000_public_feed_rollback_capability.sql');
+    expect(files.at(-7)).toBe('20260909120000_staff_lifecycle_readiness.sql');
+    expect(files.at(-8)).toBe('20260906120000_public_removal_completion_reconciliation.sql');
+    expect(files.at(-10)).toBe('20260903120000_participant_preview_controlled_links.sql');
+    expect(files.at(-11)).toBe('20260902010606_controlled_project_links_import.sql');
+    expect(files.at(-12)).toBe(filename);
+    expect(files.at(-13)).toBe('20260828170000_assistive_execution_control.sql');
 
     // Forward-only: every migration that existed immediately before 0048 was introduced remains
     // present in the same ordered prefix. This works before and after merge and catches deletion,
@@ -147,6 +148,7 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
       '20260910120200_assistive_worker_production_identity.sql',
       '20260911120000_gallery_full_text_equivalents.sql',
       '20260914100000_layout_recipe_library.sql',
+      '20260916120000_archived_project_restore.sql',
     ]);
   });
 
@@ -273,20 +275,20 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
   });
 
   it('keeps the exact migration manifest, count and latest-migration contracts in step', () => {
-    expect(EXPECTED_MIGRATION_FILENAMES).toHaveLength(58);
-    expect(EXPECTED_MIGRATION_FILENAMES.at(-1)).toBe('20260914100000_layout_recipe_library.sql');
-    expect(EXPECTED_MIGRATION_FILENAMES.at(-2)).toBe('20260911120000_gallery_full_text_equivalents.sql');
-    expect(EXPECTED_MIGRATION_FILENAMES.at(-10)).toBe('20260902010606_controlled_project_links_import.sql');
-    expect(EXPECTED_MIGRATION_FILENAMES.at(-11)).toBe(filename);
-    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-1)).toBe('20260914100000_layout_recipe_library.sql');
-    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-2)).toBe('20260911120000_gallery_full_text_equivalents.sql');
-    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-10)).toBe('20260902010606_controlled_project_links_import.sql');
-    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-11)).toBe(filename);
+    expect(EXPECTED_MIGRATION_FILENAMES).toHaveLength(59);
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-1)).toBe('20260916120000_archived_project_restore.sql');
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-2)).toBe('20260914100000_layout_recipe_library.sql');
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-11)).toBe('20260902010606_controlled_project_links_import.sql');
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-12)).toBe(filename);
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-1)).toBe('20260916120000_archived_project_restore.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-2)).toBe('20260914100000_layout_recipe_library.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-11)).toBe('20260902010606_controlled_project_links_import.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-12)).toBe(filename);
     expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(EXPECTED_REPOSITORY_MIGRATIONS.length);
 
     const ci = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
     expect(ci).toContain(
-      "test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 58",
+      "test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 59",
     );
   });
 

@@ -14,6 +14,7 @@ import { ProjectMetadataNavigationProvider } from './ProjectMetadataNavigation';
 import { Project } from '../../domain/project';
 import { ProjectMetadataView } from '../../projects/projectMetadata';
 import { Layers } from 'lucide-react';
+import type { ReviewAction } from '../../workflow/projectWorkflow';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -285,7 +286,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
 
   describe('StagingReviewActions', () => {
     it('keeps the allowed action order and assigns accurate visual semantics', () => {
-      const actions = ['approve', 'request_changes', 'archive'];
+      const actions: ReviewAction[] = ['approve', 'request_changes', 'archive'];
       render(
         <StagingReviewActions
           publicId="2026-proj-01"
@@ -399,6 +400,57 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       );
     });
 
+    it('warns that a published-origin restore returns to Approved and never republishes directly', () => {
+      render(
+        <StagingReviewActions
+          publicId="2026-proj-01"
+          currentStatus="archived"
+          archivedFromStatus="published"
+          allowedActions={['restore']}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Restore project' }));
+      const dialog = screen.getByRole('alertdialog', { name: 'Restore project?' });
+      expect(within(dialog).getByText(/returns it to Approved but does not republish it/i)).toBeTruthy();
+      expect(within(dialog).getByText(/separate normal publish action/i)).toBeTruthy();
+      expect(within(dialog).getByText(/all readiness checks/i)).toBeTruthy();
+    });
+
+    it('dispatches exactly one restore request only after confirmation', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      render(
+        <StagingReviewActions
+          publicId="2026-proj-01"
+          currentStatus="archived"
+          archivedFromStatus="approved"
+          allowedActions={['restore']}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Restore project' }));
+      expect(mockFetch).not.toHaveBeenCalled();
+      const confirmButton = within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Restore project',
+      });
+      fireEvent.click(confirmButton);
+      fireEvent.click(confirmButton);
+
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/projects/2026-proj-01/review-action',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ action: 'restore', comments: undefined }),
+        }),
+      );
+    });
+
     it('dispatches approve directly without archive confirmation', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -473,6 +525,23 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       fireEvent.click(screen.getByRole('button', { name: /Approve project/i }));
       expect(await screen.findByText('Accept or return the pending project-team package before approving this project.')).toBeTruthy();
       expect(screen.queryByText('Untrusted raw detail')).toBeNull();
+    });
+
+    it('shows the bounded provenance error without exposing raw restore details', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({
+          success: false,
+          code: 'ARCHIVE_PROVENANCE_AMBIGUOUS',
+          error: 'SECRET_SQL_DETAIL_SHOULD_NOT_ESCAPE',
+        }),
+      }));
+      render(<StagingReviewActions publicId="2026-proj-01" currentStatus="archived" allowedActions={['restore']} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Restore project' }));
+      fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Restore project' }));
+      expect(await screen.findByText(/archive history is incomplete or inconsistent/i)).toBeTruthy();
+      expect(screen.queryByText('SECRET_SQL_DETAIL_SHOULD_NOT_ESCAPE')).toBeNull();
     });
 
     it('renders safe generic error message when review transition fails', async () => {

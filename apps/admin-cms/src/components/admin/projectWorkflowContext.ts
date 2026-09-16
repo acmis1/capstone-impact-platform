@@ -162,7 +162,9 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
     return {
       stageLabel,
       summary: 'This project is archived and is not part of the showcase.',
-      decision: 'No review transition is available from this status.',
+      decision: hasReviewActions
+        ? 'Authorized staff can restore this project to its last verified non-public workflow state.'
+        : 'Your role can inspect this project but cannot restore it.',
     };
   }
 

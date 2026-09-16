@@ -105,11 +105,12 @@ describe('Authentication & Authorization Tests (Offline)', () => {
   });
 
   describe('2. Review-Action Permission Mapping', () => {
-    it('allows reviewer to approve and request changes, but blocks archive', () => {
+    it('allows reviewer to approve and request changes, but blocks archive and restore', () => {
       const perms = getPermissionsForRoles(['reviewer']);
       expect(canPerformReviewAction(perms, 'approve')).toBe(true);
       expect(canPerformReviewAction(perms, 'request_changes')).toBe(true);
       expect(canPerformReviewAction(perms, 'archive')).toBe(false);
+      expect(canPerformReviewAction(perms, 'restore')).toBe(false);
     });
 
     it('blocks editor from performing review or archive actions', () => {
@@ -117,6 +118,7 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       expect(canPerformReviewAction(perms, 'approve')).toBe(false);
       expect(canPerformReviewAction(perms, 'request_changes')).toBe(false);
       expect(canPerformReviewAction(perms, 'archive')).toBe(false);
+      expect(canPerformReviewAction(perms, 'restore')).toBe(false);
     });
 
     it('allows admin to perform all review actions', () => {
@@ -124,6 +126,7 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       expect(canPerformReviewAction(perms, 'approve')).toBe(true);
       expect(canPerformReviewAction(perms, 'request_changes')).toBe(true);
       expect(canPerformReviewAction(perms, 'archive')).toBe(true);
+      expect(canPerformReviewAction(perms, 'restore')).toBe(true);
     });
 
     it('returns false for unknown actions', () => {
@@ -396,6 +399,14 @@ describe('Authentication & Authorization Tests (Offline)', () => {
         expect(result.data.comments).toBe('Looks great!');
         expect(result.data.publicId).toBe('2026-showcase-project');
       }
+    });
+
+    it('accepts restore as a bounded review action', () => {
+      const result = validateReviewActionInput({ action: 'restore', comments: 'Restore for review.' }, '2026-archived');
+      expect(result).toEqual({
+        valid: true,
+        data: { action: 'restore', comments: 'Restore for review.', publicId: '2026-archived' },
+      });
     });
 
     it('rejects null, array, and primitive bodies', () => {

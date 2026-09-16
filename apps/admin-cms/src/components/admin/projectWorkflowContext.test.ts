@@ -172,10 +172,13 @@ describe('project workflow orientation context', () => {
     expect(context.decision).toMatch(/authorized staff in a supported environment/i);
   });
 
-  it('states plainly that an archived project has no review transition', () => {
-    const context = derive({ status: 'archived', allowedActions: [] });
+  it('offers restore only when the archived transition is authorized', () => {
+    const context = derive({ status: 'archived', allowedActions: ['restore'] });
     expect(context.summary).toMatch(/archived/i);
-    expect(context.decision).toMatch(/no review transition is available/i);
+    expect(context.decision).toMatch(/restore/i);
+
+    const unavailable = derive({ status: 'archived', allowedActions: [] });
+    expect(unavailable.decision).toMatch(/cannot restore it/i);
   });
 
   it('degrades safely for an unrecognised status without inventing a next step', () => {
@@ -202,6 +205,13 @@ describe('permission-filtered review actions', () => {
     expect(derive({ status: 'in_review', allowedActions: [] }).decision).toMatch(/cannot record a review decision/i);
     expect(derive({ status: 'in_review', allowedActions: ['request_changes', 'approve'] }).decision)
       .toMatch(/approve it or request changes/i);
+  });
+
+  it('limits archived restore to administrators', () => {
+    const statusAllowedActions = getAllowedReviewActions('archived');
+    expect(getPermittedReviewActions(statusAllowedActions, getPermissionsForRoles(['admin']))).toEqual(['restore']);
+    expect(getPermittedReviewActions(statusAllowedActions, getPermissionsForRoles(['reviewer']))).toEqual([]);
+    expect(getPermittedReviewActions(statusAllowedActions, getPermissionsForRoles(['editor']))).toEqual([]);
   });
 
   it.each([

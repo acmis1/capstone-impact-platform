@@ -128,6 +128,9 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     'AMBIGUOUS_ACTIVE_PREVIEW',
     'PROJECT_MEDIA_REQUIRED',
     'PROJECT_MEDIA_INVALID',
+    'ARCHIVE_PROVENANCE_AMBIGUOUS',
+    'RESTORE_PUBLIC_FEED_UNSAFE',
+    'PUBLICATION_IN_PROGRESS',
   ] as const)('3b. preserves bounded RPC result %s before success-shape parsing', async (resultCode) => {
     const repo = new SupabaseProjectRepositoryCore({ rpc: vi.fn().mockResolvedValue({ data: { resultCode }, error: null }) } as never);
     await expect(repo.performReviewAction({ publicId: '2026-proj1', action: 'request_changes', adminId: '11111111-2222-3333-4444-555555555555' }))
@@ -364,7 +367,25 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     const req = new NextRequest('http://localhost:3000/api/projects/2026-proj1/review-action', { method: 'POST', headers: { origin: 'http://localhost:3000' }, body: JSON.stringify({ action: 'archive' }) });
     const res = await POST(req, { params: Promise.resolve({ publicId: '2026-proj1' }) });
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ success: false, error: 'Published projects must use the controlled public-removal workflow.' });
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'Published projects must use the controlled public-removal workflow.',
+      code: 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED',
+    });
+    mockAction.mockRestore();
+  });
+
+  it.each([
+    ['ARCHIVE_PROVENANCE_AMBIGUOUS', 'This project cannot be restored because its archive history is incomplete or inconsistent.'],
+    ['RESTORE_PUBLIC_FEED_UNSAFE', 'This project is still present in the current public feed. Complete the controlled removal workflow before restoring it.'],
+  ] as const)('10d. API maps %s to a bounded restore refusal', async (code, message) => {
+    const { requireAdmin } = await import('../auth/requireAdmin');
+    vi.mocked(requireAdmin).mockResolvedValueOnce({ authUserId: 'auth-uuid-1', adminUserId: 'admin-uuid-1', email: 'admin@capstone.test', fullName: 'Admin User', roles: ['admin'], permissions: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit'] });
+    const mockAction = vi.spyOn(SupabaseProjectRepository.prototype, 'performReviewAction').mockRejectedValueOnce(new ReviewActionExecutionError(code));
+    const req = new NextRequest('http://localhost:3000/api/projects/2026-proj1/review-action', { method: 'POST', headers: { origin: 'http://localhost:3000' }, body: JSON.stringify({ action: 'restore' }) });
+    const res = await POST(req, { params: Promise.resolve({ publicId: '2026-proj1' }) });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ success: false, error: message, code });
     mockAction.mockRestore();
   });
 
@@ -453,10 +474,11 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     expect(getAllowedReviewActions('approved')).toEqual(['request_changes', 'archive']);
     expect(getAllowedReviewActions('published')).toEqual([]);
     expect(getAllowedReviewActions('draft')).toEqual([]);
-    expect(getAllowedReviewActions('archived')).toEqual([]);
+    expect(getAllowedReviewActions('archived')).toEqual(['restore']);
     expect(getAllowedReviewActions('deleted')).toEqual([]);
 
     expect(applyReviewActionTransition('submitted', 'approve')).toEqual({ allowed: true, fromStatus: 'submitted', toStatus: 'approved' });
+    expect(applyReviewActionTransition('archived', 'restore', 'published')).toEqual({ allowed: true, fromStatus: 'archived', toStatus: 'approved' });
     expect(applyReviewActionTransition('draft', 'approve')).toEqual({ allowed: false, fromStatus: 'draft', error: expect.any(String) });
   });
 
@@ -468,14 +490,17 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     expect(canPerformReviewAction(adminPerms, 'request_changes')).toBe(true);
     expect(canPerformReviewAction(adminPerms, 'approve')).toBe(true);
     expect(canPerformReviewAction(adminPerms, 'archive')).toBe(true);
+    expect(canPerformReviewAction(adminPerms, 'restore')).toBe(true);
 
     expect(canPerformReviewAction(reviewerPerms, 'request_changes')).toBe(true);
     expect(canPerformReviewAction(reviewerPerms, 'approve')).toBe(true);
     expect(canPerformReviewAction(reviewerPerms, 'archive')).toBe(false);
+    expect(canPerformReviewAction(reviewerPerms, 'restore')).toBe(false);
 
     expect(canPerformReviewAction(editorPerms, 'request_changes')).toBe(false);
     expect(canPerformReviewAction(editorPerms, 'approve')).toBe(false);
     expect(canPerformReviewAction(editorPerms, 'archive')).toBe(false);
+    expect(canPerformReviewAction(editorPerms, 'restore')).toBe(false);
   });
 
   // ============================================================

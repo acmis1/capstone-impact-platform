@@ -9,7 +9,7 @@ import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from '../../../../.
 import { validateReviewActionInput } from '../../../../../auth/reviewActionInput';
 
 /**
- * Route handler to execute review actions (approve, request_changes, archive) on staging projects.
+ * Route handler to execute review actions (approve, request_changes, archive, restore) on staging projects.
  * 
  * Rules:
  * - Validates Origin CSRF headers before state changes.
@@ -128,12 +128,22 @@ export async function POST(
           );
         case 'PUBLICATION_IN_PROGRESS':
           return NextResponse.json(
-            { success: false, error: 'Publication is currently in progress for this project.' },
+            { success: false, error: 'Publication is currently in progress for this project.', code: error.code },
             { status: 409 }
           );
         case 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED':
           return NextResponse.json(
-            { success: false, error: 'Published projects must use the controlled public-removal workflow.' },
+            { success: false, error: 'Published projects must use the controlled public-removal workflow.', code: error.code },
+            { status: 409 }
+          );
+        case 'ARCHIVE_PROVENANCE_AMBIGUOUS':
+          return NextResponse.json(
+            { success: false, error: 'This project cannot be restored because its archive history is incomplete or inconsistent.', code: error.code },
+            { status: 409 }
+          );
+        case 'RESTORE_PUBLIC_FEED_UNSAFE':
+          return NextResponse.json(
+            { success: false, error: 'This project is still present in the current public feed. Complete the controlled removal workflow before restoring it.', code: error.code },
             { status: 409 }
           );
         case 'ACCESSIBILITY_CONTENT_REQUIRED':
