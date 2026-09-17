@@ -12,7 +12,7 @@ import {
 } from './hostedDeploymentReadiness';
 
 export const DEPENDENCY_READINESS_TIMEOUT_MS = 2_000;
-export const RELEASE_CAPABILITY_MAX_RESPONSE_BYTES = 256;
+export const RELEASE_CAPABILITY_MAX_RESPONSE_BYTES = 320;
 
 const latestMigration = EXPECTED_REPOSITORY_MIGRATIONS[
   EXPECTED_REPOSITORY_MIGRATIONS.length - 1

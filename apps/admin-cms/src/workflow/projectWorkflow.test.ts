@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAllowedReviewActions, applyReviewActionTransition, ReviewAction } from './projectWorkflow';
+import { getAllowedReviewActions, applyReviewActionTransition, getArchiveRestoreTarget, ReviewAction } from './projectWorkflow';
 import { WorkflowStatus } from '../domain/workflowStatus';
 
 describe('projectWorkflow', () => {
@@ -28,7 +28,7 @@ describe('projectWorkflow', () => {
     });
 
     it('returns actions for archived status', () => {
-      expect(getAllowedReviewActions('archived')).toEqual([]);
+      expect(getAllowedReviewActions('archived')).toEqual(['restore']);
     });
 
     it('returns actions for deleted status', () => {
@@ -84,6 +84,31 @@ describe('projectWorkflow', () => {
     it('rejects generic archive for a published project', () => {
       expect(applyReviewActionTransition('published', 'archive')).toMatchObject({ allowed: false, fromStatus: 'published' });
     });
+
+    it.each([
+      ['submitted', 'submitted'],
+      ['in_review', 'in_review'],
+      ['approved', 'approved'],
+      ['published', 'approved'],
+    ] as const)('restores archived-from-%s to the non-public %s state', (origin, target) => {
+      expect(getArchiveRestoreTarget(origin)).toBe(target);
+      expect(applyReviewActionTransition('archived', 'restore', origin)).toEqual({
+        allowed: true,
+        fromStatus: 'archived',
+        toStatus: target,
+      });
+    });
+
+    it.each([undefined, null, '', 'draft', 'archived', 'deleted', 'changes_requested'])(
+      'fails closed for ambiguous or invalid archive provenance %s',
+      (origin) => {
+      expect(getArchiveRestoreTarget(origin)).toBeNull();
+      expect(applyReviewActionTransition('archived', 'restore', origin)).toMatchObject({
+        allowed: false,
+        fromStatus: 'archived',
+      });
+      },
+    );
 
     it('rejects invalid actions from draft state', () => {
       const result = applyReviewActionTransition('draft', 'approve');

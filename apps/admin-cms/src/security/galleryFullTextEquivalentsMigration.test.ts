@@ -35,10 +35,11 @@ function extractFunction(sql: string, functionName: string): string {
 }
 
 describe('Migration 0057 gallery full-text equivalents', () => {
-  it('remains additive Migration 0057 immediately before the additive layout-recipe migration', () => {
-    expect(migrationFiles).toHaveLength(58);
-    expect(migrationFiles.at(-2)).toBe(migrationName);
-    expect(migrationFiles.at(-1)).toBe('20260914100000_layout_recipe_library.sql');
+  it('remains additive Migration 0057 before the additive layout-recipe and archive-restore migrations', () => {
+    expect(migrationFiles).toHaveLength(59);
+    expect(migrationFiles.at(-3)).toBe(migrationName);
+    expect(migrationFiles.at(-2)).toBe('20260914100000_layout_recipe_library.sql');
+    expect(migrationFiles.at(-1)).toBe('20260916120000_archived_project_restore.sql');
 
     const schemaSection = source.slice(0, source.indexOf('-- 2. finalize_browser_import_media_stage'));
     expect(schemaSection).toContain('ADD COLUMN IF NOT EXISTS image_content_kind text');

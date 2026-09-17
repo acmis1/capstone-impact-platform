@@ -167,9 +167,9 @@ async function main(): Promise<void> {
       assert.equal(JSON.parse(findingsBefore).length, 1);
     });
 
-    assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migrations 0031 through 0058');
-    scenario('Migrations 0031 through 0058 apply as the only pending migrations', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '58');
+    assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migrations 0031 through 0059');
+    scenario('Migrations 0031 through 0059 apply as the only pending migrations', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '59');
       assert.equal(psql("SELECT to_regclass('public.assistive_validation_jobs') IS NOT NULL;"), 't');
     });
 
@@ -306,27 +306,27 @@ async function main(): Promise<void> {
     try {
       assertResetReachedExactMigration(
         runLocalSupabaseCli('reset', root),
-        'restore fresh Migration 0058 database', 58, '20260914100000',
+        'restore fresh Migration 0059 database', 59, '20260916120000',
       );
       assertCliSuccess(
         runLocalSupabaseCli('stop', root),
-        'stop Local services after restoring Migration 0058',
+        'stop Local services after restoring Migration 0059',
       );
       assertCliSuccess(
         runLocalSupabaseCli('start', root),
-        'restart Local services after restoring Migration 0058',
+        'restart Local services after restoring Migration 0059',
       );
       assert.equal(
         psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'),
-        '58',
-        'restarted Local stack did not retain all 58 migrations',
+        '59',
+        'restarted Local stack did not retain all 59 migrations',
       );
       assert.equal(
         psql('SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 1;'),
-        '20260914100000',
-        'restarted Local stack did not retain the Migration 0058 head',
+        '20260916120000',
+        'restarted Local stack did not retain the Migration 0059 head',
       );
-      console.log('PASS: fresh Migration 0058 database and Local service stack restored.');
+      console.log('PASS: fresh Migration 0059 database and Local service stack restored.');
     } catch (restoreError) {
       if (primaryFailure) throw new AggregateError([primaryFailure, restoreError], 'Upgrade verification and database restoration failed.');
       throw restoreError;

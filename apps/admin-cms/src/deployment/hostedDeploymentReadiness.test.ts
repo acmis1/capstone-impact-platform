@@ -154,13 +154,13 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
 
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(58);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(59);
 
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
       // Every merged migration through 0058 is immutable and must stay byte-identical to
       // the verified origin/main base.
-      const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS;
+      const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.slice(0, -1);
 
       expect(historicalMigrations).toHaveLength(58);
 

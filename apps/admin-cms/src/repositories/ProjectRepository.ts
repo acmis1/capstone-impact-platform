@@ -5,6 +5,7 @@ import {
   ProjectDashboardMetrics,
   ProjectFilterOptions,
 } from '../domain/projectQuery';
+import type { ReviewAction } from '../workflow/projectWorkflow';
 
 export type ReviewActionExecutionErrorCode =
   | 'PROJECT_NOT_FOUND'
@@ -15,6 +16,8 @@ export type ReviewActionExecutionErrorCode =
   | 'AMBIGUOUS_ACTIVE_PREVIEW'
   | 'PUBLICATION_IN_PROGRESS'
   | 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED'
+  | 'ARCHIVE_PROVENANCE_AMBIGUOUS'
+  | 'RESTORE_PUBLIC_FEED_UNSAFE'
   | 'ACCESSIBILITY_CONTENT_REQUIRED'
   | 'ACCESSIBILITY_CONTENT_INVALID'
   /** Required poster image/PDF rows are absent from authoritative project media. */
@@ -85,7 +88,7 @@ export interface ProjectRepository {
    */
   performReviewAction(params: {
     publicId: string;
-    action: 'request_changes' | 'approve' | 'archive';
+    action: ReviewAction;
     comments?: string;
     adminId: string;
   }): Promise<ReviewActionExecutionResult>;

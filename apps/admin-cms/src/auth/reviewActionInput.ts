@@ -1,8 +1,10 @@
+import type { ReviewAction } from '../workflow/projectWorkflow';
+
 export type ValidationResult =
   | {
       valid: true;
       data: {
-        action: 'request_changes' | 'approve' | 'archive';
+        action: ReviewAction;
         comments: string | undefined;
         publicId: string;
       };
@@ -17,7 +19,7 @@ export type ValidationResult =
  * 
  * Rules:
  * - Request body must be a plain non-null JSON object (no arrays or primitives).
- * - Action parameter must be exactly 'request_changes', 'approve', or 'archive'.
+ * - Action parameter must be exactly 'request_changes', 'approve', 'archive', or 'restore'.
  * - Comments is optional; when provided, must be a string, trimmed, capped at 4000 chars,
  *   and empty trimmed comments are normalized to undefined. Reject null, numbers, booleans, arrays, objects.
  * - publicId must be non-empty, max 100 chars, and restricted to safe alphanumeric/hyphen/underscore patterns.
@@ -32,7 +34,7 @@ export function validateReviewActionInput(body: unknown, publicIdParam: unknown)
 
   // 2. Validate action
   const action = payload.action;
-  if (typeof action !== 'string' || !['request_changes', 'approve', 'archive'].includes(action)) {
+  if (typeof action !== 'string' || !['request_changes', 'approve', 'archive', 'restore'].includes(action)) {
     return { valid: false, error: 'Invalid or missing action parameter.' };
   }
 
@@ -78,7 +80,7 @@ export function validateReviewActionInput(body: unknown, publicIdParam: unknown)
   return {
     valid: true,
     data: {
-      action: action as 'request_changes' | 'approve' | 'archive',
+      action: action as ReviewAction,
       comments,
       publicId,
     },

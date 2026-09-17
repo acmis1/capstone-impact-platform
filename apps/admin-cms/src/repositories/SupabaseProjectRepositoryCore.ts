@@ -17,6 +17,7 @@ import {
   ReviewActionExecutionError,
   ReviewActionExecutionErrorCode,
 } from './ProjectRepository';
+import type { ReviewAction } from '../workflow/projectWorkflow';
 
 /**
  * Project row plus the related rows the domain mapping needs. The snapshot media join supplies the
@@ -651,7 +652,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
 
   async performReviewAction(params: {
     publicId: string;
-    action: 'request_changes' | 'approve' | 'archive';
+    action: ReviewAction;
     comments?: string;
     adminId: string;
   }): Promise<{ publicId: string; status: Project['status']; auditRecordId: string }> {
@@ -678,6 +679,10 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
         code = 'PUBLICATION_IN_PROGRESS';
       } else if (rawMsg.includes('CONTROLLED_PUBLIC_REMOVAL_REQUIRED')) {
         code = 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED';
+      } else if (rawMsg.includes('ARCHIVE_PROVENANCE_AMBIGUOUS')) {
+        code = 'ARCHIVE_PROVENANCE_AMBIGUOUS';
+      } else if (rawMsg.includes('RESTORE_PUBLIC_FEED_UNSAFE')) {
+        code = 'RESTORE_PUBLIC_FEED_UNSAFE';
       } else if (rawMsg.includes('REVIEW_PROJECT_NOT_FOUND')) {
         code = 'PROJECT_NOT_FOUND';
       } else if (rawMsg.includes('REVIEW_TRANSITION_INVALID')) {
@@ -706,6 +711,9 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       res.resultCode === 'CORRECTION_RESOLUTION_REQUIRED' ||
       res.resultCode === 'AMBIGUOUS_ACTIVE_PREVIEW' ||
       res.resultCode === 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED' ||
+      res.resultCode === 'ARCHIVE_PROVENANCE_AMBIGUOUS' ||
+      res.resultCode === 'RESTORE_PUBLIC_FEED_UNSAFE' ||
+      res.resultCode === 'PUBLICATION_IN_PROGRESS' ||
       res.resultCode === 'ACCESSIBILITY_CONTENT_REQUIRED' ||
       res.resultCode === 'ACCESSIBILITY_CONTENT_INVALID' ||
       res.resultCode === 'PROJECT_MEDIA_REQUIRED' ||

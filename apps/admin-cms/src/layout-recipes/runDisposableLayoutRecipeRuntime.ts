@@ -25,6 +25,7 @@ import {
 } from './verifyLayoutRecipeRuntime';
 
 const MIGRATION_58_FILE = '20260914100000_layout_recipe_library.sql';
+const MIGRATION_59_FILE = '20260916120000_archived_project_restore.sql';
 
 function migration58Paths(repositoryRoot: string, identity: DisposableStackIdentity) {
   const copiedMigrationsDirectory = path.resolve(identity.workdir, 'supabase', 'migrations');
@@ -38,17 +39,38 @@ function migration58Paths(repositoryRoot: string, identity: DisposableStackIdent
   };
 }
 
-function withholdMigration58(repositoryRoot: string, identity: DisposableStackIdentity): void {
-  const { sourceMigration, copiedMigration } = migration58Paths(repositoryRoot, identity);
-  if (!fs.existsSync(sourceMigration) || !fs.existsSync(copiedMigration)) {
-    throw new Error('LAYOUT_RUNTIME_MIGRATION_MISSING');
+function migration59Paths(repositoryRoot: string, identity: DisposableStackIdentity) {
+  const copiedMigrationsDirectory = path.resolve(identity.workdir, 'supabase', 'migrations');
+  const copiedMigration = path.resolve(copiedMigrationsDirectory, MIGRATION_59_FILE);
+  if (path.dirname(copiedMigration) !== copiedMigrationsDirectory || path.basename(copiedMigration) !== MIGRATION_59_FILE) {
+    throw new Error('LAYOUT_RUNTIME_MIGRATION_PATH_UNSAFE');
   }
-  fs.rmSync(copiedMigration);
-  if (fs.existsSync(copiedMigration)) throw new Error('LAYOUT_RUNTIME_MIGRATION_WITHHOLD_FAILED');
+  return {
+    sourceMigration: path.resolve(repositoryRoot, 'infra', 'supabase', 'migrations', MIGRATION_59_FILE),
+    copiedMigration,
+  };
+}
+
+function withholdReleaseTail(repositoryRoot: string, identity: DisposableStackIdentity): void {
+  for (const paths of [migration58Paths(repositoryRoot, identity), migration59Paths(repositoryRoot, identity)]) {
+    if (!fs.existsSync(paths.sourceMigration) || !fs.existsSync(paths.copiedMigration)) {
+      throw new Error('LAYOUT_RUNTIME_MIGRATION_MISSING');
+    }
+    fs.rmSync(paths.copiedMigration);
+    if (fs.existsSync(paths.copiedMigration)) throw new Error('LAYOUT_RUNTIME_MIGRATION_WITHHOLD_FAILED');
+  }
 }
 
 function restoreMigration58(repositoryRoot: string, identity: DisposableStackIdentity): void {
   const { sourceMigration, copiedMigration } = migration58Paths(repositoryRoot, identity);
+  if (!fs.existsSync(sourceMigration) || fs.existsSync(copiedMigration)) {
+    throw new Error('LAYOUT_RUNTIME_MIGRATION_RESTORE_UNSAFE');
+  }
+  fs.copyFileSync(sourceMigration, copiedMigration, fs.constants.COPYFILE_EXCL);
+}
+
+function restoreMigration59(repositoryRoot: string, identity: DisposableStackIdentity): void {
+  const { sourceMigration, copiedMigration } = migration59Paths(repositoryRoot, identity);
   if (!fs.existsSync(sourceMigration) || fs.existsSync(copiedMigration)) {
     throw new Error('LAYOUT_RUNTIME_MIGRATION_RESTORE_UNSAFE');
   }
@@ -104,7 +126,7 @@ export async function runDisposableLayoutRecipeRuntime(): Promise<void> {
       repositoryRoot, mode: 'migrated-source', tag: 'layout',
       portBase: await preflightDisposablePortBase(), postgresMajorVersion: 17,
     });
-    withholdMigration58(repositoryRoot, identity);
+    withholdReleaseTail(repositoryRoot, identity);
     networkId = createDisposableNetwork(identity);
     startAttempted = true;
     startDisposableStack(repositoryRoot, identity, networkId);
@@ -113,8 +135,10 @@ export async function runDisposableLayoutRecipeRuntime(): Promise<void> {
     restoreMigration58(repositoryRoot, identity);
     applyMigration58(repositoryRoot, identity, networkId);
     await verifyLayoutRecipeUpgradePreservation(repositoryRoot, identity, baseline);
+    restoreMigration59(repositoryRoot, identity);
+    applyMigration58(repositoryRoot, identity, networkId);
     await verifyLayoutRecipeRuntime(repositoryRoot, identity);
-    console.log('PASS: exact retained-state 57 -> 58 layout recipe disposable runtime');
+    console.log('PASS: exact retained-state 57 -> 58 preservation and current M59 layout recipe runtime');
   } catch (error) {
     console.error('FAIL: layout recipe disposable runtime');
     if (error instanceof Error && error.message.startsWith('LAYOUT_RUNTIME_')) console.error(error.message);

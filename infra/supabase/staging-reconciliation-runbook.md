@@ -162,7 +162,7 @@ SELECT version, inserted_at
   FROM supabase_migrations.schema_migrations
  ORDER BY version ASC;
 ```
-Record exact count and missing timestamps against the 58 repository migrations; current hosted staging is verified through Migration 0058, but every later release candidate still requires fresh alignment evidence.
+Record exact count and missing timestamps against the 59 repository migrations; current hosted staging is verified through Migration 0058, so Migration 0059 remains unapplied until a separately authorized release and every later candidate still requires fresh alignment evidence.
 
 ### Historical 53–57 release order
 
@@ -255,13 +255,13 @@ Evaluate empirical evidence from Gates 1–4 to determine the required path:
 ```mermaid
 flowchart TD
     G[Gates 1-4 Evidence] --> C{Schema & History State}
-    C -->|All 58 migrations applied & history matches| PA[Path A: Ready for Deployment Decision]
+    C -->|All 59 migrations applied & history matches| PA[Path A: Ready for Deployment Decision]
     C -->|Read-only evidence shows history mismatch| PB[Path B: Phased Reconciliation & Push]
     C -->|Unexpected column/table drift| PC[Path C: Drift Resolution Required]
     C -->|Target mismatch or unauthorized| PD[Path D: Stop & Abort]
 ```
 
-- **Path A (Full Match / Ready)**: All 58 migrations, 47 public application tables, 3 non-public execution-control tables, 96 service-role application RPC signatures across 95 names, 4 dispatcher routines, 4 canonical buckets, exact constraints/grants, and absence of unexpected schema objects are verified by combined automated and governed manual evidence. Active staging-v2 has current M58 preservation/readiness evidence and an exact-SHA application deployment; the full structural totals above remain tied to their M57 capture. This does not prove recovery, monitoring, human UAT, or institutional/live acceptance.
+- **Path A (Full Match / Ready)**: All 59 migrations, 47 public application tables, 3 non-public execution-control tables, 96 service-role application RPC signatures across 95 names, 4 dispatcher routines, 4 canonical buckets, exact constraints/grants, and absence of unexpected schema objects are verified by combined automated and governed manual evidence. Active staging-v2 has M58 preservation/readiness evidence and an exact-SHA application deployment; M59 remains repository-only in this change. The full structural totals above remain tied to their M57 capture. This does not prove recovery, monitoring, human UAT, or institutional/live acceptance.
 - **Path B (Phased Reconciliation / Conditional)**: Future read-only evidence shows a real history mismatch or missing forward migration; any repair or migration application requires separate authorization. Proceed to Gate 6 only after that authorization.
 - **Path C (Drift Detected)**: Unrecognized columns, conflicting constraint names, or manual schema changes detected. STOP. Document drift and formulate an explicit resolution plan.
 - **Path D (Abort)**: Target identity mismatch or lack of operator authorization. STOP immediately.

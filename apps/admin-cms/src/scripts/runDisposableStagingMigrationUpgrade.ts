@@ -17,7 +17,7 @@ import { collectLocalGate4Evidence } from './checkGate4SchemaEvidence';
 import { MIGRATION_MANAGED_BUCKETS } from '../local-development/localSupabaseFixtures';
 
 /**
- * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 -> 55 -> 56 -> 57 -> 58 migration transition on a stack this
+ * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 migration transition on a stack this
  * verifier owns outright.
  *
  * The known hosted staging-v2 baseline is 48 migrations through
@@ -25,7 +25,7 @@ import { MIGRATION_MANAGED_BUCKETS } from '../local-development/localSupabaseFix
  * end state but not the transition, and the existing deployment-ledger upgrade proves a different
  * single migration. This rehearsal provisions exactly the 48-migration baseline, seeds the minimum
  * representative synthetic evidence a real 48-state database would hold, applies 0049 through
- * 0058 one at a time in deterministic order, and asserts after each step that nothing existing was
+ * 0059 one at a time in deterministic order, and asserts after each step that nothing existing was
  * rewritten and that the new authority is exactly what the migration declares.
  *
  * Everything is disposable and loopback-only: its own project id, port block, Docker network,
@@ -44,6 +44,7 @@ const RELEASE_MIGRATIONS = [
   { ordinal: 56, version: '20260910120200', file: '20260910120200_assistive_worker_production_identity.sql' },
   { ordinal: 57, version: '20260911120000', file: '20260911120000_gallery_full_text_equivalents.sql' },
   { ordinal: 58, version: '20260914100000', file: '20260914100000_layout_recipe_library.sql' },
+  { ordinal: 59, version: '20260916120000', file: '20260916120000_archived_project_restore.sql' },
 ] as const;
 
 const BASELINE_MIGRATION_COUNT = 48;
@@ -120,6 +121,10 @@ const CURRENT_55_TABLES = [
   ...PRESERVED_EXECUTION_CONTROL_TABLES,
 ];
 const CURRENT_57_TABLES = CURRENT_55_TABLES;
+const CURRENT_58_TABLES = [
+  ...ALL_REQUIRED_TABLES.map((table) => `public.${table}`),
+  ...PRESERVED_EXECUTION_CONTROL_TABLES,
+];
 
 /** Exact overloads of the participant-preview issuance authority and its legacy wrapper. */
 const PREVIEW_ISSUANCE_IDENTITY = 'p_public_id text, p_admin_id uuid, p_token_hash text, p_expires_in_seconds integer, p_private_bucket text, p_is_correction_reissue boolean';
@@ -1578,6 +1583,388 @@ function assertAfter58(
   console.log('PASS: Migration 0058 preserved retained rows, kept historical layout evidence null/immutable, and installed service-only bounded layout recipe authority');
 }
 
+function assertAfter59(
+  current58Tables: Record<string, string>,
+  publicTableGrantsBefore59: string,
+  untrustedRoutineGrantsBefore59: string,
+  reviewDefinitionBefore59: string,
+): void {
+  assert.equal(Object.keys(current58Tables).length, 50, 'The current 0058 retained-table inventory is incomplete.');
+  assertTablesUnchanged(current58Tables, 'Migration 0059');
+  assert.equal(publicTableGrants(), publicTableGrantsBefore59, 'Migration 0059 changed direct table grants.');
+  assert.equal(
+    untrustedRoutineExecuteGrants(),
+    untrustedRoutineGrantsBefore59,
+    'Migration 0059 introduced an unsafe direct routine grant.',
+  );
+
+  const identity = 'p_public_id text, p_action text, p_comments text, p_admin_id uuid';
+  const helperDefinition = routineDefinition('perform_project_review_action_without_restore', identity)
+    .replaceAll('perform_project_review_action_without_restore', 'perform_project_review_action');
+  assert.equal(
+    helperDefinition,
+    reviewDefinitionBefore59,
+    'Migration 0059 rewrote the established non-restore review authority.',
+  );
+  assert.equal(
+    psql("SELECT has_function_privilege('service_role','public.perform_project_review_action_without_restore(text,text,text,uuid)','EXECUTE')::text"
+      + " || '|' || has_function_privilege('anon','public.perform_project_review_action_without_restore(text,text,text,uuid)','EXECUTE')::text"
+      + " || '|' || has_function_privilege('authenticated','public.perform_project_review_action_without_restore(text,text,text,uuid)','EXECUTE')::text;"),
+    'false|false|false',
+    'Migration 0059 exposed the delegated review helper.',
+  );
+  assert.equal(
+    psql("SELECT has_function_privilege('service_role','public.perform_project_review_action(text,text,text,uuid)','EXECUTE')::text"
+      + " || '|' || has_function_privilege('anon','public.perform_project_review_action(text,text,text,uuid)','EXECUTE')::text"
+      + " || '|' || has_function_privilege('authenticated','public.perform_project_review_action(text,text,text,uuid)','EXECUTE')::text;"),
+    'true|false|false',
+    'Migration 0059 review wrapper grant contract drifted.',
+  );
+
+  const wrapper = routineDefinition('perform_project_review_action', identity);
+  assert.match(wrapper, /p_action IS DISTINCT FROM 'restore'/);
+  assert.match(wrapper, /WHEN 'published' THEN 'approved'/);
+  assert.doesNotMatch(wrapper, /WHEN 'published' THEN 'published'/);
+  assert.match(wrapper, /ARCHIVE_PROVENANCE_AMBIGUOUS/);
+  assert.match(wrapper, /RESTORE_PUBLIC_FEED_UNSAFE/);
+  assert.match(wrapper, /public_feed_canonical_writer/);
+  assert.match(wrapper, /action_taken,[\s\S]*'restore'/);
+  assert.equal(
+    psql('SELECT public.get_release_capability_sentinel();'),
+    '20260916120000_archived_project_restore|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1',
+  );
+  console.log('PASS: Migration 0059 preserved all 50 retained tables and installed service-only, fail-closed archived-project restoration');
+}
+
+async function verifyArchivedRestoreRuntime(client: SupabaseClient): Promise<void> {
+  const reviewerId = '3f000000-0000-4000-8000-000000000059';
+  const archivedAt = '2026-09-16T12:00:00+00';
+  const completedAt = '2026-09-16T12:01:00+00';
+  const staleCompletedAt = '2026-09-15T12:01:00+00';
+  psql(`
+BEGIN;
+INSERT INTO public.admin_users (id, email, full_name)
+VALUES ('${reviewerId}', 'upgrade-restore-reviewer@example.invalid', 'Restore Rehearsal Reviewer');
+INSERT INTO public.user_roles (user_id, role) VALUES ('${reviewerId}', 'reviewer');
+
+INSERT INTO public.projects (
+  public_id, title, year, program_id, program_name, study_program, status, source_folder,
+  archived_at, archived_from_status, archive_reason, pending_removal_from_public,
+  public_removal_completed_at
+)
+SELECT
+  candidate.public_id, candidate.title, 2026, programs.id, programs.name, programs.name,
+  'archived', 'upgrade-restore-rehearsal', '${archivedAt}'::timestamptz,
+  candidate.origin, 'Synthetic archive restore rehearsal.', false,
+  CASE
+    WHEN candidate.public_id IN ('upgrade-restore-published', 'upgrade-restore-published-duplicate', 'upgrade-restore-published-no-removal')
+      THEN '${completedAt}'::timestamptz
+    WHEN candidate.public_id = 'upgrade-restore-published-stale' THEN '${staleCompletedAt}'::timestamptz
+    ELSE NULL
+  END
+FROM (VALUES
+  ('upgrade-restore-submitted', 'Restore submitted origin', 'submitted'),
+  ('upgrade-restore-in-review', 'Restore in-review origin', 'in_review'),
+  ('upgrade-restore-approved', 'Restore approved origin', 'approved'),
+  ('upgrade-restore-published', 'Restore published origin', 'published'),
+  ('upgrade-restore-ambiguous', 'Restore ambiguous origin', 'approved'),
+  ('upgrade-restore-contradictory', 'Restore contradictory origin', 'approved'),
+  ('upgrade-restore-unsupported', 'Restore unsupported origin', 'draft'),
+  ('upgrade-restore-feed-unsafe', 'Restore feed-unsafe origin', 'approved'),
+  ('upgrade-restore-published-no-removal', 'Restore missing-removal origin', 'published'),
+  ('upgrade-restore-published-stale', 'Restore stale-removal origin', 'published'),
+  ('upgrade-restore-published-duplicate', 'Restore duplicate-removal origin', 'published'),
+  ('upgrade-restore-writer-blocked', 'Restore writer-blocked origin', 'approved'),
+  ('upgrade-restore-unauthorized', 'Restore unauthorized origin', 'approved'),
+  ('upgrade-restore-concurrent', 'Restore concurrent origin', 'approved'),
+  ('upgrade-restore-audit-failure', 'Restore audit failure origin', 'approved')
+) AS candidate(public_id, title, origin)
+CROSS JOIN LATERAL (SELECT id, name FROM public.programs ORDER BY name LIMIT 1) AS programs;
+
+INSERT INTO public.approval_records (
+  project_id, admin_id, action_taken, from_status, to_status, comments, created_at
+)
+SELECT project.id, '${ADMIN_ID}', 'archive', project.archived_from_status, 'archived',
+       project.archive_reason, project.archived_at
+  FROM public.projects project
+ WHERE project.source_folder = 'upgrade-restore-rehearsal'
+   AND project.public_id <> 'upgrade-restore-ambiguous';
+
+INSERT INTO public.approval_records (
+  project_id, admin_id, action_taken, from_status, to_status, comments, created_at
+)
+SELECT project.id, '${ADMIN_ID}', 'archive', 'submitted', 'archived',
+       'Contradictory synthetic provenance.', project.archived_at
+  FROM public.projects project
+ WHERE project.public_id = 'upgrade-restore-contradictory';
+
+WITH activation_operation AS (
+  INSERT INTO public.public_feed_operations (
+    operation_key, kind, authorizing_actor_id, completion_actor_id,
+    candidate_feed_hash, candidate_record_count, candidate_byte_count,
+    candidate_feed_content, candidate_members, storage_bucket, storage_path,
+    state, owner_epoch, owner_token_hash, lease_expires_at,
+    observed_storage_hash, observed_storage_record_count,
+    created_at, updated_at, finalized_at, completed_at
+  ) VALUES (
+    pg_catalog.gen_random_uuid(), 'activation', '${ADMIN_ID}', '${ADMIN_ID}',
+    pg_catalog.encode(extensions.digest(pg_catalog.convert_to('[]', 'UTF8'), 'sha256'), 'hex'),
+    0, 2, '[]', '[]'::jsonb, 'synthetic-local', 'upgrade-restore-head',
+    'COMPLETED', 1, '${'d'.repeat(64)}', '${archivedAt}'::timestamptz - interval '1 day',
+    pg_catalog.encode(extensions.digest(pg_catalog.convert_to('[]', 'UTF8'), 'sha256'), 'hex'),
+    0, '${archivedAt}'::timestamptz - interval '1 day', '${archivedAt}'::timestamptz - interval '1 day',
+    '${archivedAt}'::timestamptz - interval '1 day', '${archivedAt}'::timestamptz - interval '1 day'
+  )
+  RETURNING id, authorizing_actor_id, completion_actor_id,
+            candidate_feed_content, candidate_byte_count,
+            candidate_feed_hash, candidate_record_count
+), activation_version AS (
+  INSERT INTO public.public_feed_versions (
+    operation, operation_id, authorizing_actor_id, completion_actor_id,
+    artifact_content, byte_count, feed_hash, record_count, created_at
+  )
+  SELECT 'baseline', operation.id, operation.authorizing_actor_id,
+         operation.completion_actor_id, operation.candidate_feed_content,
+         operation.candidate_byte_count, operation.candidate_feed_hash,
+         operation.candidate_record_count, '${archivedAt}'::timestamptz - interval '1 day'
+    FROM activation_operation operation
+  RETURNING id, operation_id, authorizing_actor_id, completion_actor_id
+)
+INSERT INTO public.public_feed_head (
+  singleton, current_version_id, generation, activated_by_id, activated_at,
+  transitioned_by_id, transitioned_at, last_operation_id
+)
+SELECT true, version.id, 1, version.authorizing_actor_id,
+       '${archivedAt}'::timestamptz - interval '1 day', version.completion_actor_id,
+       '${archivedAt}'::timestamptz - interval '1 day', version.operation_id
+  FROM activation_version version;
+
+WITH removal_fixture(public_id, operation_count, finalized_at, completed_at) AS (
+  VALUES
+    ('upgrade-restore-published', 1, '${archivedAt}'::timestamptz, '${completedAt}'::timestamptz),
+    ('upgrade-restore-published-stale', 1, '${staleCompletedAt}'::timestamptz - interval '1 minute', '${staleCompletedAt}'::timestamptz),
+    ('upgrade-restore-published-duplicate', 2, '${archivedAt}'::timestamptz, '${completedAt}'::timestamptz)
+)
+INSERT INTO public.public_feed_operations (
+  operation_key, kind, authorizing_actor_id, completion_actor_id, project_id, public_id,
+  archive_reason, candidate_feed_hash, candidate_record_count, candidate_byte_count,
+  candidate_feed_content, candidate_members, state, owner_epoch, owner_token_hash,
+  lease_expires_at, observed_storage_hash, observed_storage_record_count,
+  created_at, updated_at, finalized_at, completed_at
+)
+SELECT pg_catalog.gen_random_uuid(), 'removal', '${ADMIN_ID}', '${ADMIN_ID}', project.id,
+       project.public_id, project.archive_reason,
+       pg_catalog.encode(extensions.digest(pg_catalog.convert_to('[]', 'UTF8'), 'sha256'), 'hex'),
+       0, 2, '[]', '[]'::jsonb, 'COMPLETED', 1, '${'a'.repeat(64)}', fixture.completed_at,
+       pg_catalog.encode(extensions.digest(pg_catalog.convert_to('[]', 'UTF8'), 'sha256'), 'hex'),
+       0, fixture.finalized_at, fixture.completed_at, fixture.finalized_at, fixture.completed_at
+  FROM removal_fixture fixture
+  JOIN public.projects project ON project.public_id = fixture.public_id
+ CROSS JOIN LATERAL pg_catalog.generate_series(1, fixture.operation_count) duplicate;
+
+INSERT INTO public.public_feed_operation_events (
+  operation_id, sequence, from_state, to_state, actor_id, owner_epoch,
+  observed_storage_hash, observed_storage_record_count, created_at
+)
+SELECT operation.id, 1, 'DB_FINALIZED', 'COMPLETED', operation.completion_actor_id,
+       operation.owner_epoch, operation.observed_storage_hash,
+       operation.observed_storage_record_count, operation.completed_at
+  FROM public.public_feed_operations operation
+ WHERE operation.public_id IN (
+   'upgrade-restore-published',
+   'upgrade-restore-published-stale'
+ )
+    OR operation.id = (
+      SELECT duplicate.id
+        FROM public.public_feed_operations duplicate
+       WHERE duplicate.public_id = 'upgrade-restore-published-duplicate'
+       ORDER BY duplicate.id::text
+       LIMIT 1
+    );
+
+INSERT INTO public.public_feed_version_members(version_id, ordinal, public_id, record_hash)
+SELECT head.current_version_id,
+       COALESCE((SELECT pg_catalog.max(member.ordinal) + 1
+                   FROM public.public_feed_version_members member
+                  WHERE member.version_id = head.current_version_id), 0),
+       'upgrade-restore-feed-unsafe', '${'b'.repeat(64)}'
+  FROM public.public_feed_head head
+ WHERE head.singleton = true;
+COMMIT;
+`);
+
+  const feedBefore = fingerprintTables([
+    'public.public_feed_operations',
+    'public.public_feed_versions',
+    'public.public_feed_version_members',
+    'public.public_feed_head',
+    'public.public_feed_operation_events',
+    'public.published_snapshots',
+  ]);
+  for (const [origin, expected] of [
+    ['submitted', 'submitted'],
+    ['in-review', 'in_review'],
+    ['approved', 'approved'],
+    ['published', 'approved'],
+  ] as const) {
+    assert.equal(
+      psql(`SELECT public.perform_project_review_action('upgrade-restore-${origin}', 'restore', 'Synthetic restore.', '${ADMIN_ID}'::uuid)->>'status';`),
+      expected,
+      `Restore did not preserve the safe ${origin} origin.`,
+    );
+  }
+  assertTablesUnchanged(feedBefore, 'Archived-project restore runtime');
+  assert.equal(
+    psql("SELECT status || '|' || (archived_at IS NULL)::text || '|' || (archived_from_status IS NULL)::text"
+      + " || '|' || (archive_reason IS NULL)::text FROM public.projects WHERE public_id='upgrade-restore-published';"),
+    'approved|true|true|true',
+    'Published-origin restore was not private Approved state with cleared archive fields.',
+  );
+  assert.equal(
+    psql("SELECT event_details->>'republishRequired' FROM public.approval_records"
+      + " WHERE project_id=(SELECT id FROM public.projects WHERE public_id='upgrade-restore-published')"
+      + " AND action_taken='restore';"),
+    'true',
+    'Published-origin restore audit does not record the explicit republish requirement.',
+  );
+  const readinessCode = psql(
+    `SELECT public.get_project_publication_readiness('upgrade-restore-published', '${ADMIN_ID}'::uuid, 'project-drafts-private')->>'resultCode';`,
+  );
+  assert.notEqual(readinessCode, 'PROJECT_NOT_APPROVED', 'Restored published-origin project cannot enter the normal publication readiness path.');
+  assert.notEqual(readinessCode, 'READY', 'Synthetic restored project bypassed ordinary publication readiness blockers.');
+
+  assert.equal(
+    psql(`SELECT public.perform_project_review_action('upgrade-restore-ambiguous', 'restore', NULL, '${ADMIN_ID}'::uuid)->>'resultCode';`),
+    'ARCHIVE_PROVENANCE_AMBIGUOUS',
+  );
+  assert.equal(
+    psql("SELECT status || '|' || count(*) FILTER (WHERE action_taken='restore')::text"
+      + " FROM public.projects project LEFT JOIN public.approval_records audit ON audit.project_id=project.id"
+      + " WHERE project.public_id='upgrade-restore-ambiguous' GROUP BY project.status;"),
+    'archived|0',
+    'Ambiguous provenance mutated project state or audit history.',
+  );
+
+  for (const [publicId, expectedCode] of [
+    ['upgrade-restore-contradictory', 'ARCHIVE_PROVENANCE_AMBIGUOUS'],
+    ['upgrade-restore-unsupported', 'ARCHIVE_PROVENANCE_AMBIGUOUS'],
+    ['upgrade-restore-feed-unsafe', 'RESTORE_PUBLIC_FEED_UNSAFE'],
+    ['upgrade-restore-published-no-removal', 'ARCHIVE_PROVENANCE_AMBIGUOUS'],
+    ['upgrade-restore-published-stale', 'ARCHIVE_PROVENANCE_AMBIGUOUS'],
+    ['upgrade-restore-published-duplicate', 'ARCHIVE_PROVENANCE_AMBIGUOUS'],
+  ] as const) {
+    assert.equal(
+      psql(`SELECT public.perform_project_review_action('${publicId}', 'restore', NULL, '${ADMIN_ID}'::uuid)->>'resultCode';`),
+      expectedCode,
+      `${publicId} did not fail closed with ${expectedCode}.`,
+    );
+    assert.equal(
+      psql(`SELECT status || '|' || (SELECT pg_catalog.count(*) FROM public.approval_records audit WHERE audit.project_id = project.id AND audit.action_taken = 'restore')::text FROM public.projects project WHERE project.public_id = '${publicId}';`),
+      'archived|0',
+      `${publicId} mutated project state or restore-audit history.`,
+    );
+  }
+
+  psql(`
+INSERT INTO public.public_feed_operations (
+  operation_key, kind, authorizing_actor_id, state, owner_token_hash, lease_expires_at
+) VALUES (
+  pg_catalog.gen_random_uuid(), 'activation', '${ADMIN_ID}', 'RESERVED',
+  '${'c'.repeat(64)}', pg_catalog.now() + interval '2 minutes'
+);
+`);
+  assert.equal(
+    psql(`SELECT public.perform_project_review_action('upgrade-restore-writer-blocked', 'restore', NULL, '${ADMIN_ID}'::uuid)->>'resultCode';`),
+    'PUBLICATION_IN_PROGRESS',
+    'Restore did not refuse an active canonical feed writer.',
+  );
+  assert.equal(psql("SELECT status FROM public.projects WHERE public_id='upgrade-restore-writer-blocked';"), 'archived');
+  psql("DELETE FROM public.public_feed_operations WHERE kind='activation' AND state='RESERVED' AND project_id IS NULL;");
+
+  let unauthorizedRejected = false;
+  try {
+    psql(`SELECT public.perform_project_review_action('upgrade-restore-unauthorized', 'restore', NULL, '${reviewerId}'::uuid);`);
+  } catch {
+    unauthorizedRejected = true;
+  }
+  assert.equal(unauthorizedRejected, true, 'Reviewer-only actor could restore an archived project.');
+  assert.equal(psql("SELECT status FROM public.projects WHERE public_id='upgrade-restore-unauthorized';"), 'archived');
+
+  const concurrent = await Promise.all([
+    client.rpc('perform_project_review_action', {
+      p_public_id: 'upgrade-restore-concurrent', p_action: 'restore', p_comments: null, p_admin_id: ADMIN_ID,
+    }),
+    client.rpc('perform_project_review_action', {
+      p_public_id: 'upgrade-restore-concurrent', p_action: 'restore', p_comments: null, p_admin_id: ADMIN_ID,
+    }),
+  ]);
+  assert.equal(concurrent.filter((result) => result.data?.status === 'approved').length, 1, 'Concurrent restore did not have exactly one winner.');
+  assert.equal(concurrent.filter((result) => result.error?.message.includes('REVIEW_TRANSITION_INVALID')).length, 1, 'Concurrent restore did not reject exactly one stale attempt.');
+  assert.equal(
+    psql("SELECT count(*)::text FROM public.approval_records WHERE action_taken='restore'"
+      + " AND project_id=(SELECT id FROM public.projects WHERE public_id='upgrade-restore-concurrent');"),
+    '1',
+    'Concurrent restore wrote more than one audit record.',
+  );
+
+  psql(`
+CREATE FUNCTION public.reject_upgrade_restore_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.action_taken = 'restore' THEN RAISE EXCEPTION 'SYNTHETIC_RESTORE_AUDIT_FAILURE'; END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER reject_upgrade_restore_audit
+BEFORE INSERT ON public.approval_records
+FOR EACH ROW EXECUTE FUNCTION public.reject_upgrade_restore_audit();
+`);
+  let auditFailureRejected = false;
+  try {
+    psql(`SELECT public.perform_project_review_action('upgrade-restore-audit-failure', 'restore', NULL, '${ADMIN_ID}'::uuid);`);
+  } catch {
+    auditFailureRejected = true;
+  } finally {
+    psql('DROP TRIGGER reject_upgrade_restore_audit ON public.approval_records; DROP FUNCTION public.reject_upgrade_restore_audit();');
+  }
+  assert.equal(auditFailureRejected, true, 'Synthetic restore audit failure did not abort the transaction.');
+  assert.equal(psql("SELECT status FROM public.projects WHERE public_id='upgrade-restore-audit-failure';"), 'archived');
+  assertTablesUnchanged(feedBefore, 'Archived-project restore adverse runtime');
+
+  psql(`
+CREATE TEMP TABLE upgrade_restore_cleanup_ids AS
+SELECT id FROM public.projects WHERE source_folder = 'upgrade-restore-rehearsal';
+ALTER TABLE public.public_feed_operation_events DISABLE TRIGGER reject_public_feed_event_mutation;
+DELETE FROM public.public_feed_operation_events
+ WHERE operation_id IN (
+   SELECT id FROM public.public_feed_operations WHERE public_id LIKE 'upgrade-restore-%'
+ );
+ALTER TABLE public.public_feed_operation_events ENABLE TRIGGER reject_public_feed_event_mutation;
+ALTER TABLE public.public_feed_version_members DISABLE TRIGGER reject_public_feed_member_mutation;
+DELETE FROM public.public_feed_version_members WHERE public_id = 'upgrade-restore-feed-unsafe';
+ALTER TABLE public.public_feed_version_members ENABLE TRIGGER reject_public_feed_member_mutation;
+DELETE FROM public.public_feed_head
+ WHERE last_operation_id = (
+   SELECT id FROM public.public_feed_operations WHERE storage_path = 'upgrade-restore-head'
+ );
+ALTER TABLE public.public_feed_versions DISABLE TRIGGER reject_public_feed_version_mutation;
+DELETE FROM public.public_feed_versions
+ WHERE operation_id = (
+   SELECT id FROM public.public_feed_operations WHERE storage_path = 'upgrade-restore-head'
+ );
+ALTER TABLE public.public_feed_versions ENABLE TRIGGER reject_public_feed_version_mutation;
+DELETE FROM public.public_feed_operations
+ WHERE public_id LIKE 'upgrade-restore-%' OR storage_path = 'upgrade-restore-head';
+DELETE FROM public.projects WHERE source_folder = 'upgrade-restore-rehearsal';
+DELETE FROM public.public_feed_project_projection_authority authority
+USING upgrade_restore_cleanup_ids fixture
+WHERE authority.project_id = fixture.id;
+DELETE FROM public.user_roles WHERE user_id = '${reviewerId}';
+DELETE FROM public.admin_users WHERE id = '${reviewerId}';
+`);
+  assert.equal(psql("SELECT count(*)::text FROM public.projects WHERE source_folder='upgrade-restore-rehearsal';"), '0');
+  console.log('PASS: restore runtime covers all origins, contradictory provenance, canonical removal timing/uniqueness, feed-head absence, writer exclusion, RBAC, atomicity, history preservation and concurrent replay');
+}
+
 async function verifyUpgrade(workdir: string, networkId: string): Promise<void> {
   assertBaseline();
   seedBaselineEvidence();
@@ -1666,6 +2053,19 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   assertAfter58(current57Tables, participantPreviewsBefore58, publicTableGrantsBefore58, untrustedRoutineGrantsBefore58);
   await assertStorageUnchanged(storageClient, baseline, 'Migration 0058');
 
+  const current58Tables = fingerprintTables(CURRENT_58_TABLES);
+  const publicTableGrantsBefore59 = publicTableGrants();
+  const untrustedRoutineGrantsBefore59 = untrustedRoutineExecuteGrants();
+  const reviewDefinitionBefore59 = routineDefinition(
+    'perform_project_review_action',
+    'p_public_id text, p_action text, p_comments text, p_admin_id uuid',
+  );
+  applyRelease(workdir, networkId, 59);
+  assertAfter59(current58Tables, publicTableGrantsBefore59, untrustedRoutineGrantsBefore59, reviewDefinitionBefore59);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0059');
+  await verifyArchivedRestoreRuntime(storageClient);
+  assertTablesUnchanged(current58Tables, 'Migration 0059 restore-runtime cleanup');
+
   const applied = appliedMigrations();
   assert.equal(applied.length, RELEASE_MIGRATION_COUNT, 'The upgraded head is not the full release migration set.');
   assert.deepEqual(applied, repositoryMigrationVersions(), 'The upgraded history does not match the repository manifest.');
@@ -1711,7 +2111,7 @@ async function main(): Promise<void> {
     startAttempted = true;
     runSupabase('start', workdir, networkId);
     await verifyUpgrade(workdir, networkId);
-    console.log('PASS: staging migration 0048 -> 0058 upgrade rehearsal');
+    console.log('PASS: staging migration 0048 -> 0059 upgrade rehearsal');
     console.log('HOSTED_SYSTEMS_CONTACTED = NO');
     exitCode = 0;
   } catch (error) {

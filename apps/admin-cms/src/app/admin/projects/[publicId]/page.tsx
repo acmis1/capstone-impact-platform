@@ -570,6 +570,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                     <StagingReviewActions
                       publicId={project.publicId || ''}
                       currentStatus={project.status}
+                      archivedFromStatus={project.archivedFromStatus}
                       allowedActions={permittedReviewActions}
                     />
                   )}

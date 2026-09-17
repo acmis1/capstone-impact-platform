@@ -19,14 +19,23 @@ import {
 import { PROJECT_DETAIL_SURFACE_CLASSES } from './projectDetailSurfaceStyles';
 import { CheckCircle2 } from 'lucide-react';
 import { getReviewActionPresentation } from './reviewActionPresentation';
+import type { ReviewAction } from '../../workflow/projectWorkflow';
 
 interface StagingReviewActionsProps {
   publicId: string;
   currentStatus: string;
-  allowedActions: string[];
+  archivedFromStatus?: string;
+  allowedActions: readonly ReviewAction[];
 }
 
-export function StagingReviewActions({ publicId, currentStatus, allowedActions }: StagingReviewActionsProps) {
+const SAFE_ACTION_ERRORS: Partial<Record<string, string>> = {
+  ARCHIVE_PROVENANCE_AMBIGUOUS: 'This project cannot be restored because its archive history is incomplete or inconsistent.',
+  RESTORE_PUBLIC_FEED_UNSAFE: 'This project is still present in the current public feed. Complete the controlled removal workflow before restoring it.',
+  PUBLICATION_IN_PROGRESS: 'A publishing operation is in progress. Wait for it to finish before restoring this project.',
+  CONTROLLED_PUBLIC_REMOVAL_REQUIRED: 'Complete the controlled public-removal workflow before restoring this project.',
+};
+
+export function StagingReviewActions({ publicId, currentStatus, archivedFromStatus, allowedActions }: StagingReviewActionsProps) {
   const [comments, setComments] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +50,7 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
     );
   }
 
-  const handleAction = async (action: string) => {
+  const handleAction = async (action: ReviewAction) => {
     if (requestInFlight.current) return;
     requestInFlight.current = true;
     setLoading(true);
@@ -64,6 +73,11 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
 
       if (response.status === 409 && data.code === 'PROJECT_TEAM_PACKAGE_DECISION_REQUIRED') {
         setError('Accept or return the pending project-team package before approving this project.');
+        return;
+      }
+
+      if (response.status === 409 && typeof data.code === 'string' && SAFE_ACTION_ERRORS[data.code]) {
+        setError(SAFE_ACTION_ERRORS[data.code] ?? null);
         return;
       }
 
@@ -149,6 +163,42 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
                       onClick={() => handleAction('archive')}
                     >
                       Archive project
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            );
+          }
+          if (action === 'restore') {
+            const wasPublished = archivedFromStatus?.toLowerCase() === 'published';
+            return (
+              <AlertDialog key={action}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={presentation.variant}
+                    disabled={loading || success}
+                    className={`w-full font-semibold ${presentation.className ?? ''}`}
+                  >
+                    {presentation.label}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Restore project?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {wasPublished
+                        ? 'This project was previously published. Restore returns it to Approved but does not republish it. A separate normal publish action, including all readiness checks, is required before it can become public again.'
+                        : 'Restore returns this project to its last verified non-public review state. It does not publish the project or change public-feed history.'}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={loading || success}
+                      onClick={() => handleAction('restore')}
+                    >
+                      Restore project
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

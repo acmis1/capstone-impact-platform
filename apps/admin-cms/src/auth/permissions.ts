@@ -87,6 +87,7 @@ export function canPerformReviewAction(userPermissions: AdminPermission[], actio
     case 'approve':
       return hasPermission(userPermissions, 'projects.review');
     case 'archive':
+    case 'restore':
       return hasPermission(userPermissions, 'projects.archive');
     default:
       return false;

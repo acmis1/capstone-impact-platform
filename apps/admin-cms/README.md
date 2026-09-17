@@ -47,7 +47,7 @@ The explicit `npm run verify:release-evaluation` command runs the deterministic 
 | Published-only feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled live cutover pending |
 | Public deployment ledger | Yes | Exact-byte versions, explicit head, controlled writer/recovery, history UI, reconciliation, and disposable-Local/verified-staging rollback policies are tested | Active hosted enablement and production acceptance remain separate |
 | Duda integration | Maintained presentation package | `apps/public-layer` renderer and approved-feed contract have loopback and bounded Duda TEST evidence | Live Duda publication remains pending authorization |
-| Database schema/RLS | Versioned | Tests and SQL contracts cover 58 repository migrations; hosted staging is verified through Migration 0058 | Production verification and institutional acceptance remain pending |
+| Database schema/RLS | Versioned | Tests and SQL contracts cover 59 repository migrations; hosted staging remains verified through Migration 0058 | Migration 0059 hosted delivery, production verification and institutional acceptance remain pending |
 | Automated testing | Yes | Vitest offline suite, onboarding precheck, and merged-main CI | Hosted staging smoke is separate from human/UAT acceptance |
 | Production publication paths | Implemented, disabled | Exact production identity and enablement policies and routes are tested | Undeployed, unauthorized, and not live; hardening and controlled cutover pending |
 
@@ -211,7 +211,7 @@ Do not blindly reinitialize an already-applied environment. Use the [Supabase mi
 
 ## Database and migrations
 
-The repository and hosted staging contain 58 timestamped migrations through Migration `0058`, `20260914100000_layout_recipe_library.sql`. Migration 0058 was applied and verified on 2026-09-15; existing project, media, feed, and history data remained preserved, historical participant previews retained `NULL` layout snapshots, the new layout-recipe tables remained empty, and the release sentinel was current. The earlier governed application of Migrations `0053`-`0057` remains recorded in [Staging-57 Deployment Evidence](../../docs/staging-57-deployment-evidence-2026-09-13.md). The migration set remains manually governed for authorized isolated environments: never target `Prototype/`, recovery, or unrelated environments, and never blindly reinitialize an already provisioned environment. Production migration delivery and verification remain pending.
+The repository contains 59 timestamped migrations through Migration `0059`, `20260916120000_archived_project_restore.sql`; hosted staging remains verified through Migration `0058`, `20260914100000_layout_recipe_library.sql`. Migration 0058 was applied and verified on 2026-09-15; existing project, media, feed, and history data remained preserved, historical participant previews retained `NULL` layout snapshots, the new layout-recipe tables remained empty, and the then-current release sentinel was verified. Migration 0059 is repository-only in this change and has not been applied to hosted staging. The migration set remains manually governed for authorized isolated environments: never target `Prototype/`, recovery, or unrelated environments, and never blindly reinitialize an already provisioned environment. Production migration delivery and verification remain pending.
 
 - [`20260601035138_staging_schema.sql`](../../infra/supabase/migrations/20260601035138_staging_schema.sql) defines the relational schema, constraints, indexes and timestamps.
 - [`20260601035139_staging_rls_policies.sql`](../../infra/supabase/migrations/20260601035139_staging_rls_policies.sql) establishes the restrictive Row-Level Security baseline.
@@ -339,7 +339,9 @@ The domain represents `draft`, `submitted`, `in_review`, `changes_requested`, `a
 | `changes_requested` | `approve` | `approved` |
 | `approved` | `request_changes` | `changes_requested` |
 | `approved` | `archive` | `archived` |
-| `published` | `archive` | `archived` |
+| `published` | controlled public-removal workflow (not this review action) | `archived` |
+| `archived` from `submitted`, `in_review`, or `approved` | `restore` | the verified prior non-public state |
+| `archived` from `published` after completed public removal | `restore` | `approved` (never directly `published`) |
 
 The review action mutation invokes PostgreSQL RPC `public.perform_project_review_action`, which row-locks the project (`FOR UPDATE`), validates workflow transition targets and RBAC role permissions, updates project status and side effects, and inserts an audit row into `approval_records` in a single atomic transaction.
 
@@ -447,7 +449,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - Project-team-authored public content is read-only in the project workspace; staff use the complete correction-package review/acceptance path. Broader staff acceptance remains pending.
 - Reviewer/editor permission-matrix UAT remains pending.
 - Project detail is the next major UI modernization area.
-- The repository and hosted staging contain 58 migrations through verified Migration 0058; production migration delivery and institutional acceptance remain pending.
+- The repository contains 59 migrations through Migration 0059; hosted staging remains verified through Migration 0058, and Migration 0059 hosted delivery, production delivery and institutional acceptance remain pending.
 - Participant preview/confirmation is implemented. Deployment history and disposable-Local/verified-staging rollback code are implemented; hosted enablement remains separately governed and production rollback remains unavailable.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.
