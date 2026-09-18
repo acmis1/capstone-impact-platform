@@ -79,6 +79,15 @@ LANGUAGE plpgsql
 SET search_path = ''
 AS $$
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    -- Invoker-security trigger: legitimate owner-executed SECURITY DEFINER RPCs may append;
+    -- a direct service-role/PostgREST insert cannot impersonate those audit authorities.
+    IF NEW.action_taken IN ('update_layout', 'project_recovery', 'soft_delete')
+       AND NOT pg_catalog.pg_has_role(current_user, (SELECT relowner FROM pg_catalog.pg_class WHERE oid = TG_RELID), 'USAGE') THEN
+      RAISE EXCEPTION 'PROJECT_MAINTENANCE_AUDIT_INSERT_FORBIDDEN';
+    END IF;
+    RETURN NEW;
+  END IF;
   IF OLD.action_taken IN ('update_layout', 'project_recovery', 'soft_delete')
      OR (TG_OP='UPDATE' AND NEW.action_taken IN ('update_layout', 'project_recovery', 'soft_delete')) THEN
     RAISE EXCEPTION 'PROJECT_MAINTENANCE_AUDIT_IMMUTABLE';
@@ -91,7 +100,7 @@ $$;
 REVOKE ALL ON FUNCTION public.guard_governed_project_maintenance_audit_immutable() FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE TRIGGER governed_project_maintenance_audit_immutable
-  BEFORE UPDATE OR DELETE ON public.approval_records
+  BEFORE INSERT OR UPDATE OR DELETE ON public.approval_records
   FOR EACH ROW EXECUTE FUNCTION public.guard_governed_project_maintenance_audit_immutable();
 
 CREATE FUNCTION public.project_maintenance_actor_is_admin(p_actor_id uuid)
@@ -784,10 +793,7 @@ BEGIN
              OR lower(candidate.name) = lower(btrim(OLD.study_program)) THEN CONTINUE; END IF;
         END IF;
         IF candidate.retired_at IS NOT NULL THEN RAISE EXCEPTION 'RETIRED_PROGRAM_NOT_AVAILABLE'; END IF;
-        IF candidate.id = NEW.program_id AND NULLIF(btrim(NEW.program_name), '') IS NOT NULL
-           AND lower(candidate.name) IS DISTINCT FROM lower(btrim(NEW.program_name)) THEN
-          RAISE EXCEPTION 'TAXONOMY_REFERENCE_CHANGED';
-        END IF;
+        -- Preserve the established legacy FK/display-name contract; only new retired assignments are refused.
       END LOOP;
     END IF;
     IF TG_OP = 'INSERT' OR NEW.discipline IS DISTINCT FROM OLD.discipline THEN
@@ -884,8 +890,11 @@ DECLARE
   v_old_industries jsonb;
   v_new_industries jsonb;
 BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('capstone.staff_lifecycle_admin_invariant', 0));
   SELECT full_name, email INTO v_actor_full_name, v_actor_email
-  FROM public.admin_users WHERE id = p_admin_id;
+  FROM public.admin_users actor WHERE actor.id = p_admin_id AND actor.lifecycle_status = 'active'
+    AND NOT EXISTS (SELECT 1 FROM public.staff_provisioning_requests request WHERE request.admin_user_id = actor.id AND request.status = 'pending_activation')
+  FOR SHARE;
 
   IF NOT FOUND OR NOT EXISTS (
     SELECT 1 FROM public.user_roles
@@ -1194,6 +1203,11 @@ BEGIN
   END IF;
 
   SELECT * INTO v_run FROM public.assistive_validation_runs WHERE id = v_job.run_id;
+  IF EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(p_findings) finding
+    WHERE finding->>'checkType' = 'LANGUAGE_SUGGESTION'
+      AND finding #>> '{evidence,pipelineVersion}' IS DISTINCT FROM v_run.pipeline_version) THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'VALIDATION_FAILED');
+  END IF;
   IF p_input_hash IS DISTINCT FROM v_run.input_hash THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'INPUT_CHANGED');
   END IF;
@@ -1546,6 +1560,32 @@ BEGIN
   );
 END;
 $$;
+
+-- Preserve existing catalogue rows; serialize only new/changed normalized names.
+-- This complements lifecycle NOWAIT reference fencing and also covers ordinary create calls.
+CREATE FUNCTION public.guard_taxonomy_normalized_name()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $name_guard$
+DECLARE normalized text; duplicate_name boolean; exact_name_exists boolean;
+BEGIN
+  IF TG_TABLE_NAME NOT IN ('programs','disciplines','industry_categories') THEN RAISE EXCEPTION 'TAXONOMY_NAME_GUARD_TABLE_INVALID'; END IF;
+  IF TG_OP = 'UPDATE' AND NEW.name IS NOT DISTINCT FROM OLD.name THEN RETURN NEW; END IF;
+  normalized := pg_catalog.lower(pg_catalog.btrim(NEW.name));
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('capstone.taxonomy_name:' || TG_TABLE_NAME || ':' || normalized, 0));
+  -- Preserve exact-name ON CONFLICT DO NOTHING imports; ordinary UNIQUE(name) still owns that conflict.
+  IF TG_OP = 'INSERT' THEN
+    EXECUTE pg_catalog.format('SELECT EXISTS (SELECT 1 FROM public.%I WHERE name=$1)', TG_TABLE_NAME)
+      INTO exact_name_exists USING NEW.name;
+    IF exact_name_exists THEN RETURN NEW; END IF;
+  END IF;
+  EXECUTE pg_catalog.format('SELECT EXISTS (SELECT 1 FROM public.%I WHERE lower(btrim(name))=$1 AND id IS DISTINCT FROM $2)', TG_TABLE_NAME)
+    INTO duplicate_name USING normalized, NEW.id;
+  IF duplicate_name THEN RAISE EXCEPTION 'TAXONOMY_NAME_DUPLICATE' USING ERRCODE = '23505'; END IF;
+  RETURN NEW;
+END; $name_guard$;
+REVOKE ALL ON FUNCTION public.guard_taxonomy_normalized_name() FROM PUBLIC, anon, authenticated, service_role;
+CREATE TRIGGER taxonomy_normalized_name BEFORE INSERT OR UPDATE OF name ON public.programs FOR EACH ROW EXECUTE FUNCTION public.guard_taxonomy_normalized_name();
+CREATE TRIGGER taxonomy_normalized_name BEFORE INSERT OR UPDATE OF name ON public.disciplines FOR EACH ROW EXECUTE FUNCTION public.guard_taxonomy_normalized_name();
+CREATE TRIGGER taxonomy_normalized_name BEFORE INSERT OR UPDATE OF name ON public.industry_categories FOR EACH ROW EXECUTE FUNCTION public.guard_taxonomy_normalized_name();
 
 CREATE OR REPLACE FUNCTION public.get_release_capability_sentinel()
 RETURNS text

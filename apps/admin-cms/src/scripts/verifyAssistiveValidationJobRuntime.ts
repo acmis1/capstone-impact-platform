@@ -420,6 +420,8 @@ async function main(): Promise<void> {
       })).resultCode, 'VALIDATION_FAILED');
       const base = languageFinding(inputHash);
       const malformed = [
+        { ...base, evidence: { ...base.evidence, pipelineVersion: 'assistive-deterministic-checks/v3' } },
+        { ...base, evidence: { ...base.evidence, pipelineVersion: 'assistive-deterministic-checks/v5' } },
         { ...base, evidence: { ...base.evidence, endOffset: 10 } },
         { ...base, evidence: { ...base.evidence, contextExcerpt: 'x'.repeat(501) } },
         { ...base, evidence: { ...base.evidence, suggestions: [] } },

@@ -4201,6 +4201,56 @@ async function verifyAssistiveV4Compatibility(client: SupabaseClient): Promise<v
   console.log('PASS: M62 preserves legacy v3 registration/evidence identity, accepts explicit v4 workers, and rejects cross-version availability and unsupported pipelines');
 }
 
+function verifyMaintenanceActorLifecycle(): void {
+  const before = fingerprintTables(['public.admin_users', 'public.user_roles', 'public.staff_provisioning_requests', 'public.projects', 'public.approval_records']);
+  assert.equal(psql(`\\set QUIET 1
+BEGIN;
+DO $actor$
+DECLARE actor_id uuid:=gen_random_uuid(); linked_id uuid:=gen_random_uuid(); stage text; result jsonb;
+BEGIN
+  INSERT INTO public.admin_users(id,email,full_name) VALUES(actor_id,'m62-pending-lifecycle@example.invalid','Synthetic lifecycle actor');
+  INSERT INTO public.user_roles(user_id,role) VALUES(actor_id,'editor');
+  FOREACH stage IN ARRAY ARRAY['deactivated','pending_activation'] LOOP
+    IF stage='deactivated' THEN UPDATE public.admin_users SET lifecycle_status='deactivated',deactivated_at=now() WHERE id=actor_id;
+    ELSE
+      UPDATE public.admin_users SET lifecycle_status='active',deactivated_at=NULL WHERE id=actor_id;
+      INSERT INTO public.staff_provisioning_requests(normalized_email,full_name,requested_roles,status,execution_token_hash,auth_ownership_token_hash,lease_expires_at,auth_user_id,auth_identity_owned,admin_user_id)
+      VALUES('m62-pending-lifecycle@example.invalid','Synthetic lifecycle actor',ARRAY['editor'],'pending_activation',repeat('a',64),repeat('b',64),now()+interval '1 day',linked_id,true,actor_id);
+    END IF;
+    result:=public.update_project_metadata('unattempted-lifecycle-project','','','','',2026,NULL,ARRAY[]::uuid[],ARRAY[]::uuid[],now(),actor_id,'','');
+    IF result->>'resultCode' IS DISTINCT FROM 'PERMISSION_DENIED' THEN RAISE EXCEPTION 'INACTIVE_METADATA_ACTOR_ACCEPTED'; END IF;
+  END LOOP;
+END; $actor$;
+SELECT 'METADATA_LIFECYCLE_FAILS_CLOSED';
+ROLLBACK;`), 'METADATA_LIFECYCLE_FAILS_CLOSED');
+  assertTablesUnchanged(before, 'M62 inactive/pending metadata actor probes');
+  console.log('PASS: M62 metadata rejects deactivated and pending-activation actors while retaining role history');
+}
+
+async function verifyNormalizedCatalogueConcurrency(): Promise<void> {
+  const first = interactivePsql('m62_name_first');
+  const second = interactivePsql('m62_name_second');
+  try {
+    await first.execute("BEGIN; INSERT INTO public.programs(name) VALUES('M62 Concurrent Exact Name');");
+    const observe = observeConcurrentPsql(second.execute(`DO $name$ BEGIN
+      BEGIN INSERT INTO public.programs(name) VALUES('m62 concurrent exact name');
+      EXCEPTION WHEN unique_violation THEN RETURN; END;
+      RAISE EXCEPTION 'NORMALIZED_DUPLICATE_CONCURRENTLY_ACCEPTED';
+    END; $name$; SELECT 'NORMALIZED_DUPLICATE_REFUSED';`));
+    await waitForDatabaseLockWait('m62_name_second');
+    await first.execute('COMMIT;');
+    assert.equal(await observe(), 'NORMALIZED_DUPLICATE_REFUSED');
+    assert.equal(psql("SELECT count(*)::text FROM public.programs WHERE lower(btrim(name))='m62 concurrent exact name';"), '1');
+    // Ordinary repeat imports rely on exact-name ON CONFLICT DO NOTHING, not an exception.
+    psql("INSERT INTO public.programs(name) VALUES('M62 Concurrent Exact Name') ON CONFLICT(name) DO NOTHING;");
+    assert.equal(psql("SELECT count(*)::text FROM public.programs WHERE name='M62 Concurrent Exact Name';"), '1');
+  } finally {
+    await first.execute('ROLLBACK;').catch(() => undefined);
+    await first.close(); await second.close();
+  }
+  console.log('PASS: normalized-name concurrent create allows one record and exact-name import upsert remains idempotent');
+}
+
 async function verifyMaintenanceReviewRegressions(client: SupabaseClient): Promise<void> {
   const before = fingerprintTables(['public.projects', 'public.approval_records', 'public.programs', 'public.disciplines', 'public.industry_categories']);
   assert.equal(psql(`\\set QUIET 1
@@ -4218,6 +4268,11 @@ BEGIN
     BEGIN UPDATE public.approval_records SET action_taken=protected_action WHERE id=ordinary_id;
     EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'PROJECT_MAINTENANCE_AUDIT_IMMUTABLE' THEN RAISE; END IF; rejected:=true; END;
     IF NOT rejected THEN RAISE EXCEPTION 'AUDIT_ACTION_FORGERY_ACCEPTED'; END IF;
+    rejected := false;
+    BEGIN INSERT INTO public.approval_records(project_id,admin_id,action_taken,from_status,to_status,comments)
+      SELECT project_id,admin_id,protected_action,from_status,to_status,'Forged insert must fail' FROM public.approval_records WHERE id=ordinary_id;
+    EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'PROJECT_MAINTENANCE_AUDIT_INSERT_FORBIDDEN' THEN RAISE; END IF; rejected:=true; END;
+    IF NOT rejected THEN RAISE EXCEPTION 'PROTECTED_AUDIT_INSERT_ACCEPTED'; END IF;
   END LOOP;
   FOR protected_id IN SELECT a.id FROM public.approval_records a JOIN public.projects p ON p.id=a.project_id
     WHERE p.public_id IN ('upgrade-maintenance-layout','upgrade-maintenance-recovery') AND a.action_taken IN ('soft_delete','project_recovery','update_layout') LOOP
@@ -4253,7 +4308,9 @@ END; $legacy$;
 SELECT 'INVALID_PREVIOUS_LAYOUT_REFUSED';
 ROLLBACK;`), 'INVALID_PREVIOUS_LAYOUT_REFUSED');
   assertTablesUnchanged(before, 'M62 audit/legacy-layout review regression rollback');
+  verifyMaintenanceActorLifecycle();
   await verifyRetiredTaxonomyRuntime(client);
+  await verifyNormalizedCatalogueConcurrency();
   console.log('PASS: M62 refuses audit action forgery, protected-row mutation and malformed previous layout evidence');
 }
 
@@ -5767,11 +5824,16 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   await assertStorageUnchanged(storageClient, baseline, 'Migration 0061');
   await verifyGovernedSoftDeleteRuntime(storageClient);
 
+  const current61Storage: BaselineEvidence = {
+    ...baseline,
+    storageObjects: await readStorageEvidenceAfterTransientFailure(storageClient, storageInventory()),
+    storageRows: tableFingerprint('storage.objects'),
+  };
   const current61Tables = fingerprintTables(CURRENT_58_TABLES);
   const current61TaxonomyRows = Object.fromEntries(['programs','disciplines','industry_categories'].map(table => [table, psql(`SELECT COALESCE(jsonb_agg(to_jsonb(entry) ORDER BY id),'[]'::jsonb)::text FROM public.${table} entry;`)]));
   applyRelease(workdir, networkId, 62);
   assertAfter62(current61Tables, current61TaxonomyRows);
-  await assertStorageUnchanged(storageClient, baseline, 'Migration 0062');
+  await assertStorageUnchanged(storageClient, current61Storage, 'Migration 0062');
   await waitForMaintenanceSchema(storageClient);
   await verifyGovernedMaintenanceRuntime(storageClient);
   await verifyAssistiveV4Compatibility(storageClient);

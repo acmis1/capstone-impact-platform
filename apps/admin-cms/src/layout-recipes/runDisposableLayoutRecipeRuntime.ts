@@ -30,6 +30,7 @@ const RELEASE_TAIL_FILES = [
   '20260916120000_archived_project_restore.sql',
   '20260917090000_archived_project_republish_media_rearm.sql',
   '20260917120000_governed_project_soft_delete.sql',
+  '20260918120000_governed_project_maintenance.sql',
 ] as const;
 
 function migrationPaths(
@@ -132,9 +133,10 @@ export async function runDisposableLayoutRecipeRuntime(): Promise<void> {
     restoreMigration(repositoryRoot, identity, RELEASE_TAIL_FILES[1]);
     restoreMigration(repositoryRoot, identity, RELEASE_TAIL_FILES[2]);
     restoreMigration(repositoryRoot, identity, RELEASE_TAIL_FILES[3]);
+    restoreMigration(repositoryRoot, identity, RELEASE_TAIL_FILES[4]);
     applyPendingMigrations(repositoryRoot, identity, networkId);
     await verifyLayoutRecipeRuntime(repositoryRoot, identity);
-    console.log('PASS: exact retained-state 57 -> 58 preservation and current M61 layout recipe runtime');
+    console.log('PASS: exact retained-state 57 -> 58 preservation and current M62 layout recipe runtime');
   } catch (error) {
     console.error('FAIL: layout recipe disposable runtime');
     if (error instanceof Error && error.message.startsWith('LAYOUT_RUNTIME_')) console.error(error.message);

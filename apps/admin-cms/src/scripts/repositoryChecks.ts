@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const yaml = require('js-yaml') as { load(input: string): unknown };
 export const prohibited = /stu[d]ents?/i;
-export const frozenSyntheticOcrEvidence = /^(?:tools\/assistive-validation-benchmark\/(?:ocr-productionization\/corpus\/(?:calibration|holdout)|ocr-iteration2-calibration\/corpus\/calibration|ocr-iteration2-fresh-holdout\/corpus\/holdout)\.json|tools\/assistive-validation-benchmark\/src\/assistive_validation_benchmark\/(?:ocr_iteration2_holdout_protocol\/distractor_calibration|ocr_iteration2_fresh_holdout\/corpus)\.py|docs\/assistive-validation\/evidence\/ocr-productionization(?:-iteration2-distractor-calibration|-report)\.json|docs\/assistive-validation\/evidence\/ocr-iteration2-fresh-holdout\/holdout-capture\.json)$/;
+export const frozenSyntheticOcrEvidence = /^(?:apps\/admin-cms\/src\/assistive-validation\/__tests__\/fixtures\/native-title-regression\.json|tools\/assistive-validation-benchmark\/(?:ocr-productionization\/corpus\/(?:calibration|holdout)|ocr-iteration2-calibration\/corpus\/calibration|ocr-iteration2-fresh-holdout\/corpus\/holdout)\.json|tools\/assistive-validation-benchmark\/src\/assistive_validation_benchmark\/(?:ocr_iteration2_holdout_protocol\/distractor_calibration|ocr_iteration2_fresh_holdout\/corpus)\.py|docs\/assistive-validation\/evidence\/ocr-productionization(?:-iteration2-distractor-calibration|-report)\.json|docs\/assistive-validation\/evidence\/ocr-iteration2-fresh-holdout\/holdout-capture\.json)$/;
 
 function trackedFiles(repoRoot: string): string[] {
   return execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })

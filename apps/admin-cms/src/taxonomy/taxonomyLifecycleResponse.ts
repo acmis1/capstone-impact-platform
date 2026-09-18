@@ -7,10 +7,9 @@ const resultSchema = z.union([
     id: postgresUuidSchema, name: z.string().min(1).max(120),
     retiredAt: z.string().datetime({ offset: true }).nullable(), lifecycleVersion: z.number().int().min(1),
   }).strict(),
-  z.object({
-    resultCode: z.enum(['PERMISSION_DENIED', 'VALIDATION_FAILED', 'NOT_FOUND', 'STALE_VERSION', 'REFERENCED_RENAME_BLOCKED', 'DUPLICATE_NAME', 'BUSY']),
-    lifecycleVersion: z.number().int().min(1).optional(), referenceCount: z.number().int().min(1).optional(),
-  }).strict(),
+  z.object({ resultCode: z.enum(['PERMISSION_DENIED', 'VALIDATION_FAILED', 'NOT_FOUND', 'DUPLICATE_NAME', 'BUSY']) }).strict(),
+  z.object({ resultCode: z.literal('STALE_VERSION'), lifecycleVersion: z.number().int().min(1) }).strict(),
+  z.object({ resultCode: z.literal('REFERENCED_RENAME_BLOCKED'), referenceCount: z.number().int().min(1) }).strict(),
 ]);
 
 export function parseTaxonomyLifecycleResponse(input: unknown, expected: {
