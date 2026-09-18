@@ -1,5 +1,7 @@
 # Developer and Technical Handover Guide
 
+The [Post-audit maintenance guide](post-audit-maintenance-guide.md) describes M62 layout/recovery/catalogue controls and v4 worker compatibility. Use the exact deployed readiness/worker receipt; source presence alone is not deployment proof.
+
 This guide gives a new maintainer the shortest safe path to understand, verify, release, and recover the Capstone Impact Platform. It references authoritative documents instead of duplicating detailed contracts.
 
 ## Source-of-truth order

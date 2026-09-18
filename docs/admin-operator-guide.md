@@ -2,13 +2,15 @@
 
 This guide is for school staff performing routine Admin/CMS work. It describes the current controlled workflow without database access, terminal commands, or bypasses. Environment-specific publishing, staff provisioning, recovery, and cloud administration require the authority named in the handover matrix.
 
+For existing-project layouts, deleted-project recovery, category retirement and protected intake drafts, see the [Post-audit maintenance guide](post-audit-maintenance-guide.md).
+
 ## Before starting
 
 - Use the institution-provided Admin/CMS address and staff account. Do not use the historical `Prototype/` application.
 - Confirm the page identifies the intended test/staging environment before making a controlled change.
 - Use only approved synthetic data in staging. Follow institutional privacy policy in any later production environment.
 - If the service displays a permission, configuration, readiness, recovery, or identity error, stop and use the escalation table below.
-- This guide describes the candidate's operator controls, not a deployment receipt. Each control requires the matching deployed release, environment, and capabilities. M60/M61 are currently pending hosted rollout; do not infer hosted verification, UAT, provider qualification, or institutional approval from this guide.
+- This guide describes the candidate's operator controls, not a deployment receipt. Each control requires the matching deployed release, environment, and capabilities. M60/M61 were self-verified in the dated 18 September 2026 staging release `79fe1b333d16fafe9aa15e5572e230d74640f365`; M62 maintenance requires its own deployment receipt. Do not infer hosted verification, staff UAT, provider qualification or institutional approval merely from this guide.
 - Do not edit database rows, Storage objects, browser storage, feed JSON, or provider settings to “repair” a workflow.
 
 ## Sign in and navigate
@@ -154,7 +156,7 @@ the poster, formatting problems, spelling and grammar suggestions, and projects 
 duplicates.
 
 They are **suggestions only**. They cannot approve a project, publish anything, or change project
-information on their own. You decide what to accept. The platform works completely without them.
+information on their own. Staff review remains the authority. Assistive availability is nevertheless a required operational feature, so record and report processing outages rather than treating them as completed checks.
 
 - Open a project and select **Run checks**. Results appear on the same page when processing finishes.
 - Review each finding and mark it reviewed or dismissed as appropriate. When content needs correction, request a corrected project-team package; assistive suggestions do not directly rewrite participant-owned content.

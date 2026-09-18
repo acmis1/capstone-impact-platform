@@ -16,11 +16,8 @@ describe('public-feed activation authority migration', () => {
 
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'origin/main', '--',
-      // Migrations 0060 and 0061 are not present in the verified origin/main baseline.
-      ...files.filter((file) => ![
-        '20260917090000_archived_project_republish_media_rearm.sql',
-        '20260917120000_governed_project_soft_delete.sql',
-      ].includes(file))
+      // Main already contains all 61 historical migrations. Only this new forward M62 is excluded.
+      ...files.filter((file) => file !== '20260918120000_governed_project_maintenance.sql')
                       .map((file) => `infra/supabase/migrations/${file}`)
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
 

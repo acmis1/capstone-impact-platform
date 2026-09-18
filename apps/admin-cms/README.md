@@ -1,5 +1,7 @@
 # Capstone Impact Platform — Admin/CMS
 
+See [Post-audit maintenance](../../docs/post-audit-maintenance-guide.md) for the governed existing-project layout, deleted-project recovery and catalogue lifecycle workflows. This describes candidate functionality; compare the deployed readiness receipt before use.
+
 The Admin/CMS is the active Next.js application for authenticated internal administration of structured capstone project records, validation, imports, review actions, media/storage foundations, and published-only feed compilation. It is a production-oriented staging implementation, not a production-readiness certification. See the [repository README](../../README.md) for the project-level overview.
 
 ## Scope and non-goals
