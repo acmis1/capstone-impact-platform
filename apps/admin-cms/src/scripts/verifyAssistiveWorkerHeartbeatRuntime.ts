@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
 
 import { requireDisposableRuntime } from './publicFeedRuntimeSupport';
+import { RELEASE_CAPABILITY_SENTINEL, EXPECTED_REPOSITORY_MIGRATION_COUNT } from '../deployment/hostedDeploymentReadiness';
 const PIPELINE = 'assistive-deterministic-checks/v4';
 const OCR = 'paddle-title/pp-ocrv6-small@3.7.0';
 const LANGUAGE = 'languagetool/en-au@6.6';
@@ -87,12 +88,12 @@ async function main(): Promise<void> {
 
   let failure: unknown = null;
   try {
-    await scenario('fresh schema contains exactly 62 migrations and the governed-soft-delete release capability', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '62');
+    await scenario('fresh schema matches the current manifest and exact release capability', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), String(EXPECTED_REPOSITORY_MIGRATION_COUNT));
       assert.equal(psql("SELECT to_regclass('public.assistive_worker_heartbeats') IS NOT NULL;"), 't');
       assert.equal(
         psql('SELECT public.get_release_capability_sentinel();'),
-        '20260917120000_governed_project_soft_delete|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1|archived_project_republish_media_rearm_v1|governed_project_soft_delete_v1',
+        RELEASE_CAPABILITY_SENTINEL,
       );
     });
 
