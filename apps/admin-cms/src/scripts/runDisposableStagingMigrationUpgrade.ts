@@ -5361,6 +5361,12 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   await verifyArchivedRestoreRuntime(storageClient, retainedBaseline, activationGenerationBeforeFixture);
   await assertStorageUnchanged(storageClient, baseline, 'Migration 0060 restore-runtime cleanup');
   assertTablesUnchanged(current59Tables, 'Migration 0060 restore-runtime cleanup');
+  psql(`INSERT INTO public.projects (public_id, title, year, program_id, program_name, study_program, status, source_folder, deleted_at) SELECT 'upgrade-delete-legacy-mismatch', 'Legacy mismatched tombstone', 2026, programs.id, programs.name, programs.name, 'draft', 'upgrade-soft-delete-legacy', '2026-09-17T11:59:00+00'::timestamptz FROM public.programs programs ORDER BY programs.name LIMIT 1;`);
+  assert.equal(
+    psql("SELECT status || '|' || (deleted_at IS NOT NULL)::text FROM public.projects WHERE public_id='upgrade-delete-legacy-mismatch';"),
+    'draft|true',
+    'Migration 0060 legacy mismatch fixture was not seeded with its expected state.',
+  );
 
   const current60Tables = fingerprintTables(CURRENT_58_TABLES);
   const publicTableGrantsBefore61 = publicTableGrants();

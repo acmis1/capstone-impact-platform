@@ -7,6 +7,8 @@ const migrationPath = path.resolve(
   '../../../../infra/supabase/migrations/20260917120000_governed_project_soft_delete.sql',
 );
 const migration = fs.readFileSync(migrationPath, 'utf8').replace(/\r\n/g, '\n');
+const upgradeScriptPath = path.resolve(__dirname, '../scripts/runDisposableStagingMigrationUpgrade.ts');
+const upgradeScript = fs.readFileSync(upgradeScriptPath, 'utf8').replace(/\r\n/g, '\n');
 const executableMigration = migration.replace(/--[^\n]*/g, '');
 const decision = migration.slice(
   migration.indexOf('CREATE FUNCTION public.project_soft_delete_decision'),
@@ -136,5 +138,19 @@ describe('governed project soft delete migration', () => {
     expect(migration).toContain('REVOKE ALL ON FUNCTION public.parse_project_soft_delete_evidence_json(text)\nFROM PUBLIC, anon, authenticated, service_role;');
     expect(migration).toContain('20260917120000_governed_project_soft_delete');
     expect(migration).toContain('governed_project_soft_delete_v1');
+  });
+
+  it('seeds the legacy mismatch fixture before Migration 0061 without weakening refusal', () => {
+    const seed = "psql(`INSERT INTO public.projects (public_id, title, year, program_id, program_name, study_program, status, source_folder, deleted_at) SELECT 'upgrade-delete-legacy-mismatch', 'Legacy mismatched tombstone', 2026, programs.id, programs.name, programs.name, 'draft', 'upgrade-soft-delete-legacy', '2026-09-17T11:59:00+00'::timestamptz FROM public.programs programs ORDER BY programs.name LIMIT 1;`);";
+    const verifyUpgrade = upgradeScript.indexOf('async function verifyUpgrade(');
+    const seedIndex = upgradeScript.indexOf(seed, verifyUpgrade);
+    const current60Index = upgradeScript.indexOf('const current60Tables = fingerprintTables(CURRENT_58_TABLES);', verifyUpgrade);
+    const apply61Index = upgradeScript.indexOf('applyRelease(workdir, networkId, 61);', verifyUpgrade);
+
+    expect(verifyUpgrade).toBeGreaterThanOrEqual(0);
+    expect(seedIndex).toBeGreaterThan(verifyUpgrade);
+    expect(seedIndex).toBeLessThan(current60Index);
+    expect(seedIndex).toBeLessThan(apply61Index);
+    expect(upgradeScript).toMatch(/upgrade-delete-legacy-mismatch[\s\S]*?blocked:DELETE_STATE_AMBIGUOUS/);
   });
 });
