@@ -30,12 +30,9 @@ export default async function ImportBatchDetailPage({
   let errorMsg: string | null = null;
 
   try {
+    const adminContext = await requireAdmin();
     const repository = new ImportBatchRepository();
-    const [batchResult, adminContext] = await Promise.all([
-      repository.getImportBatchById(batchId),
-      requireAdmin(),
-    ]);
-    batch = batchResult;
+    batch = await repository.getImportBatchById(batchId);
     canSubmit = hasPermission(adminContext.permissions, 'projects.edit');
 
     if (batch) {

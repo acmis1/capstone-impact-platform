@@ -55,6 +55,14 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Alert } from '../ui/alert';
 import { Badge } from '../ui/badge';
+import {
+  createPackageIntakeCheckpoint,
+  downloadIntakeProgressCheckpoint,
+  MAX_INTAKE_CHECKPOINT_BYTES,
+  parseIntakeProgressCheckpoint,
+  type IntakeProgressCheckpoint,
+} from '../ui/intake-progress-checkpoint';
+import { useUnsavedWorkGuard } from '../ui/unsaved-work';
 
 export default function BrowserImportPreviewClient() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -71,6 +79,11 @@ export default function BrowserImportPreviewClient() {
   const [declaredTotalBytes, setDeclaredTotalBytes] = useState(0);
   const [detectedPackageCount, setDetectedPackageCount] = useState(0);
   const [intakeMode, setIntakeMode] = useState<'package' | 'form'>('package');
+  const [formDirty, setFormDirty] = useState(false);
+  const [restoredPackageCheckpoint, setRestoredPackageCheckpoint] = useState<Extract<IntakeProgressCheckpoint, { kind: 'package-selection' }> | null>(null);
+  const [checkpointNotice, setCheckpointNotice] = useState<string | null>(null);
+  const [checkpointError, setCheckpointError] = useState<string | null>(null);
+  const [referenceSectionKey, setReferenceSectionKey] = useState(0);
 
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -88,6 +101,7 @@ export default function BrowserImportPreviewClient() {
 
   const issuesId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const checkpointInputRef = useRef<HTMLInputElement>(null);
   const folderButtonRef = useRef<HTMLButtonElement>(null);
   const checkButtonRef = useRef<HTMLButtonElement>(null);
   const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -137,6 +151,16 @@ export default function BrowserImportPreviewClient() {
   const preparationLockRef = useRef(false);
   const selectionStateRef = useRef<BrowserImportSelectionState>(selectionState);
 
+  const importDraftDirty = !stagedResult && !mediaCompleteResult && (
+    selectedFiles.length > 0 || formDirty || Boolean(adminReferenceData)
+  );
+  const navigate = React.useCallback((href: string) => { window.location.assign(href); }, []);
+  const { requestAction, dialog } = useUnsavedWorkGuard({
+    dirty: importDraftDirty,
+    onDiscard: () => setFormDirty(false),
+    navigate,
+  });
+
   const updateSelectionState = (
     updater:
       | BrowserImportSelectionState
@@ -161,10 +185,8 @@ export default function BrowserImportPreviewClient() {
   const annualWorkflowActive = annualProgressStarted && !annualProgress?.chunks.every((chunk) => chunk.status === 'completed' || chunk.status === 'skipped');
   const isPreparingOrLocked = selectionState.isPreparing || isStaging || isCompletingMedia || annualWorkflowActive;
 
-  const handleFolderSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const applyFolderSelection = (files: File[]) => {
     if (preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
-
-    const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
     setSelectedFiles([]);
@@ -179,6 +201,8 @@ export default function BrowserImportPreviewClient() {
     setAnnualVerificationSucceeded(false);
     setAnnualError(null);
     setApiError(null);
+    setRestoredPackageCheckpoint(null);
+    setCheckpointNotice(null);
     invalidateStagingResult();
     updateSelectionState(resetSelectionState());
     setManifestCache(null);
@@ -246,6 +270,17 @@ export default function BrowserImportPreviewClient() {
     setSelectedRootName(rootName);
     setDeclaredTotalBytes(totalBytes);
     setDetectedPackageCount(calculatedPackagePaths.size);
+  };
+
+  const handleFolderSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    requestAction(() => applyFolderSelection(files), {
+      trigger: folderButtonRef.current,
+      description: 'The current project folder selection, preview, and uncommitted choices will be replaced.',
+      confirmLabel: 'Replace folder selection',
+    });
   };
 
   const handleRequestPreview = async (
@@ -421,7 +456,7 @@ export default function BrowserImportPreviewClient() {
     }
   };
 
-  const handleClearSelection = () => {
+  const clearSelectionState = () => {
     if (preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
 
     setSelectedFiles([]);
@@ -436,11 +471,22 @@ export default function BrowserImportPreviewClient() {
     setAnnualVerificationSucceeded(false);
     setAnnualError(null);
     setApiError(null);
+    setFormDirty(false);
+    setRestoredPackageCheckpoint(null);
+    setCheckpointNotice(null);
     invalidateStagingResult();
     updateSelectionState(resetSelectionState());
     setManifestCache(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setFocusRequest({ origin: document.activeElement, action: 'folder' });
+  };
+
+  const handleClearSelection = () => {
+    requestAction(clearSelectionState, {
+      trigger: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+      description: 'The current project folder selection, preview, and uncommitted choices will be cleared.',
+      confirmLabel: 'Clear selection',
+    });
   };
 
   const handleFormPackageReady = async (pkg: MaterializedPackageFiles) => {
@@ -453,8 +499,62 @@ export default function BrowserImportPreviewClient() {
 
   const handleSwitchIntakeMode = (mode: 'package' | 'form') => {
     if (isPreparingOrLocked || intakeMode === mode) return;
-    handleClearSelection();
-    setIntakeMode(mode);
+    requestAction(() => {
+      clearSelectionState();
+      setIntakeMode(mode);
+    }, {
+      trigger: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+      description: 'Switching intake methods clears the current uncommitted project work.',
+      confirmLabel: 'Switch intake method',
+    });
+  };
+
+  const handleExportCheckpoint = () => {
+    try {
+      downloadIntakeProgressCheckpoint(
+        createPackageIntakeCheckpoint({
+          selectedRootName,
+          selectedFileNames: selectedFiles.map((file) => file.webkitRelativePath || file.name),
+          selectedPackagePaths: selectionState.selectedPackagePaths,
+          referenceFileName: adminReferenceData?.referenceFile.name,
+          referenceMapping: adminReferenceData?.mappingConfig,
+        }),
+        'project-package-progress.json',
+      );
+      setCheckpointError(null);
+      setCheckpointNotice('Checkpoint downloaded. It contains project information and selection names but no file bytes, credentials, validation results, or committed actions.');
+    } catch (error) {
+      setCheckpointError(error instanceof Error ? error.message : 'The checkpoint could not be downloaded.');
+    }
+  };
+
+  const applyRestoredPackageCheckpoint = (checkpoint: Extract<IntakeProgressCheckpoint, { kind: 'package-selection' }>) => {
+    clearSelectionState();
+    setAdminReferenceData(null);
+    setReferenceSectionKey((current) => current + 1);
+    setRestoredPackageCheckpoint(checkpoint);
+    setCheckpointError(null);
+    setCheckpointNotice('Checkpoint restored. Reselect the source folder and School reference spreadsheet, then run fresh inspection and preview. Previous validation and ready status were not restored.');
+  };
+
+  const handleCheckpointRestore = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      if (file.size > MAX_INTAKE_CHECKPOINT_BYTES) throw new Error('The checkpoint file is too large.');
+      const checkpoint = parseIntakeProgressCheckpoint(await file.text());
+      if (checkpoint.kind !== 'package-selection') throw new Error('Choose a package-selection checkpoint for folder import.');
+      requestAction(() => applyRestoredPackageCheckpoint(checkpoint), {
+        forceConfirmation: importDraftDirty,
+        trigger: checkpointInputRef.current,
+        title: 'Replace current import draft?',
+        description: 'Restoring this checkpoint replaces the current import selection. Files, validation results, and any committed metadata or media actions are not restored.',
+        confirmLabel: 'Restore checkpoint',
+      });
+    } catch (error) {
+      setCheckpointError(error instanceof Error ? error.message : 'The checkpoint could not be restored.');
+    }
   };
 
   const handleToggleValid = (pkgPath: string) => {
@@ -640,6 +740,23 @@ export default function BrowserImportPreviewClient() {
       {/* Workflow Steps Indicator & Onboarding Guide */}
       <ImportWorkflowGuide currentStep={currentStep} isComplete={isWorkflowComplete || isAnnualWorkflowComplete} />
 
+      <Card className="border-border-structural">
+        <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
+          <CardTitle className="text-sm font-semibold text-foreground">Local progress checkpoint</CardTitle>
+          <CardDescription className="text-xs text-muted-foreground">
+            Explicit download only. The bounded JSON contains project information, selection names, and mapping labels; it never contains file bytes, credentials, validation status, or committed actions.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-3 p-4 sm:px-6">
+          <Button type="button" variant="outline" onClick={handleExportCheckpoint} disabled={isPreparingOrLocked}>Download checkpoint</Button>
+          <Button type="button" variant="outline" onClick={() => checkpointInputRef.current?.click()} disabled={isPreparingOrLocked}>Restore checkpoint</Button>
+          <input ref={checkpointInputRef} type="file" accept="application/json,.json" onChange={handleCheckpointRestore} className="hidden" aria-label="Restore package checkpoint file" />
+          {restoredPackageCheckpoint && <p className="basis-full text-xs text-muted-foreground">Restored names: {restoredPackageCheckpoint.selectedFileNames.length} file name(s), {restoredPackageCheckpoint.selectedPackagePaths.length} package path(s). Source files and School inspection must be selected again.</p>}
+          {checkpointNotice && <p className="basis-full text-xs text-muted-foreground" role="status">{checkpointNotice}</p>}
+          {checkpointError && <p className="basis-full text-xs font-medium text-destructive" role="alert">{checkpointError}</p>}
+        </CardContent>
+      </Card>
+
       {/* Browser Support Check Warning */}
       {!isSupported && (
         <Alert
@@ -651,9 +768,14 @@ export default function BrowserImportPreviewClient() {
 
       {/* Step 2: Admin Reference Dataset Section */}
       <AdminReferenceDatasetSection
+        key={referenceSectionKey}
         onMappingConfigured={(data) => {
           if (data) setFocusRequest({ origin: document.activeElement, action: 'folder' });
           setAdminReferenceData(data);
+          if (data) {
+            setRestoredPackageCheckpoint(null);
+            setCheckpointNotice(null);
+          }
           setPreviewResult(null);
           setManifestCache(null);
           setAnnualPlan(null);
@@ -669,13 +791,11 @@ export default function BrowserImportPreviewClient() {
       />
 
       {/* Intake Method Selection Tabs */}
-      <div className="flex items-center gap-2 p-1 bg-muted/60 border border-border rounded-lg w-fit" role="tablist" aria-label="Project intake method">
+      <div className="flex items-center gap-2 p-1 bg-muted/60 border border-border rounded-lg w-fit" role="group" aria-label="Project intake method">
         <button
           type="button"
-          role="tab"
-          aria-selected={intakeMode === 'package'}
+          aria-pressed={intakeMode === 'package'}
           id="tab-package"
-          aria-controls="panel-package"
           onClick={() => handleSwitchIntakeMode('package')}
           disabled={isPreparingOrLocked}
           className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
@@ -689,10 +809,8 @@ export default function BrowserImportPreviewClient() {
         </button>
         <button
           type="button"
-          role="tab"
-          aria-selected={intakeMode === 'form'}
+          aria-pressed={intakeMode === 'form'}
           id="tab-form"
-          aria-controls="panel-form"
           onClick={() => handleSwitchIntakeMode('form')}
           disabled={isPreparingOrLocked}
           className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
@@ -712,6 +830,7 @@ export default function BrowserImportPreviewClient() {
           <ProjectIntakeForm
             onPackageReady={handleFormPackageReady}
             disabled={isPreparingOrLocked}
+            onDirtyChange={setFormDirty}
           />
         </div>
       ) : (
@@ -1474,6 +1593,7 @@ export default function BrowserImportPreviewClient() {
           )}
         </div>
       )}
+      {dialog}
     </div>
   );
 }

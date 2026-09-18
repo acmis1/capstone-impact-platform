@@ -64,10 +64,10 @@ function renderLongText(value: string): string {
   return escapeHtml(value).replace(/\r?\n/g, '<br />');
 }
 
-function renderProseField(label: string, value: string | null, className = ''): string {
+function renderProseField(label: string, value: string | null, className = '', heading: 'h2' | 'h3' = 'h3'): string {
   if (!value || value.trim() === '') return '';
   const classes = ['prose-field', className].filter(Boolean).join(' ');
-  return `<section class="${classes}"><h3>${escapeHtml(label)}</h3><p>${renderLongText(value)}</p></section>`;
+  return `<section class="${classes}"><${heading}>${escapeHtml(label)}</${heading}><p>${renderLongText(value)}</p></section>`;
 }
 
 function renderExternalLinks(links: ParticipantPreviewSnapshot['externalLinks']): string {
@@ -513,7 +513,7 @@ function renderConfiguredParticipantContent(
     : renderConfiguredMedia(media, snapshot.accessibilityText, 'poster');
   const documents = renderConfiguredMedia(media, snapshot.accessibilityText, 'documents');
 
-  return `${featuredHtml}${ordered}${remainingPoster}${documents}`;
+  return `${renderProseField('Summary', snapshot.summary, '', 'h2')}${featuredHtml}${ordered}${remainingPoster}${documents}`;
 }
 
 /** Must match the route header while preserving a real same-origin POST Origin. */

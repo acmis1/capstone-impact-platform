@@ -5,18 +5,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ImportBatchRow } from '../../../repositories/ImportBatchRepositoryCore';
 import ImportBatchesPage from './page';
 
-const repository = vi.hoisted(() => ({ listRecentImportBatches: vi.fn() }));
+const repository = vi.hoisted(() => ({ constructed: vi.fn(), listRecentImportBatches: vi.fn() }));
+const auth = vi.hoisted(() => ({ requireAdmin: vi.fn() }));
 const permissions = vi.hoisted(() => ({ hasPermission: vi.fn() }));
 const table = vi.hoisted(() => ({ render: vi.fn() }));
 
 vi.mock('../../../repositories/ImportBatchRepository', () => ({
   ImportBatchRepository: class {
+    constructor() {
+      repository.constructed();
+    }
     listRecentImportBatches = repository.listRecentImportBatches;
   },
 }));
 
 vi.mock('../../../auth/requireAdmin', () => ({
-  requireAdmin: vi.fn(async () => ({ permissions: ['projects.edit'] })),
+  requireAdmin: auth.requireAdmin,
 }));
 
 vi.mock('../../../auth/permissions', () => ({
@@ -56,6 +60,9 @@ function valueFor(label: string): HTMLElement {
 describe('Imports index summary', () => {
   beforeEach(() => {
     cleanup();
+    auth.requireAdmin.mockReset();
+    auth.requireAdmin.mockResolvedValue({ permissions: ['projects.read', 'projects.edit'] });
+    repository.constructed.mockReset();
     repository.listRecentImportBatches.mockReset();
     permissions.hasPermission.mockReset();
     permissions.hasPermission.mockReturnValue(true);
@@ -94,7 +101,7 @@ describe('Imports index summary', () => {
     repository.listRecentImportBatches.mockResolvedValue([
       { ...BATCHES[0], warning_count: 0, error_count: 0 },
     ]);
-    permissions.hasPermission.mockReturnValue(false);
+    permissions.hasPermission.mockImplementation((_permissions: unknown, required: string) => required === 'projects.read');
 
     render(await ImportBatchesPage());
 
@@ -121,5 +128,28 @@ describe('Imports index summary', () => {
     expect(screen.queryByRole('region', { name: 'Import batch summary' })).toBeNull();
     expect(table.render).not.toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+
+  it('fails closed on authentication failure before constructing or reading the repository', async () => {
+    auth.requireAdmin.mockRejectedValueOnce(new Error('session revoked'));
+
+    render(await ImportBatchesPage());
+
+    expect(screen.getByText('Import records unavailable')).toBeTruthy();
+    expect(repository.constructed).not.toHaveBeenCalled();
+    expect(repository.listRecentImportBatches).not.toHaveBeenCalled();
+  });
+
+  it('keeps reviewer read access while withholding edit controls', async () => {
+    auth.requireAdmin.mockResolvedValueOnce({ permissions: ['projects.read'] });
+    permissions.hasPermission.mockImplementation((_permissions: unknown, required: string) => required === 'projects.read');
+    repository.listRecentImportBatches.mockResolvedValueOnce([]);
+
+    render(await ImportBatchesPage());
+
+    expect(repository.constructed).toHaveBeenCalledTimes(1);
+    expect(repository.listRecentImportBatches).toHaveBeenCalledWith(50);
+    expect(screen.getByText('No imports found')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Import projects' })).toBeNull();
   });
 });

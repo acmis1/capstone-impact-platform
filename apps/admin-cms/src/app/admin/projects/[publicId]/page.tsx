@@ -160,11 +160,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   // Essential dependencies: without the base project or authenticated staff context there is no
   // safe project-detail page to render.
   try {
+    adminContext = await requireAdmin();
     const repository = new SupabaseProjectRepository();
     project = await repository.getProjectByPublicId(publicId);
-    if (project) {
-      adminContext = await requireAdmin();
-    }
   } catch (error: unknown) {
     console.error('[Project detail: essential load failure]', error instanceof Error ? error.name : 'UNKNOWN_FAILURE');
     loadError = 'Project details are temporarily unavailable.';

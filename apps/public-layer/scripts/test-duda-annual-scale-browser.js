@@ -11,10 +11,13 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const dudaDirectory = path.resolve(scriptDirectory, '..', 'duda');
-const annualRecordCount = 120;
+const annualRecordCount = Number(process.env.CAPSTONE_PUBLIC_SCALE_RECORDS || 120);
+assert.ok([120, 1000].includes(annualRecordCount), 'only qualified 120/1000 synthetic dimensions are accepted');
+const measurementStartedAt = Date.now();
 const localFeedHost = 'annualfixture.supabase.co';
 const localFeedUrl = `https://${localFeedHost}/storage/v1/object/public/public-feeds/capstones-latest.json`;
 const exactFeedPath = process.env.CAPSTONE_LV01_FEED_PATH?.trim();
+assert.ok(!exactFeedPath || annualRecordCount === 120, 'exact governed LV01 feed retains its original 120-record contract');
 
 const [bodyEndHtml, listingHtml, listingCss, detailHtml, detailCss, fixtureText] = await Promise.all([
   readFile(path.join(dudaDirectory, 'bodyend.html'), 'utf8'),
@@ -26,7 +29,7 @@ const [bodyEndHtml, listingHtml, listingCss, detailHtml, detailCss, fixtureText]
 ]);
 
 const seedRecords = JSON.parse(fixtureText);
-let years = ['2026', '2025', '2024', '2023', '2022', '2021'];
+let years = annualRecordCount === 120 ? ['2026', '2025', '2024', '2023', '2022', '2021'] : Array.from({ length: 10 }, (_, index) => String(2026 - index));
 let programs = [
   'Bachelor of Software Engineering',
   'Master of Cyber Security',
@@ -63,7 +66,7 @@ function makeAnnualRecord(index) {
     summary: `Synthetic annual-scale summary for project ${serial}.`,
     background: `Synthetic annual-scale background for project ${serial}.`,
     solution: `Synthetic annual-scale solution for project ${serial}.`,
-    year: years[Math.floor(index / 20)],
+    year: years[Math.floor(index / Math.ceil(annualRecordCount / years.length))],
     program,
     studyProgram: program,
     discipline,
@@ -113,7 +116,7 @@ if (exactFeedText) {
 }
 
 function assertGeneratedFixture(records) {
-  assert.equal(records.length, annualRecordCount, 'annual fixture has exactly 120 records');
+  assert.equal(records.length, annualRecordCount, 'fixture matches the exact requested record count');
   assert.equal(new Set(records.map((record) => record.id)).size, annualRecordCount, 'annual IDs are unique');
   assert.equal(new Set(records.map((record) => record.publicId)).size, annualRecordCount, 'annual public IDs are unique');
   assert.equal(new Set(records.map((record) => record.title)).size, annualRecordCount, 'annual titles are unique');
@@ -232,7 +235,7 @@ function harnessDriver() {
     const onclick = card.querySelector('.capstone-poster-link')?.getAttribute('onclick') || '';
     return Number(onclick.match(/handleProjectClick\((\d+)\)/)?.[1]);
   });
-  const visibleTitles = () => visibleCards().map((card) => card.querySelector('.capstone-card-image')?.alt);
+  const visibleTitles = () => visibleCards().map((card) => card.querySelector('.capstone-card-title')?.textContent);
   const setSearch = (value) => {
     const input = document.getElementById('filter-search');
     input.value = value;
@@ -310,6 +313,8 @@ function harnessDriver() {
     result.detailPublicIds = firstActionIds.map((id) => expectedById.get(id).publicId);
     check(new Set(visibleTitles()).size === records.length, 'listing has no duplicate card titles');
     check(visibleTitles().every((title) => records.some((record) => record.title === title)), 'listing has no unrelated cards');
+    check(visibleCards().every(card => card.querySelector('.capstone-card-title')?.checkVisibility()), 'all card titles are visible real text, not only alt attributes');
+    check(document.getElementById('capstone-result-count')?.textContent.includes(String(records.length)), 'live result count reflects the dataset');
     check(visibleCards().every((card) => card.querySelector('.capstone-poster-link')?.getAttribute('aria-label') === `View ${card.querySelector('.capstone-card-image')?.alt} project detail`), 'poster actions have project-specific accessible names');
     check(visibleCards().every((card) => card.querySelector('.capstone-card-btn')?.getAttribute('aria-label') === `Learn more about ${card.querySelector('.capstone-card-image')?.alt}`), 'learn-more actions have project-specific accessible names');
 
@@ -544,7 +549,10 @@ const windowErrors = evidence.reduce((total, item) => total + item.result.window
 const unhandledRejections = evidence.reduce((total, item) => total + item.result.unhandledRejections.length, 0);
 const externalContacts = evidence.reduce((total, item) => total + item.result.externalContacts, 0);
 
-console.log('DUDA_ANNUAL_SCALE_CLASSIFICATION = LOCAL_120_RECORD_RENDERING_VERIFIED');
+console.log(`DUDA_ANNUAL_SCALE_CLASSIFICATION = LOCAL_${annualRecordCount}_RECORD_RENDERING_VERIFIED`);
+console.log(`FEED_BYTES = ${Buffer.byteLength(exactFeedText || JSON.stringify(fixture))}`);
+console.log(`HARNESS_ELAPSED_MS = ${Date.now() - measurementStartedAt}`);
+console.log(`RETAINED_YEARS = ${years.length}`);
 console.log(`RECORDS = ${annualRecordCount}`);
 console.log(`LISTING_CARDS = ${annualRecordCount}`);
 console.log(`DETAIL_TARGETS_VALID = ${annualRecordCount}/${annualRecordCount}`);

@@ -69,6 +69,45 @@
   cursor: text;
 }
 
+.capstone-filter-actions {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 42px;
+}
+
+.capstone-result-count {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 0.95rem;
+}
+
+.capstone-clear-button,
+.capstone-retry-button {
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.capstone-clear-button:hover,
+.capstone-clear-button:focus-visible,
+.capstone-retry-button:hover,
+.capstone-retry-button:focus-visible {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.capstone-clear-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .capstone-year-section {
   margin-bottom: 80px;
 }
@@ -119,7 +158,9 @@
   width: 100%;
   display: block;
   aspect-ratio: 2 / 3;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  background: rgba(15, 23, 42, 0.6);
   border-radius: 8px;
   margin-bottom: 20px;
   box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
@@ -129,6 +170,27 @@
 .capstone-poster-link:hover .capstone-card-image {
   transform: translateY(-6px) scale(1.01);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.capstone-card-title {
+  width: 100%;
+  margin: 0 0 8px;
+  color: #fff;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.capstone-card-context {
+  width: 100%;
+  min-height: 2.6em;
+  margin: 0 0 18px;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .capstone-card-btn {
@@ -160,7 +222,32 @@
   text-align: center;
 }
 
+.capstone-inline-error strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #fca5a5;
+  font-size: 1.15rem;
+}
+
+.capstone-inline-error p {
+  margin: 0 0 16px;
+}
+
+.capstone-empty-state {
+  width: 100%;
+  margin: 0;
+  padding: 60px 10px;
+  color: #fff;
+  font-size: 1.15rem;
+  text-align: center;
+}
+
 @media (max-width: 768px) {
+  .capstone-filter-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .capstone-year-heading {
     font-size: 1.8rem;
   }

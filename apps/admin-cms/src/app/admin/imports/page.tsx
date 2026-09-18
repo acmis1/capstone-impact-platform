@@ -19,12 +19,30 @@ export default async function ImportBatchesPage() {
   let loadError = false;
   let canEdit = false;
 
+  let authContext: Awaited<ReturnType<typeof requireAdmin>>;
   try {
-    const authContext = await requireAdmin();
-    canEdit = hasPermission(authContext.permissions, 'projects.edit');
+    authContext = await requireAdmin();
   } catch {
-    // Non-blocking for audit log display if authenticated
+    return (
+      <ErrorState
+        title="Import records unavailable"
+        description="Your administrative session could not be verified. Sign in again to view import records."
+        headingLevel="h1"
+      />
+    );
   }
+
+  if (!hasPermission(authContext.permissions, 'projects.read')) {
+    return (
+      <ErrorState
+        title="Access denied"
+        description="Your account cannot view import records."
+        headingLevel="h1"
+      />
+    );
+  }
+
+  canEdit = hasPermission(authContext.permissions, 'projects.edit');
 
   try {
     const repository = new ImportBatchRepository();

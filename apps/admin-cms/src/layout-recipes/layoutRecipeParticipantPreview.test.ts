@@ -32,6 +32,44 @@ describe('recipe-backed participant preview composition', () => {
     expect(html).toContain('Exact results transcript.');
   });
 
+  it.each(LAYOUT_TEMPLATE_IDS)('renders one immutable summary for %s despite custom order and hidden optional sections', (templateId) => {
+    const summarySentinel = 'UNIQUE_SNAPSHOT_SUMMARY_SENTINEL_9f4c';
+    const html = render({
+      ...baseSnapshot,
+      title: 'TITLE_SENTINEL_NOT_SUMMARY',
+      summary: summarySentinel,
+      background: 'BACKGROUND_SENTINEL_NOT_SUMMARY',
+      layoutConfig: {
+        ...createLayoutConfigFromStock(templateId),
+        featuredMedia: 'none',
+        sectionOrder: ['citations', 'accessibilityText', 'team', 'snapshots', 'links', 'solution', 'background', 'video'],
+        hiddenSections: ['background', 'solution', 'video', 'links', 'citations'],
+      },
+    });
+
+    expect(html.match(new RegExp(summarySentinel, 'g'))).toHaveLength(1);
+    expect(html).toContain('<h2>Summary</h2>');
+    expect(html).not.toContain('<h3>Summary</h3>');
+    expect(html).toContain('TITLE_SENTINEL_NOT_SUMMARY');
+    expect(html).not.toContain('BACKGROUND_SENTINEL_NOT_SUMMARY');
+  });
+
+  it('escapes the configured immutable summary and preserves the historical no-layout summary', () => {
+    const maliciousSummary = '<script>alert("summary")</script> & "quoted"';
+    const configured = render({
+      ...baseSnapshot,
+      summary: maliciousSummary,
+      layoutConfig: createLayoutConfigFromStock('technical_detail'),
+    });
+    const historicalSummary = 'UNIQUE_HISTORICAL_SUMMARY_SENTINEL_4c2a';
+    const historical = render({ ...baseSnapshot, summary: historicalSummary });
+
+    expect(configured).not.toContain(maliciousSummary);
+    expect(configured).toContain('&lt;script&gt;alert(&quot;summary&quot;)&lt;/script&gt; &amp; &quot;quoted&quot;');
+    expect(historical).toContain('Project overview');
+    expect(historical.match(new RegExp(historicalSummary, 'g'))).toHaveLength(1);
+  });
+
   it('renders the captured value order, safe visibility and featured media without a recipe lookup', () => {
     const html = render({
       ...baseSnapshot,

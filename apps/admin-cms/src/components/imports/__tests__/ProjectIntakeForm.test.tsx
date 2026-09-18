@@ -5,6 +5,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectIntakeForm } from '../ProjectIntakeForm';
 import * as clientMaterializer from '../../../import/formIntakeMaterializerClient';
+import { createInitialFormIntakeMediaState, createInitialFormIntakeMetadata } from '../../../import/formIntakeContract';
+import { createManualIntakeCheckpoint } from '../../ui/intake-progress-checkpoint';
 
 describe('ProjectIntakeForm Component', () => {
   afterEach(() => {
@@ -140,6 +142,49 @@ describe('ProjectIntakeForm Component', () => {
     expect((screen.getByLabelText('Main Media to Feature') as HTMLSelectElement).value).toBe('auto');
     expect(screen.getByText(/Section order:/i).parentElement?.textContent).toContain('team, solution, background');
     expect(screen.getByText(/Hidden optional sections:/i).parentElement?.textContent).toContain('video');
+
+    fireEvent.change(screen.getByLabelText('Main Media to Feature'), { target: { value: 'snapshots' } });
+    expect(screen.getByText(/Section order:/i).parentElement?.textContent).toContain('team, solution, background');
+    expect(screen.getByText(/Hidden optional sections:/i).parentElement?.textContent).toContain('video');
+  });
+
+  it('returns from a saved recipe to the documented stock configuration with confirmation', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        recipes: [{
+          id: '11111111-1111-4111-8111-111111111111',
+          recipeId: '22222222-2222-4222-8222-222222222222',
+          version: 2,
+          name: 'Team first',
+          status: 'active',
+          sourceVersionId: null,
+          createdAt: '2026-09-14T00:00:00.000Z',
+          config: {
+            templateId: 'media_rich', featuredMedia: 'video',
+            sectionOrder: ['team', 'solution', 'background', 'links', 'citations', 'accessibilityText', 'snapshots', 'video'],
+            hiddenSections: [],
+          },
+        }],
+      }),
+    }));
+    render(<ProjectIntakeForm onPackageReady={vi.fn()} />);
+    const selector = await screen.findByLabelText('Reusable layout recipe');
+    fireEvent.change(selector, { target: { value: '11111111-1111-4111-8111-111111111111' } });
+    expect((screen.getByLabelText('Showcase Layout') as HTMLSelectElement).value).toBe('media_rich');
+
+    fireEvent.change(selector, { target: { value: '' } });
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect((screen.getByLabelText('Showcase Layout') as HTMLSelectElement).value).toBe('media_rich');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect((screen.getByLabelText('Showcase Layout') as HTMLSelectElement).value).toBe('media_rich');
+
+    fireEvent.change(selector, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use stock layout' }));
+    expect((screen.getByLabelText('Showcase Layout') as HTMLSelectElement).value).toBe('poster_showcase');
+    expect((screen.getByLabelText('Main Media to Feature') as HTMLSelectElement).value).toBe('poster');
+    expect(screen.getByText(/Section order:/i).parentElement?.textContent).toContain('background, solution, snapshots');
   });
 
   it('submits valid form data, materializes package, and invokes onPackageReady', async () => {
@@ -189,5 +234,31 @@ describe('ProjectIntakeForm Component', () => {
       selectedRootName: 'smart-solar-iot',
       totalBytes: 3000,
     });
+  });
+
+  it('rejects malformed checkpoints and does not restore token fields', async () => {
+    render(<ProjectIntakeForm onPackageReady={vi.fn()} />);
+    const input = screen.getByLabelText('Restore intake checkpoint file');
+    const malformed = new File(['{"version":99,"kind":"manual-form","token":"secret"}'], 'bad.json', { type: 'application/json' });
+    fireEvent.change(input, { target: { files: [malformed] } });
+    expect((await screen.findByRole('alert')).textContent).toMatch(/unsupported or malformed/i);
+    expect((screen.getByLabelText(/Project Title/i) as HTMLInputElement).value).toBe('');
+  });
+
+  it('restores metadata without files and requires fresh validation before save', async () => {
+    const metadata = createInitialFormIntakeMetadata();
+    metadata.title = 'Checkpoint title';
+    const checkpoint = createManualIntakeCheckpoint(metadata, createInitialFormIntakeMediaState(), 1);
+    render(<ProjectIntakeForm onPackageReady={vi.fn()} />);
+    const input = screen.getByLabelText('Restore intake checkpoint file');
+    const file = new File([JSON.stringify(checkpoint)], 'progress.json', { type: 'application/json' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(await screen.findByText(/Reselect poster\/snapshot files/i)).toBeTruthy();
+    expect((screen.getByLabelText(/Project Title/i) as HTMLInputElement).value).toBe('Checkpoint title');
+    expect(screen.getByText(/never contains file bytes/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Check project and continue/i }));
+    expect((await screen.findAllByText(/Required poster image \(PNG\) is missing/i)).length).toBeGreaterThan(0);
   });
 });
