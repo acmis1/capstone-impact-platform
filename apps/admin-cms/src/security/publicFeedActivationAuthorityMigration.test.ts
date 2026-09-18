@@ -11,13 +11,16 @@ const source = fs.readFileSync(path.join(migrations, migrationName), 'utf8').rep
 describe('public-feed activation authority migration', () => {
   it('leaves every earlier migration byte-identical to current main', () => {
     const files = fs.readdirSync(migrations).filter((name) => name.endsWith('.sql')).sort();
-    expect(files).toHaveLength(59);
+    expect(files).toHaveLength(61);
     expect(files).toContain(migrationName);
 
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'origin/main', '--',
-      // Migration 0059 is not present in the verified origin/main baseline.
-      ...files.filter((file) => file !== '20260916120000_archived_project_restore.sql')
+      // Migrations 0060 and 0061 are not present in the verified origin/main baseline.
+      ...files.filter((file) => ![
+        '20260917090000_archived_project_republish_media_rearm.sql',
+        '20260917120000_governed_project_soft_delete.sql',
+      ].includes(file))
                       .map((file) => `infra/supabase/migrations/${file}`)
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
 

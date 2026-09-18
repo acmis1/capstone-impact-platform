@@ -5,7 +5,7 @@
  * deployment readiness separately executes one immutable, read-only capability sentinel.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 59;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 61;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -67,10 +67,12 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260911120000_gallery_full_text_equivalents.sql',
   '20260914100000_layout_recipe_library.sql',
   '20260916120000_archived_project_restore.sql',
+  '20260917090000_archived_project_republish_media_rearm.sql',
+  '20260917120000_governed_project_soft_delete.sql',
 ] as const;
 
 export const RELEASE_CAPABILITY_SENTINEL =
-  '20260916120000_archived_project_restore|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1';
+  '20260917120000_governed_project_soft_delete|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1|archived_project_republish_media_rearm_v1|governed_project_soft_delete_v1';
 
 export const REQUIRED_CORE_TABLES = [
   'programs',
@@ -206,6 +208,8 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('review_participant_correction', ['p_public_id', 'p_admin_id', 'p_submission_id', 'p_package_hash', 'p_expected_version', 'p_action'], ['text', 'uuid', 'uuid', 'text', 'text', 'text']),
   rpc('get_project_publication_readiness', ['p_public_id', 'p_admin_id', 'p_private_bucket'], ['text', 'uuid', 'text']),
   rpc('get_project_reconciliation_readiness', ['p_public_id', 'p_admin_id', 'p_private_bucket'], ['text', 'uuid', 'text']),
+  rpc('get_project_soft_delete_preflight', ['p_public_ids', 'p_admin_id'], ['text[]', 'uuid']),
+  rpc('soft_delete_project_if_current', ['p_public_id', 'p_expected_updated_at', 'p_admin_id'], ['text', 'timestamptz', 'uuid']),
   rpc('reserve_publication_attempt', ['p_public_id', 'p_admin_id', 'p_private_bucket', 'p_confirmed_preview_id', 'p_confirmed_at'], ['text', 'uuid', 'text', 'uuid', 'timestamptz']),
   rpc('prepare_publication_attempt', ['p_attempt_id', 'p_execution_token', 'p_private_bucket', 'p_candidate_record_count', 'p_candidate_feed_hash', 'p_candidate_feed_content', 'p_feed_storage_bucket', 'p_feed_storage_path', 'p_feed_public_url', 'p_previous_feed_existed', 'p_previous_feed_content', 'p_media_manifest'], ['uuid', 'uuid', 'text', 'integer', 'text', 'text', 'text', 'text', 'text', 'boolean', 'text', 'jsonb']),
   rpc('claim_publication_attempt', ['p_public_id', 'p_admin_id'], ['text', 'uuid']),

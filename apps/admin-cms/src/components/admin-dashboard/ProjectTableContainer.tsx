@@ -28,6 +28,8 @@ import { isSafeBulkPublicId } from '../../projects/bulkProjectReview';
 import { BulkProjectReviewPanel } from './BulkProjectReviewPanel';
 import { BulkAssistiveExecutionPanel } from './BulkAssistiveExecutionPanel';
 import { BulkArchivePanel, type BulkArchiveExecutionTarget } from './BulkArchivePanel';
+import { BulkPublishPanel, type BulkPublishExecutionTarget } from './BulkPublishPanel';
+import { BulkSoftDeletePanel } from './BulkSoftDeletePanel';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -56,7 +58,10 @@ export interface ProjectTableContainerProps {
   canReviewBulk?: boolean;
   canRunAssistiveBulk?: boolean;
   canArchiveBulk?: boolean;
+  canDeleteBulk?: boolean;
   archiveExecutionTarget?: BulkArchiveExecutionTarget;
+  canPublishBulk?: boolean;
+  publishExecutionTarget?: BulkPublishExecutionTarget;
 }
 
 const columnHelper = createColumnHelper<ProjectIndexRow>();
@@ -189,7 +194,10 @@ export function ProjectTableContainer({
   canReviewBulk = false,
   canRunAssistiveBulk = false,
   canArchiveBulk = false,
+  canDeleteBulk = false,
   archiveExecutionTarget = null,
+  canPublishBulk = false,
+  publishExecutionTarget = null,
 }: ProjectTableContainerProps) {
   // Opt out of React Compiler memoization because useReactTable is an incompatible library boundary
   "use no memo";
@@ -553,6 +561,20 @@ export function ProjectTableContainer({
         selectedProjects={selectedProjects}
         canArchive={canArchiveBulk}
         executionTarget={archiveExecutionTarget}
+        sharedBusy={bulkReviewBusy}
+        onBusyChange={setBulkReviewBusy}
+      />
+      <BulkPublishPanel
+        selectedProjects={selectedProjects}
+        canPublish={canPublishBulk}
+        executionTarget={publishExecutionTarget}
+        sharedBusy={bulkReviewBusy}
+        onBusyChange={setBulkReviewBusy}
+      />
+      <BulkSoftDeletePanel
+        key={`soft-delete:${canDeleteBulk}:${selectedProjects.map((project) => project.publicId).join('|')}`}
+        selectedProjects={selectedProjects}
+        canDelete={canDeleteBulk}
         sharedBusy={bulkReviewBusy}
         onBusyChange={setBulkReviewBusy}
       />

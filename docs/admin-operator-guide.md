@@ -8,6 +8,7 @@ This guide is for school staff performing routine Admin/CMS work. It describes t
 - Confirm the page identifies the intended test/staging environment before making a controlled change.
 - Use only approved synthetic data in staging. Follow institutional privacy policy in any later production environment.
 - If the service displays a permission, configuration, readiness, recovery, or identity error, stop and use the escalation table below.
+- This guide describes the candidate's operator controls, not a deployment receipt. Each control requires the matching deployed release, environment, and capabilities. M60/M61 are currently pending hosted rollout; do not infer hosted verification, UAT, provider qualification, or institutional approval from this guide.
 - Do not edit database rows, Storage objects, browser storage, feed JSON, or provider settings to “repair” a workflow.
 
 ## Sign in and navigate
@@ -66,6 +67,18 @@ The application deliberately blocks progression when authoritative evidence is i
 3. Refresh after any stale/concurrent result and reassess the current version.
 4. Confirm the history/audit area records the action. Do not repeat a completed action to create a preferred message.
 
+### Batch actions from Projects
+
+Selections are current-page only. Use **Select current page** or row checkboxes, confirm the displayed count, and repeat separately after changing page, filters, or search. Panels are shown/enabled from server-derived roles and capabilities. A missing, disabled, or unavailable control is a stop/escalation condition, not permission to bypass it.
+
+#### Batch review decisions
+
+With selected rows, **Review selected projects** offers **Submit for review**, **Approve**, and **Request changes** when allowed. Choose one, read the authoritative check, and inspect each row. The result distinguishes ready, blocked, already complete, and needs refresh/cannot continue; mixed eligibility is expected. **Request changes** requires one shared comment (up to 4,000 characters), applied only to successful requests. Confirm using the displayed **Confirm and ...** action and record per-row outcomes. Refresh stale rows and inspect current state before any intentional retry.
+
+#### Batch assistive checks
+
+For **Assistive checks for selected projects**, choose **Check eligibility**, review ready/already active or current/blocked/invalid or stale rows, then **Confirm and enqueue ready projects**. The action is limited to 50 projects; clear selection and continue in another page/chunk for a larger cohort. It queues suggestions only and changes no metadata, findings, review, publication, or archive state. Read outcomes as enqueued, already active/current, blocked, invalid/stale, or failed—not completed; no completion time is promised. Assistive findings do not authorize approval or publication. Working assistive checks remain part of platform acceptance. Continue deterministic validation and review if the worker, limit, or role makes it unavailable, and escalate persistent unavailability.
+
 ## Participant preview lifecycle
 
 1. A project must be approved before a participant preview can be generated.
@@ -91,6 +104,10 @@ Publication preparation and publication execution are different actions.
 
 If the candidate changes after preparation, discard the stale plan and prepare again.
 
+#### Batch publication
+
+For **Publish selected approved projects**, verify the displayed target: **Local test-showcase feed**, **Staging test-showcase feed**, or **Production live feed**. The panel allows up to 50; choose **Review publication batch**, inspect the server preflight and exact list, acknowledge that exact target/list, then choose the displayed **Confirm and publish** action. Eligible rows run sequentially through canonical feed writers; there are no automatic retries and no Duda Publish/Republish call. Published/currently public projects require canonical archive/removal first; a former-published project is eligible again only after verified removal. Production requires separate enablement and verified target identity. On **Unknown**, stop; later rows are **Not attempted**. Refresh and inspect project/feed state before an intentional retry; the batch never resumes automatically.
+
 ## Archive or unpublish
 
 Archiving changes the project lifecycle. Removing a project from the deployed feed is a controlled writer operation and may occur with the archive action only in an explicitly enabled environment.
@@ -110,9 +127,23 @@ ineligible, denied, failed, unknown, and not-attempted rows. Stop on recovery, w
 feed divergence, target/auth loss, or an ambiguous timeout/network result and inspect current
 state before explicitly selecting and confirming any retry. The batch never resumes itself. A
 120-project cohort therefore requires three separately authorized batches of 50, 50, and 20.
+The displayed target is **Local test-showcase feed**, **Staging test-showcase feed**, or
+**Production live feed**; use **Review archive batch**, the required **Shared archive reason**,
+and the displayed **Confirm and archive** action. Server state is authoritative. An **Unknown**
+result stops the batch; later rows are **Not attempted**, with no automatic retry.
 Original assets remain stored. Production is unavailable until separate institutional enablement
 and exact runtime identity checks pass; an enabled production removal changes the live feed, while
 verification of the Duda presentation remains a separate operator step.
+
+### Restore an archived project
+
+Use the archived project's **Restore project** action only after checking archive provenance and current public-feed state. This lifecycle restore is not a **Publishing** historical-feed rollback. A published-origin/currently public project requires canonical removal and verified absence from the feed first; restore returns it to **Approved**, revokes old preview authority, and requires a fresh preview, participant confirmation, and normal publication readiness/publication. It never republishes automatically; never reuse an old preview link. A non-published archive returns to its verified non-public review state. Stop on provenance or removal warnings and escalate.
+
+### Soft-delete a project
+
+Only active administrators can soft-delete projects. Soft delete is separate from archive/restore and performs no physical deletion. Published or currently public projects must complete canonical archive/removal first; previously published projects require exact completed-removal evidence. On one project, choose **Delete project**, wait for eligibility, read **Soft-delete this project?**, then use **Confirm soft delete** only for the exact eligible project. It changes lifecycle to Deleted and hides it from normal staff workflows but retains the project row, media/Storage, participant evidence, and all project history (publication/removal history, feed versions, and audit history). Deleted projects cannot be edited, reviewed, published, or restored through archive restore.
+
+For multiple rows, choose **Delete selected projects** and **Review delete batch**. Server preflight labels each row **Eligible**, **Already soft-deleted**, or **Ineligible**; only eligible rows are attempted. The panel allows up to 50 and requires the exact list plus retained-history acknowledgement before choosing the displayed **Confirm and soft-delete** action. Processing is sequential with no automatic retry. **Unknown** stops the batch and later rows are **Not attempted**. Refresh and inspect project/audit state before any intentional retry.
 
 Hosted application/database/Storage rollback is not the **Publishing** restore control. Historical-feed restoration is implemented only for explicitly enabled disposable Local or verified staging with the required database capability and exact-head evidence. It creates a new exact feed version and does not reverse project lifecycle or audit records. Production/Duda rollback remains unavailable.
 

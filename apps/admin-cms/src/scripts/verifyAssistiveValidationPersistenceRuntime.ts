@@ -237,7 +237,7 @@ async function main(): Promise<void> {
       public_id: `${publicId}-deleted`,
       title: 'Soft-deleted assistive fixture',
       summary: 'Synthetic soft-deleted project fixture.',
-      status: 'draft',
+      status: 'deleted',
       year: 2026,
       deleted_at: new Date().toISOString(),
     }).select('id').single();
@@ -254,8 +254,8 @@ async function main(): Promise<void> {
     // ---------------------------------------------------------------------
     // Schema, constraints, RLS and privileges
     // ---------------------------------------------------------------------
-    await scenario(1, 'Local Supabase applied exactly 59 migrations from zero', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '59');
+    await scenario(1, 'Local Supabase applied exactly 61 migrations from zero', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '61');
     });
 
     await scenario(2, 'both assistive tables exist and a finding cannot restate run identity', () => {

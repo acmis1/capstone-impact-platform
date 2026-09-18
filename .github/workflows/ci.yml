@@ -366,10 +366,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify fifty-eight migrations and local integrity
+      - name: Verify sixty-one migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 59
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 61
 
       - name: Verify exact Gate 4 schema evidence from the migrated Local catalog
         run: npm run check:gate4-schema-evidence:local --workspace=apps/admin-cms -- --local-self-check

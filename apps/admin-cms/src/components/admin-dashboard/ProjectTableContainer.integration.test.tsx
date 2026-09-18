@@ -615,4 +615,261 @@ describe('ProjectTableContainer mobile card presentation', () => {
     }), { status: 200 }));
     await waitFor(() => expect(screen.getByText(/^Batch result:/)).toBeTruthy());
   });
+
+  it('renders bulk Approve, Request changes, and Submit for review for administrator selection', async () => {
+    render(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={result}
+            canReviewBulk
+            canSubmitBulk
+            canPublishBulk
+            canDeleteBulk
+            publishExecutionTarget="local"
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+
+    // Prior to selection, bulk panels are hidden
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Request changes' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Submit for review' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Review publication batch' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Review delete batch' })).toBeNull();
+
+    // Select row
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Atlas' }))[0]);
+
+    // Admin sees all review actions and publication batch trigger
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Request changes' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Submit for review' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Review publication batch' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Review delete batch' })).toBeTruthy();
+  });
+
+  it('does not render bulk Approve or Request changes when canReviewBulk is false (editor-only)', async () => {
+    render(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={result}
+            canReviewBulk={false}
+            canSubmitBulk={true}
+            canPublishBulk={false}
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+
+    // Select row
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Atlas' }))[0]);
+
+    // Editor sees Submit for review, but NOT Approve, Request changes, or Publish
+    expect(screen.getByRole('button', { name: 'Submit for review' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Request changes' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Review publication batch' })).toBeNull();
+  });
+
+  it('shares busy state and disables table controls during bulk publish preflight', async () => {
+    let resolveRequest: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => {
+      resolveRequest = resolve;
+    });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockReturnValueOnce(pending);
+
+    render(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={result}
+            canReviewBulk
+            canPublishBulk
+            publishExecutionTarget="local"
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Atlas' }))[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Review publication batch' }));
+
+    await waitFor(() => {
+      expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole('button', { name: 'Clear selection' }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getAllByRole('checkbox', { name: 'Select Atlas' }).every((input) => (input as HTMLInputElement).disabled)).toBe(true);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    resolveRequest?.(
+      new Response(
+        JSON.stringify({
+          success: true,
+          result: {
+            resultCode: 'READY_TO_STAGE',
+            publicId: 'P-1',
+            confirmedPreviewId: 'prev-1',
+            confirmedAt: '2026-09-16T10:00:00Z',
+            recordCount: 1,
+            feedHash: 'a'.repeat(64),
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText((_, element) => (
+          element?.tagName === 'P' &&
+          element.textContent?.includes('Checked 1 project:') === true &&
+          element.textContent.includes('1 ready to publish')
+        )),
+      ).toBeTruthy();
+    });
+  });
+
+  it('shares busy state between bulk delete, bulk publish, and table controls', async () => {
+    let resolveRequest: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => {
+      resolveRequest = resolve;
+    });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockReturnValueOnce(pending);
+
+    render(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={result}
+            canDeleteBulk
+            canPublishBulk
+            publishExecutionTarget="local"
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Atlas' }))[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Review delete batch' }));
+
+    await waitFor(() => {
+      expect((screen.getByRole('button', { name: 'Review publication batch' }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole('button', { name: 'Clear selection' }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getAllByRole('checkbox', { name: 'Select Atlas' }).every((input) => (input as HTMLInputElement).disabled)).toBe(true);
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/soft-delete/preflight', expect.any(Object));
+    resolveRequest?.(new Response(JSON.stringify({
+      summary: { total: 1, eligible: 1, blocked: 0, alreadyDeleted: 0 },
+      items: [{
+        publicId: 'P-1', title: 'Atlas', status: 'approved', updatedAt: '2026-02-01',
+        disposition: 'eligible', reasonCode: 'ELIGIBLE', reason: 'Eligible.', previouslyPublished: false,
+      }],
+    }), { status: 200 }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm and soft-delete 1 project' })).toBeTruthy());
+  });
+
+  it('releases old delete busy ownership across keyed selection and permission changes', async () => {
+    const secondRow: ProjectIndexRow = { ...baseRow, id: 'project-2', publicId: 'P-2', title: 'Bravo' };
+    const secondResult: ProjectIndexResult = { ...result, rows: [secondRow] };
+    let requestNumber = 0;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      requestNumber += 1;
+      const publicId = requestNumber === 1 ? 'P-1' : 'P-2';
+      return new Promise<Response>((resolve) => {
+        init?.signal?.addEventListener('abort', () => {
+          setTimeout(() => resolve(new Response(JSON.stringify({
+            summary: { total: 1, eligible: 1, blocked: 0, alreadyDeleted: 0 },
+            items: [{
+              publicId,
+              title: publicId === 'P-1' ? 'Atlas' : 'Bravo',
+              status: 'approved',
+              updatedAt: '2026-02-01',
+              disposition: 'eligible',
+              reasonCode: 'ELIGIBLE',
+              reason: 'Eligible.',
+              previouslyPublished: false,
+            }],
+          }), { status: 200 })), 0);
+        }, { once: true });
+      });
+    });
+
+    const view = render(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={result}
+            canDeleteBulk
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Atlas' }))[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Review delete batch' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    view.rerender(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={secondResult}
+            canDeleteBulk
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Review delete batch' })).toBeNull();
+      expect(screen.getAllByRole('checkbox', { name: 'Select Bravo' }).every((input) => !(input as HTMLInputElement).disabled)).toBe(true);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Bravo' }))[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Review delete batch' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Clear selection' }) as HTMLButtonElement).disabled).toBe(true));
+
+    view.rerender(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={secondResult}
+            canDeleteBulk={false}
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Review delete batch' })).toBeNull());
+
+    view.rerender(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={secondResult}
+            canDeleteBulk
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Review delete batch' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Review delete batch' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Clear selection' }) as HTMLButtonElement).disabled).toBe(true));
+  });
 });

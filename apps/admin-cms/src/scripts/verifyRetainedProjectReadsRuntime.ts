@@ -53,7 +53,7 @@ async function main(): Promise<void> {
   }
 
   const deleted = await harness.db.from('projects')
-    .update({ deleted_at: new Date('2026-09-14T00:00:00.000Z').toISOString() })
+    .update({ status: 'deleted', deleted_at: new Date('2026-09-14T00:00:00.000Z').toISOString() })
     .eq('public_id', targetIds[1]);
   assert.equal(deleted.error, null, deleted.error?.message);
   assert.equal(await harness.projects.getProjectByPublicId(targetIds[1]), null);

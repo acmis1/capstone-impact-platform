@@ -4,6 +4,7 @@ import { AdminAuthError } from '../../../../auth/authTypes';
 import { requireAdmin } from '../../../../auth/requireAdmin';
 import { getServerEnv } from '../../../../lib/env';
 import { createSupabaseAdminClient } from '../../../../lib/supabase/admin';
+import { validateFolderDerivedPublicId } from '../../../../import/publicIdValidation';
 import {
   cancelAssistiveValidation,
   enqueueAssistiveValidation,
@@ -49,6 +50,8 @@ const RUN_ID = '22222222-2222-4222-8222-222222222222';
 const FINDING_ID = '33333333-3333-4333-8333-333333333333';
 const PUBLIC_ID = 'PRJ-101';
 const ADMIN_ID = 'admin-user-123';
+const FOLDER_DERIVED_PUBLIC_IDS = [50, 51, 100].map((length) => 'a'.repeat(length));
+const INVALID_PUBLIC_IDS: unknown[] = ['a'.repeat(101), '', null, 123, {}];
 
 describe('Assistive Validation Server Actions', () => {
   beforeEach(() => {
@@ -196,6 +199,54 @@ describe('Assistive Validation Server Actions', () => {
         message: 'No valid poster PDF or image file found for assistive checks.',
       });
     });
+
+    it.each(FOLDER_DERIVED_PUBLIC_IDS)('accepts a folder-derived identifier of length %s', async (publicId) => {
+      expect(validateFolderDerivedPublicId(publicId).valid).toBe(true);
+      vi.mocked(enqueueAssistiveValidation).mockResolvedValueOnce({
+        resultCode: 'ENQUEUED',
+        runId: RUN_ID,
+        status: 'QUEUED',
+      });
+
+      const result = await runAssistiveChecksAction(publicId);
+
+      expect(result).toEqual({ ok: true, runId: RUN_ID, status: 'QUEUED' });
+      expect(enqueueAssistiveValidation).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps permission denial for the maximum folder-derived identifier length', async () => {
+      vi.mocked(requireAdmin).mockResolvedValueOnce({
+        adminUserId: ADMIN_ID,
+        role: 'guest',
+        permissions: [],
+      } as unknown as Awaited<ReturnType<typeof requireAdmin>>);
+
+      const result = await runAssistiveChecksAction(FOLDER_DERIVED_PUBLIC_IDS[2]);
+
+      expect(result).toEqual({
+        ok: false,
+        code: 'PERMISSION_DENIED',
+        message: 'You do not have permission to view this project.',
+      });
+      expect(enqueueAssistiveValidation).not.toHaveBeenCalled();
+    });
+
+    it('keeps the worker-unavailable refusal for the maximum folder-derived identifier length', async () => {
+      vi.mocked(resolveAssistiveExecutionAvailability).mockResolvedValueOnce({
+        state: 'TEMPORARILY_UNAVAILABLE',
+        canEnqueue: false,
+        message: 'Assistive checks are temporarily unavailable because the processing worker is not ready.',
+      });
+
+      const result = await runAssistiveChecksAction(FOLDER_DERIVED_PUBLIC_IDS[2]);
+
+      expect(result).toEqual({
+        ok: false,
+        code: 'EXECUTION_UNAVAILABLE',
+        message: 'Assistive checks are temporarily unavailable because the processing worker is not ready.',
+      });
+      expect(enqueueAssistiveValidation).not.toHaveBeenCalled();
+    });
   });
 
   describe('cancelAssistiveChecksAction', () => {
@@ -228,6 +279,16 @@ describe('Assistive Validation Server Actions', () => {
 
       const result = await cancelAssistiveChecksAction(PUBLIC_ID, RUN_ID);
       expect(result).toEqual({ ok: false, code: 'NOT_FOUND', message: 'Assistive run not found for this project.' });
+    });
+
+    it.each(FOLDER_DERIVED_PUBLIC_IDS)('accepts a folder-derived identifier of length %s', async (publicId) => {
+      expect(validateFolderDerivedPublicId(publicId).valid).toBe(true);
+      vi.mocked(cancelAssistiveValidation).mockResolvedValueOnce({ resultCode: 'CANCELLED' });
+
+      const result = await cancelAssistiveChecksAction(publicId, RUN_ID);
+
+      expect(result).toEqual({ ok: true });
+      expect(cancelAssistiveValidation).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -309,6 +370,23 @@ describe('Assistive Validation Server Actions', () => {
       // Verify no reviewedBy or adminUserId exists in the response
       expect('reviewedBy' in result).toBe(false);
     });
+
+    it.each(FOLDER_DERIVED_PUBLIC_IDS)('accepts a folder-derived identifier of length %s', async (publicId) => {
+      expect(validateFolderDerivedPublicId(publicId).valid).toBe(true);
+      vi.mocked(recordAssistiveFindingDisposition).mockResolvedValueOnce({
+        ok: true,
+        findingId: FINDING_ID,
+        disposition: 'REVIEWED',
+        reviewedAt: '2026-08-21T09:10:00.000Z',
+        reviewedBy: ADMIN_ID,
+        changed: true,
+      });
+
+      const result = await recordAssistiveDispositionAction(publicId, RUN_ID, FINDING_ID, 'REVIEWED');
+
+      expect(result).toEqual({ ok: true, findingId: FINDING_ID, disposition: 'REVIEWED' });
+      expect(recordAssistiveFindingDisposition).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('getAssistiveInspectionAction', () => {
@@ -348,5 +426,33 @@ describe('Assistive Validation Server Actions', () => {
       const result = await getAssistiveInspectionAction(PUBLIC_ID);
       expect(result).toEqual({ ok: true, found: false });
     });
+
+    it.each(FOLDER_DERIVED_PUBLIC_IDS)('accepts a folder-derived identifier of length %s', async (publicId) => {
+      expect(validateFolderDerivedPublicId(publicId).valid).toBe(true);
+      vi.mocked(loadAssistiveInspection).mockResolvedValueOnce({ ok: true, found: false });
+
+      const result = await getAssistiveInspectionAction(publicId);
+
+      expect(result).toEqual({ ok: true, found: false });
+      expect(loadAssistiveInspection).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it.each(INVALID_PUBLIC_IDS)('rejects invalid public IDs for all four operations without side effects (%s)', async (publicId) => {
+    const [runResult, cancelResult, dispositionResult, inspectionResult] = await Promise.all([
+      runAssistiveChecksAction(publicId),
+      cancelAssistiveChecksAction(publicId, RUN_ID),
+      recordAssistiveDispositionAction(publicId, RUN_ID, FINDING_ID, 'REVIEWED'),
+      getAssistiveInspectionAction(publicId),
+    ]);
+
+    expect(runResult).toMatchObject({ ok: false, code: 'VALIDATION_FAILED' });
+    expect(cancelResult).toMatchObject({ ok: false, code: 'VALIDATION_FAILED' });
+    expect(dispositionResult).toMatchObject({ ok: false, code: 'VALIDATION_FAILED' });
+    expect(inspectionResult).toMatchObject({ ok: false, code: 'VALIDATION_FAILED' });
+    expect(enqueueAssistiveValidation).not.toHaveBeenCalled();
+    expect(cancelAssistiveValidation).not.toHaveBeenCalled();
+    expect(recordAssistiveFindingDisposition).not.toHaveBeenCalled();
+    expect(loadAssistiveInspection).not.toHaveBeenCalled();
   });
 });

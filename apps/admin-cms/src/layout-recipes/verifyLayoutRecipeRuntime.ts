@@ -265,7 +265,7 @@ export async function verifyLayoutRecipeRuntime(repositoryRoot: string, identity
     singleTransaction: true,
   }).trim();
   assert.equal(applied, '1');
-  assert.equal(await requireData(firstSession.rpc('get_release_capability_sentinel')), '20260916120000_archived_project_restore|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1');
+  assert.equal(await requireData(firstSession.rpc('get_release_capability_sentinel')), '20260917120000_governed_project_soft_delete|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1|archived_project_republish_media_rearm_v1|governed_project_soft_delete_v1');
 
   phase = 'authorization';
   const denied = await rpc(firstSession, 'create_layout_recipe', {
