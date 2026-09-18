@@ -1152,3 +1152,10 @@
     padding: 1.25rem 0.75rem !important;
   }
 }
+
+/* Public feed failure state also applies when only the detail stylesheet is installed. */
+.capstone-inline-error { margin: 24px auto; padding: 24px; max-width: 640px; border: 1px solid #ef4444; border-radius: 12px; background: #301c27; color: #fff; text-align: center; }
+.capstone-inline-error strong { display: block; font-size: 1.15rem; color: #fca5a5; }
+.capstone-inline-error p { margin: 12px 0; }
+.capstone-retry-button { padding: 10px 18px; border: 1px solid #fff; border-radius: 999px; background: transparent; color: #fff; font: inherit; cursor: pointer; }
+.capstone-retry-button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }

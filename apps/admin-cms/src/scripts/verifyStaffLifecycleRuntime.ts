@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { preflightDisposablePortBase } from '../recovery/disposableSupabaseStack';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,7 +27,8 @@ const repositoryRoot = path.resolve(__dirname, '../../../..');
 const suffix = randomBytes(4).toString('hex');
 const projectId = `capstone-staff-lifecycle-${suffix}`;
 const networkName = `${projectId}-loopback`;
-const portBase = Number.parseInt(process.env.CAPSTONE_STAFF_LIFECYCLE_PORT_BASE ?? '55320', 10);
+const requestedPortBase = process.env.CAPSTONE_STAFF_LIFECYCLE_PORT_BASE;
+let portBase = Number.parseInt(requestedPortBase ?? '55320', 10);
 const dockerTimeoutMs = 30_000;
 
 assert(
@@ -493,6 +495,7 @@ async function runScenarios(workdir: string, networkId: string): Promise<void> {
 
 async function main(): Promise<void> {
   console.log('=== Disposable Staff Lifecycle Local Runtime Verification ===');
+  if (requestedPortBase === undefined) portBase = await preflightDisposablePortBase();
   const workdir = createWorkdir();
   let networkId = '';
   let startAttempted = false;

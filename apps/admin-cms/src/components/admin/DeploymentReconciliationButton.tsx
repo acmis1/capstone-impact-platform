@@ -14,26 +14,30 @@ export function DeploymentReconciliationButton({
   const router = useRouter();
   const unavailableDescriptionId = React.useId();
   const [pending, setPending] = React.useState(false);
+  const [unknownOutcome, setUnknownOutcome] = React.useState(false);
   // The raw backend code stays available for diagnostics, but never as the primary staff message.
   const [message, setMessage] = React.useState<{ text: string; code?: string } | null>(null);
   async function reconcile() {
-    if (unavailableReason) return;
+    if (unavailableReason || unknownOutcome) return;
     setPending(true);
     setMessage(null);
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(publicId)}/deployment-reconciliation`, { method: 'POST' });
       const body = await response.json() as { success?: boolean; code?: string };
-      if (body.success) {
+      if (response.ok && body.success === true) {
         setMessage({ text: 'Showcase status repaired.' });
         router.refresh();
-      } else {
+      } else if (response.status >= 400 && response.status < 500 && body.success === false) {
         setMessage({
-          text: 'The showcase status could not be repaired. Nothing was changed. Try again, and ask an administrator for help if it keeps stopping.',
+          text: 'The server refused to repair showcase status. Try again, and ask an administrator for help if it keeps stopping.',
           code: body.code || 'RECONCILIATION_FAILED',
         });
+      } else {
+        throw new Error('RECONCILIATION_RESPONSE_UNKNOWN');
       }
     } catch {
-      setMessage({ text: 'The showcase status could not be repaired. Nothing was changed. Check your connection and try again.' });
+      setUnknownOutcome(true);
+      setMessage({ text: 'The repair outcome could not be confirmed. Refresh the page before retrying.' });
     } finally {
       setPending(false);
     }
@@ -45,12 +49,17 @@ export function DeploymentReconciliationButton({
         size="sm"
         variant="outline"
         onClick={reconcile}
-        disabled={pending || Boolean(unavailableReason)}
+        disabled={pending || Boolean(unavailableReason) || unknownOutcome}
         aria-describedby={unavailableReason ? unavailableDescriptionId : undefined}
         className="w-fit"
       >
         {pending ? 'Repairing…' : 'Repair showcase status'}
       </Button>
+      {unknownOutcome && (
+        <Button type="button" size="sm" variant="outline" onClick={() => window.location.reload()}>
+          Refresh publishing status
+        </Button>
+      )}
       {unavailableReason && (
         <span id={unavailableDescriptionId} className="max-w-xs text-xs leading-relaxed text-muted-foreground">
           {unavailableReason}

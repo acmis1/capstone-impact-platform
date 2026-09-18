@@ -1,4 +1,6 @@
 import React from 'react';
+import { RecordTimestamp } from '../../../../components/ui/record-timestamp';
+import { layoutTemplateLabel, featuredMediaLabel, layoutSectionList } from '../../../../domain/projectRecordPresentation';
 import Link from 'next/link';
 import { SupabaseProjectRepository } from '../../../../repositories/SupabaseProjectRepository';
 import { ProjectStatusBadge } from '../../../../components/admin/ProjectStatusBadge';
@@ -71,6 +73,9 @@ import { getPermittedReviewActions } from '../../../../components/admin/projectR
 import { PROJECT_DETAIL_SURFACE_CLASSES } from '../../../../components/admin/projectDetailSurfaceStyles';
 import { Button } from '../../../../components/ui/button';
 import { ErrorState } from '../../../../components/ui/error-state';
+import { ProjectLayoutMaintenanceEditor } from '../../../../components/admin/ProjectLayoutMaintenanceEditor';
+import { SupabaseLayoutRecipeGateway } from '../../../../layout-recipes/SupabaseLayoutRecipeGateway';
+import { resolveLayoutConfigByValue, type ResolvedLayoutConfig } from '../../../../domain/layoutConfig';
 import {
   ArrowLeft,
   FileText,
@@ -152,6 +157,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let approvalMedia: ApprovalMediaInput | null = null;
   let canReview = false;
   let canSoftDelete = false;
+  let layoutRecipes: Awaited<ReturnType<SupabaseLayoutRecipeGateway['list']>> = [];
+  let layoutEditorConfig: ResolvedLayoutConfig | null = null;
   let initialAssistiveInspection: AssistiveInspectionView | null = null;
   let initialAssistiveInspectionReadFailed = false;
   let canExecuteAssistiveChecks = false;
@@ -160,11 +167,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   // Essential dependencies: without the base project or authenticated staff context there is no
   // safe project-detail page to render.
   try {
+    adminContext = await requireAdmin();
     const repository = new SupabaseProjectRepository();
     project = await repository.getProjectByPublicId(publicId);
-    if (project) {
-      adminContext = await requireAdmin();
-    }
   } catch (error: unknown) {
     console.error('[Project detail: essential load failure]', error instanceof Error ? error.name : 'UNKNOWN_FAILURE');
     loadError = 'Project details are temporarily unavailable.';
@@ -174,6 +179,14 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     canEditMetadata = hasPermission(adminContext.permissions, 'projects.edit');
     canReview = hasPermission(adminContext.permissions, 'projects.review');
     canSoftDelete = hasPermission(adminContext.permissions, 'projects.delete');
+    if (adminContext.roles.includes('admin') && canEditMetadata && (project.status === 'draft' || project.status === 'changes_requested')) {
+      try {
+        layoutEditorConfig = resolveLayoutConfigByValue(project.layoutConfig);
+        layoutRecipes = (await new SupabaseLayoutRecipeGateway(createSupabaseAdminClientCore()).list()).filter((recipe) => recipe.status === 'active');
+      } catch {
+        console.error('[Project detail: layout maintenance load failure]');
+      }
+    }
     canManagePreview = canManageParticipantPreview(adminContext.permissions);
     canPreparePublicationPlan = canPreparePublication(adminContext.permissions);
     canResolveCorrection = canResolveParticipantCorrection(adminContext.permissions);
@@ -622,6 +635,37 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               </ProjectReviewSection>
             )}
 
+            {layoutEditorConfig && adminContext?.roles.includes('admin') && (project.status === 'draft' || project.status === 'changes_requested') && project.publicId && project.updated_at && (
+              <ProjectReviewSection
+                id="project-layout"
+                title="Project layout"
+                description="Apply a maintained stock configuration or an active saved recipe by value while this project remains private and editable."
+                icon={Sliders}
+              >
+                <ProjectLayoutMaintenanceEditor
+                  publicId={project.publicId}
+                  expectedUpdatedAt={project.updated_at}
+                  initialConfig={layoutEditorConfig}
+                  recipes={layoutRecipes}
+                />
+              </ProjectReviewSection>
+            )}
+
+            {adminContext?.roles.includes('admin') && canEditMetadata
+              && project.status !== 'draft' && project.status !== 'changes_requested' && project.status !== 'deleted' && (
+              <ProjectReviewSection
+                id="project-layout-guidance"
+                title="Project layout"
+                description="Layout maintenance is intentionally unavailable in the current lifecycle state."
+                icon={Sliders}
+              >
+                <p className="text-sm text-muted-foreground">
+                  Layout changes are available only for Draft or Changes requested projects. Use the existing Archive, Restore,
+                  or Request changes workflow first; approval and publication authority remain separate.
+                </p>
+              </ProjectReviewSection>
+            )}
+
             </ProjectDetailMacroSection>
 
             <ProjectDetailMacroSection
@@ -824,34 +868,41 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                     <h4 className="text-sm font-semibold text-foreground">Layout settings</h4>
                     <dl className="mt-3 flex flex-col gap-2.5 text-sm">
                       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
-                        <dt className="text-muted-foreground">Active template ID</dt>
+                        <dt className="text-muted-foreground">Public layout preset</dt>
                         <dd className="break-all font-mono text-xs text-foreground">
-                          {project.layoutConfig?.templateId || 'default'}
+                          {layoutTemplateLabel(project.layoutConfig?.templateId)}
                         </dd>
                       </div>
                       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
                         <dt className="text-muted-foreground">Featured media focus</dt>
-                        <dd className="capitalize text-foreground">{project.layoutConfig?.featuredMedia || 'None'}</dd>
+                        <dd className="capitalize text-foreground">{featuredMediaLabel(project.layoutConfig?.featuredMedia)}</dd>
                       </div>
                       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
                         <dt className="text-muted-foreground">Section ordering</dt>
                         <dd className="break-words text-right text-foreground">
-                          {project.layoutConfig?.sectionOrder
-                            ? project.layoutConfig.sectionOrder.join(', ')
-                            : 'Default order'}
+                          {layoutSectionList(project.layoutConfig?.sectionOrder, 'Renderer default order')}
                         </dd>
                       </div>
-                      {project.layoutConfig?.hiddenSections && (
+                      {(
                         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
                           <dt className="text-muted-foreground">Hidden sections</dt>
                           <dd className="break-words text-right font-medium text-foreground">
-                            {project.layoutConfig.hiddenSections.join(', ')}
+                            {layoutSectionList(project.layoutConfig?.hiddenSections)}
                           </dd>
                         </div>
                       )}
                     </dl>
                   </div>
 
+                  <details className="rounded-md border border-border p-3 text-sm md:col-span-2 md:order-last">
+                    <summary className="cursor-pointer font-medium">Technical identifiers and exact timestamps</summary>
+                    <dl className="mt-2 space-y-2 break-all font-mono text-xs">
+                      <div><dt>Template ID</dt><dd>{project.layoutConfig?.templateId ?? 'Not recorded'}</dd></div>
+                      <div><dt>Section IDs</dt><dd>{project.layoutConfig?.sectionOrder?.join(', ') || 'Not recorded'}</dd></div>
+                      <div><dt>Created (UTC source)</dt><dd>{project.created_at ?? 'Not recorded'}</dd></div>
+                      <div><dt>Updated (UTC source)</dt><dd>{project.updated_at ?? 'Not recorded'}</dd></div>
+                    </dl>
+                  </details>
                   <div>
                     <h4 className="text-sm font-semibold text-foreground">System details</h4>
                     <dl className="mt-3 flex flex-col gap-2.5 text-sm">
@@ -871,17 +922,17 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                       </div>
                       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
                         <dt className="text-muted-foreground">Created</dt>
-                        <dd className="break-all text-right text-foreground-subtle">{project.created_at || 'Not recorded'}</dd>
+                        <dd className="break-all text-right text-foreground-subtle"><RecordTimestamp value={project.created_at} /></dd>
                       </div>
                       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
                         <dt className="text-muted-foreground">Updated</dt>
-                        <dd className="break-all text-right text-foreground-subtle">{project.updated_at || 'Not recorded'}</dd>
+                        <dd className="break-all text-right text-foreground-subtle"><RecordTimestamp value={project.updated_at} /></dd>
                       </div>
                     </dl>
 
                     {project.status === 'archived' && (
                       <div className="mt-3 rounded-lg border border-border bg-surface-inset p-3 text-sm text-foreground-subtle">
-                        <p><strong className="font-semibold text-foreground">Archived:</strong> {project.archivedAt || 'Not recorded'}</p>
+                        <p><strong className="font-semibold text-foreground">Archived:</strong> <RecordTimestamp value={project.archivedAt} /></p>
                         <p className="mt-1 break-words"><strong className="font-semibold text-foreground">Reason:</strong> {project.archiveReason || 'Not recorded'}</p>
                       </div>
                     )}
@@ -926,8 +977,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                   )}
                 </RecordFact>
                 <RecordFact label="Academic supervisor">{project.academicSupervisor || 'Not provided'}</RecordFact>
-                <RecordFact label="Showcase publishing eligibility">
-                  {isEligible ? 'Eligible by status' : 'Not eligible at this status'}
+                <RecordFact label="Workflow status eligibility">
+                  {isEligible ? 'Status permits a publication-readiness check' : 'This status does not permit publication'}
+                  <p className="mt-1 text-xs text-muted-foreground">Status alone is not approval to publish. The publishing checks separately verify participant confirmation, media, and current evidence.</p>
                 </RecordFact>
               </dl>
             </div>

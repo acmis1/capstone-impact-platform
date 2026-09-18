@@ -3,6 +3,7 @@ import { canManageTaxonomy, getPermissionsForRoles } from '../auth/permissions';
 import {
   createTaxonomyEntry,
   TaxonomyConflictError,
+  transitionTaxonomyEntry,
   type TaxonomyGateway,
 } from './taxonomy';
 
@@ -68,5 +69,24 @@ describe('taxonomy authority and management contract', () => {
 
     expect(results.filter((result) => result.ok)).toHaveLength(1);
     expect(results.filter((result) => !result.ok && result.code === 'DUPLICATE')).toHaveLength(1);
+  });
+
+  it('maps lifecycle CAS, rename-reference refusal, and unchanged responses without rewriting references', async () => {
+    const lifecycle = vi.fn()
+      .mockResolvedValueOnce({ resultCode: 'REFERENCED_RENAME_BLOCKED', referenceCount: 2 })
+      .mockResolvedValueOnce({ resultCode: 'STALE_VERSION', lifecycleVersion: 3 })
+      .mockResolvedValueOnce({ resultCode: 'UNCHANGED', id: ENTRY_ID, name: 'Existing value', retiredAt: null, lifecycleVersion: 2 });
+    const store = gateway({ lifecycle });
+
+    await expect(transitionTaxonomyEntry(store, 'program', '22222222-2222-4222-8222-222222222222', {
+      action: 'rename', id: ENTRY_ID, expectedLifecycleVersion: 1, name: 'Corrected value',
+    })).resolves.toMatchObject({ ok: false, code: 'REFERENCED_RENAME_BLOCKED' });
+    await expect(transitionTaxonomyEntry(store, 'program', '22222222-2222-4222-8222-222222222222', {
+      action: 'retire', id: ENTRY_ID, expectedLifecycleVersion: 1,
+    })).resolves.toMatchObject({ ok: false, code: 'STALE_VERSION' });
+    await expect(transitionTaxonomyEntry(store, 'program', '22222222-2222-4222-8222-222222222222', {
+      action: 'reactivate', id: ENTRY_ID, expectedLifecycleVersion: 2,
+    })).resolves.toEqual({ ok: true, code: 'UNCHANGED', entry: { id: ENTRY_ID, name: 'Existing value', retiredAt: null, lifecycleVersion: 2 } });
+    expect(lifecycle).toHaveBeenCalledTimes(3);
   });
 });

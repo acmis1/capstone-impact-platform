@@ -1,4 +1,8 @@
 import React from 'react';
+import Link from 'next/link';
+import { Button } from '../../../components/ui/button';
+import { StaffDirectoryFilters } from '../../../components/admin-staff/StaffDirectoryFilters';
+import { parseStaffDirectoryQuery, selectStaffDirectoryPage, type StaffDirectoryQuery } from '../../../staff/staffDirectoryQuery';
 import { requireAdmin } from '../../../auth/requireAdmin';
 import { canManageStaff } from '../../../auth/permissions';
 import { createSupabaseAdminClient } from '../../../lib/supabase/admin';
@@ -24,7 +28,7 @@ export const dynamic = 'force-dynamic';
  * is rendered, and again at the `/api/staff/invitations` boundary. Hiding the surface is a
  * usability affordance, never the security boundary.
  */
-export default async function StaffAccessPage() {
+export default async function StaffAccessPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
   const adminContext = await requireAdmin();
 
   if (!canManageStaff(adminContext.permissions)) {
@@ -45,6 +49,10 @@ export default async function StaffAccessPage() {
     );
   }
 
+  let query: StaffDirectoryQuery;
+  try { query = parseStaffDirectoryQuery(await searchParams ?? {}); } catch {
+    return <ErrorState headingLevel="h1" title="Invalid staff filters" description="Use a bounded name/email search, a listed status and a valid page." action={<Button asChild variant="outline"><Link href="/admin/staff">Reset staff filters</Link></Button>} />;
+  }
   let staff: StaffDirectoryEntry[] = [];
   let incidents: StaffProvisioningIncident[] = [];
   let directoryFailed = false;
@@ -60,6 +68,7 @@ export default async function StaffAccessPage() {
     directoryFailed = true;
   }
 
+  const directoryPage = selectStaffDirectoryPage(staff, query);
   const activeCount = staff.filter((entry) => entry.status === 'active').length;
   const pendingCount = staff.filter((entry) => entry.status === 'pending_activation').length;
   const needsAttentionCount = incidents.filter(
@@ -117,11 +126,14 @@ export default async function StaffAccessPage() {
           headingLevel="h2"
         />
       ) : (
+        <>
+        <StaffDirectoryFilters query={query} matching={directoryPage.matching} pages={directoryPage.pages} />
         <StaffDirectoryTable
-          staff={staff}
+          staff={directoryPage.staff}
           incidents={incidents}
           currentUserEmail={adminContext.email}
         />
+        </>
       )}
 
       <section aria-labelledby="staff-access-actions-heading" className="flex flex-col gap-4">

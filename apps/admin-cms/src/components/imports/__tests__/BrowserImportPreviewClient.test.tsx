@@ -802,6 +802,12 @@ describe('PR2A Guided Import Workflow Components', () => {
       const clear = screen.getByRole('button', { name: 'Clear selection' });
       clear.focus();
       fireEvent.click(clear);
+      expect(screen.getByRole('alertdialog')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+      await waitFor(() => expect(document.activeElement).toBe(clear));
+      fireEvent.click(clear);
+      fireEvent.click(screen.getByRole('alertdialog').querySelector('button:last-of-type') as HTMLButtonElement);
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Choose project folder' })).toBeTruthy());
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Choose project folder' }));
     });
 
@@ -908,6 +914,24 @@ describe('PR2A Guided Import Workflow Components', () => {
       });
 
       expect(controllerStubs.metadataStageCalls).toBe(1);
+    });
+
+    it('guards a dirty manual form when switching intake methods and preserves cancellation state', () => {
+      Object.defineProperty(HTMLInputElement.prototype, 'webkitdirectory', { configurable: true, value: false });
+      render(<BrowserImportPreviewClient />);
+      fireEvent.click(screen.getByRole('button', { name: 'Enter project using form' }));
+      const title = screen.getByLabelText(/Project Title/i);
+      fireEvent.change(title, { target: { value: 'Unsaved manual project' } });
+
+      const packageMethod = screen.getByRole('button', { name: 'Upload project package' });
+      fireEvent.click(packageMethod);
+      expect(screen.getAllByRole('alertdialog')).toHaveLength(1);
+      fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+      expect(screen.getByLabelText(/Project Title/i)).toBe(title);
+
+      fireEvent.click(packageMethod);
+      fireEvent.click(screen.getByRole('button', { name: 'Switch intake method' }));
+      expect(screen.getByRole('button', { name: 'Choose project folder' })).toBeTruthy();
     });
   });
 });

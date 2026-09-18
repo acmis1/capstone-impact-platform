@@ -25,7 +25,7 @@ import {
  * Identity of the deterministic evaluation that produced a run. It is part of the run's uniqueness
  * key, so bumping it is how a changed algorithm earns a new durable run for unchanged content.
  */
-export const ASSISTIVE_PIPELINE_VERSION = 'assistive-deterministic-checks/v3';
+export const ASSISTIVE_PIPELINE_VERSION = 'assistive-deterministic-checks/v4';
 
 /** Version tag stored inside every persisted evidence object. */
 export const ASSISTIVE_FINDING_EVIDENCE_VERSION = 'assistive-finding-evidence/v1';
@@ -219,7 +219,8 @@ export const persistedAssistiveEvidenceV3Schema = z.object({
   explanation: languageEvidenceText(ASSISTIVE_EVIDENCE_LIMITS.explanation)
     .refine((value) => value.length > 0, 'Explanation must not be empty.'),
   inputHash: assistiveInputHashSchema,
-  pipelineVersion: z.literal(ASSISTIVE_PIPELINE_VERSION),
+  // Prior valid language evidence stays readable; only the current pipeline may be called current.
+  pipelineVersion: z.enum(['assistive-deterministic-checks/v3', ASSISTIVE_PIPELINE_VERSION]),
   policySha256: z.literal(ASSISTIVE_LANGUAGE_POLICY_SHA256),
 }).strict().superRefine((evidence, context) => {
   if (evidence.endOffset < evidence.startOffset) {

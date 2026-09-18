@@ -3,6 +3,8 @@
 import React, { useActionState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { INSTITUTION_NAME, SCHOOL_NAME } from '../../domain/institution';
+import { AuthEnvironmentBadge } from '../../components/auth/RuntimeEnvironmentPresentation';
 import { loginAction } from './actions';
 import { AppMark } from '../../components/ui/app-mark';
 import { Button } from '../../components/ui/button';
@@ -25,7 +27,11 @@ function LoginForm() {
     if (!code) return null;
     switch (code) {
       case 'SESSION_EXPIRED':
-        return 'Session expired. Please click the invitation link again.';
+        return 'Your session expired. Sign in again, or reopen the latest invitation link to finish account setup.';
+      case 'INVITATION_SESSION_MISSING':
+        return 'This invitation session is unavailable. Reopen your latest invitation link to continue.';
+      case 'SIGN_OUT_FAILED':
+        return 'Sign-out could not be confirmed. Reload the page and try signing out again before leaving this computer.';
       case 'VERIFICATION_FAILED':
         return 'The invitation link is invalid or has expired.';
       case 'INVALID_PARAMETERS':
@@ -122,10 +128,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-background text-foreground flex flex-col justify-between p-4 sm:p-6 lg:p-12">
       {/* Top subtle environment bar on mobile */}
       <div className="w-full max-w-5xl mx-auto flex items-center justify-between text-xs text-muted-foreground pb-4 lg:pb-0">
-        <span className="font-medium tracking-tight">RMIT University</span>
-        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-foreground">
-          Staging Environment
-        </span>
+        <span className="font-medium tracking-tight">{INSTITUTION_NAME}</span>
+        <AuthEnvironmentBadge />
       </div>
 
       {/* Central Institutional Container */}
@@ -137,7 +141,7 @@ export default function LoginPage() {
               <AppMark size="lg" />
               <div>
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  School of Computing Technologies
+                  {SCHOOL_NAME}
                 </span>
                 <p className="text-xs font-medium text-primary">
                   Admin &amp; Editorial Operations

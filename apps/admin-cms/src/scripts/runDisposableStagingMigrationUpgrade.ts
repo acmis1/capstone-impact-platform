@@ -29,15 +29,15 @@ import type { PublicFeedRecord } from '../domain/publicFeed';
 import { waitForDisposableRpcReadiness } from './disposableRpcReadiness';
 
 /**
- * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 -> 61 migration transition on a stack this
+ * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 -> 61 -> 62 migration transition on a stack this
  * verifier owns outright.
  *
  * The known hosted staging-v2 baseline is 48 migrations through
- * 20260831090000_postgres17_maintain_privilege_alignment. A clean 61-migration install proves the
+ * 20260831090000_postgres17_maintain_privilege_alignment. A clean 62-migration install proves the
  * end state but not the transition, and the existing deployment-ledger upgrade proves a different
  * single migration. This rehearsal provisions exactly the 48-migration baseline, seeds the minimum
  * representative synthetic evidence a real 48-state database would hold, applies 0049 through
- * 0061 one at a time in deterministic order, and asserts after each step that nothing existing was
+ * 0062 one at a time in deterministic order, and asserts after each step that nothing existing was
  * rewritten and that the new authority is exactly what the migration declares.
  *
  * Everything is disposable and loopback-only: its own project id, port block, Docker network,
@@ -59,6 +59,7 @@ const RELEASE_MIGRATIONS = [
   { ordinal: 59, version: '20260916120000', file: '20260916120000_archived_project_restore.sql' },
   { ordinal: 60, version: '20260917090000', file: '20260917090000_archived_project_republish_media_rearm.sql' },
   { ordinal: 61, version: '20260917120000', file: '20260917120000_governed_project_soft_delete.sql' },
+  { ordinal: 62, version: '20260918120000', file: '20260918120000_governed_project_maintenance.sql' },
 ] as const;
 
 const BASELINE_MIGRATION_COUNT = 48;
@@ -76,6 +77,7 @@ const LAYOUT_RECIPE_TABLES = [
   'layout_recipe_versions',
   'layout_recipe_audit_events',
 ] as const;
+const PROJECT_MAINTENANCE_TABLES = ['taxonomy_lifecycle_audit_events'] as const;
 
 const CORRECTION_IMMUTABILITY_TRIGGERS = [
   'correction_event_immutable',
@@ -110,7 +112,8 @@ export const PRESERVED_PUBLIC_TABLES = ALL_REQUIRED_TABLES.filter(
     && table !== 'public_feed_rollback_capability_events'
     && table !== 'public_feed_rollback_preparation_capabilities'
     && !(CORRECTION_TABLES as readonly string[]).includes(table)
-    && !(LAYOUT_RECIPE_TABLES as readonly string[]).includes(table),
+    && !(LAYOUT_RECIPE_TABLES as readonly string[]).includes(table)
+    && !(PROJECT_MAINTENANCE_TABLES as readonly string[]).includes(table),
 );
 export const PRESERVED_EXECUTION_CONTROL_TABLES = [
   'assistive_execution_control.launch_budget_guard',
@@ -124,19 +127,23 @@ const PRESERVED_TABLES = [
 const CURRENT_54_TABLES = [
   ...ALL_REQUIRED_TABLES
     .filter((table) => table !== 'participant_preview_access_observations'
-      && !(LAYOUT_RECIPE_TABLES as readonly string[]).includes(table))
+      && !(LAYOUT_RECIPE_TABLES as readonly string[]).includes(table)
+      && !(PROJECT_MAINTENANCE_TABLES as readonly string[]).includes(table))
     .map((table) => `public.${table}`),
   ...PRESERVED_EXECUTION_CONTROL_TABLES,
 ];
 const CURRENT_55_TABLES = [
   ...ALL_REQUIRED_TABLES
-    .filter((table) => !(LAYOUT_RECIPE_TABLES as readonly string[]).includes(table))
+    .filter((table) => !(LAYOUT_RECIPE_TABLES as readonly string[]).includes(table)
+      && !(PROJECT_MAINTENANCE_TABLES as readonly string[]).includes(table))
     .map((table) => `public.${table}`),
   ...PRESERVED_EXECUTION_CONTROL_TABLES,
 ];
 const CURRENT_57_TABLES = CURRENT_55_TABLES;
 const CURRENT_58_TABLES = [
-  ...ALL_REQUIRED_TABLES.map((table) => `public.${table}`),
+  ...ALL_REQUIRED_TABLES
+    .filter((table) => !(PROJECT_MAINTENANCE_TABLES as readonly string[]).includes(table))
+    .map((table) => `public.${table}`),
   ...PRESERVED_EXECUTION_CONTROL_TABLES,
 ];
 const CURRENT_59_TABLES_FINGERPRINTED_BEFORE_M60 = CURRENT_58_TABLES.filter(
@@ -4090,6 +4097,385 @@ function assertAfter61(
   console.log('PASS: Migration 0061 preserved all 50 retained tables and installed bounded service-only soft-delete authority');
 }
 
+function assertAfter62(current61Tables: Record<string, string>, taxonomyBefore: Record<string, string>): void {
+  const current62Tables = fingerprintTables([...CURRENT_58_TABLES, 'public.taxonomy_lifecycle_audit_events']);
+  const taxonomyTables = new Set(['public.programs', 'public.disciplines', 'public.industry_categories']);
+  assertTablesUnchanged(
+    Object.fromEntries(Object.entries(current61Tables).filter(([table]) => !taxonomyTables.has(table))),
+    'Migration 0062 existing retained rows',
+  );
+  for (const [table, rows] of Object.entries(taxonomyBefore)) {
+    assert.equal(psql(`SELECT COALESCE(jsonb_agg(to_jsonb(entry)-'retired_at'-'lifecycle_version' ORDER BY id),'[]'::jsonb)::text FROM public.${table} entry;`), rows, 'M62 changed pre-existing taxonomy values: ' + table);
+  }
+  assert.equal(Object.keys(current62Tables).length, 51, 'The current 0062 table inventory is incomplete.');
+  assert.equal(psql("SELECT count(*)::text FROM pg_catalog.pg_class WHERE oid='public.taxonomy_lifecycle_audit_events'::regclass;"), '1');
+  for (const signature of [
+    'public.update_project_layout_if_current(text,timestamp with time zone,jsonb,uuid,uuid)',
+    'public.recover_deleted_project_if_current(text,timestamp with time zone,timestamp with time zone,uuid)',
+    'public.list_deleted_projects(uuid,integer,integer,text)',
+    'public.get_deleted_project_detail(text,uuid)',
+    'public.manage_taxonomy_lifecycle(text,uuid,text,text,integer,uuid)',
+  ] as const) {
+    assert.equal(
+      psql(`SELECT has_function_privilege('service_role','${signature}','EXECUTE')::text || '|' || has_function_privilege('anon','${signature}','EXECUTE')::text || '|' || has_function_privilege('authenticated','${signature}','EXECUTE')::text;`),
+      'true|false|false',
+      `Migration 0062 RPC grant contract drifted for ${signature}.`,
+    );
+  }
+  assert.equal(psql("SELECT has_table_privilege('service_role','public.taxonomy_lifecycle_audit_events','SELECT')::text || '|' || has_table_privilege('anon','public.taxonomy_lifecycle_audit_events','SELECT')::text;"), 'true|false');
+  assert.equal(psql('SELECT public.get_release_capability_sentinel();'), '20260918120000_governed_project_maintenance|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1|archived_project_republish_media_rearm_v1|governed_project_soft_delete_v1|governed_project_maintenance_v1');
+  console.log('PASS: Migration 0062 preserved project/media rows and installed bounded layout, recovery, deleted-read, and taxonomy authorities');
+}
+
+function verifyMaintenanceRecoveryNegatives(publicId: string): void {
+  const readiness = `SELECT public.project_deleted_recovery_readiness(id)->>'code' FROM public.projects WHERE public_id='${publicId}';`;
+  assert.equal(psql(readiness), 'READY_FOR_RECOVERY', 'The negative-control fixture must first be genuinely eligible.');
+  assert.equal(psql(`\\set QUIET 1
+BEGIN;
+UPDATE public.projects SET pending_removal_from_public=true WHERE public_id='${publicId}';
+${readiness}
+ROLLBACK;`), 'RECOVERY_REMOVAL_PENDING', 'Recovery must inspect the real pending-removal flag.');
+  assert.equal(psql(`\\set QUIET 1
+BEGIN;
+INSERT INTO public.approval_records(project_id,admin_id,action_taken,from_status,to_status,comments,created_at,actor_full_name_snapshot,actor_email_snapshot,event_details)
+SELECT project_id,admin_id,action_taken,from_status,to_status,comments,created_at,actor_full_name_snapshot,actor_email_snapshot,event_details FROM public.approval_records WHERE project_id=(SELECT id FROM public.projects WHERE public_id='${publicId}') AND action_taken='soft_delete';
+${readiness}
+ROLLBACK;`), 'RECOVERY_EVIDENCE_REQUIRED', 'Duplicated immutable-looking evidence must not authorize recovery.');
+  assert.equal(psql(readiness), 'READY_FOR_RECOVERY', 'Negative probes must roll back all test mutations.');
+  const before = fingerprintTables(['public.projects', 'public.media_assets', 'public.participant_previews', 'public.approval_records']);
+  assert.equal(psql(`\\set QUIET 1
+BEGIN;
+CREATE FUNCTION pg_temp.suppress_maintenance_recovery() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.public_id='${publicId}' AND OLD.status='deleted' AND NEW.status='draft' THEN RETURN NULL; END IF; RETURN NEW; END; $$;
+CREATE TRIGGER zz_suppress_maintenance_recovery BEFORE UPDATE ON public.projects FOR EACH ROW EXECUTE FUNCTION pg_temp.suppress_maintenance_recovery();
+DO $$ DECLARE p public.projects%ROWTYPE; rejected boolean:=false; BEGIN SELECT * INTO p FROM public.projects WHERE public_id='${publicId}'; BEGIN PERFORM public.recover_deleted_project_if_current(p.public_id,p.updated_at,p.deleted_at,'${ADMIN_ID}'::uuid); EXCEPTION WHEN OTHERS THEN IF SQLERRM<>'RECOVERY_ATOMIC_CAS_FAILED' THEN RAISE; END IF; rejected:=true; END; IF NOT rejected THEN RAISE EXCEPTION 'RECOVERY_SUPPRESSED_CAS_NOT_REJECTED'; END IF; IF EXISTS(SELECT 1 FROM public.media_assets WHERE project_id=p.id AND is_public_approved=false) OR NOT EXISTS(SELECT 1 FROM public.participant_previews WHERE project_id=p.id AND status='active') THEN RAISE EXCEPTION 'RECOVERY_EARLIER_WRITES_NOT_ROLLED_BACK'; END IF; END; $$;
+SELECT 'ATOMIC_ROLLBACK_PROVEN';
+ROLLBACK;`), 'ATOMIC_ROLLBACK_PROVEN');
+  assertTablesUnchanged(before, 'M62 negative recovery transactions and suppressed-CAS atomicity');
+  console.log('PASS: M62 recovery refuses pending/duplicate evidence and rolls back all earlier writes on suppressed final CAS');
+}
+
+async function verifyPreviouslyPublishedRecoveryRuntime(client: SupabaseClient): Promise<void> {
+  const publicId = 'upgrade-delete-prior-public';
+  const objects = JSON.parse(psql(`SELECT jsonb_agg(item) FROM (SELECT jsonb_build_object('bucket',m.storage_bucket,'key',m.storage_path) AS item FROM public.media_assets m JOIN public.projects p ON p.id=m.project_id WHERE p.public_id='${publicId}' UNION ALL SELECT jsonb_build_object('bucket',m.public_storage_bucket,'key',m.public_storage_path) FROM public.media_assets m JOIN public.projects p ON p.id=m.project_id WHERE p.public_id='${publicId}' AND m.public_storage_bucket IS NOT NULL AND m.public_storage_path IS NOT NULL) items;`)) as Array<{bucket: string; key: string}>;
+  assert.ok(objects.length >= 4, 'Recovery proof requires actual retained private AND published objects.');
+  const bytesBefore = await readStorageEvidence(client, objects);
+  const ledgerBefore = fingerprintTables(['public.public_feed_head','public.public_feed_versions','public.public_feed_version_members','public.public_feed_operations','public.public_feed_operation_events']);
+  const snapshotBefore = psql(`SELECT jsonb_agg(jsonb_build_object('id',v.id,'snapshot',v.snapshot,'media',v.media_snapshot,'layout',v.layout_config_snapshot) ORDER BY v.id)::text FROM public.participant_previews v JOIN public.projects p ON p.id=v.project_id WHERE p.public_id='${publicId}';`);
+  assert.equal(psql(`SELECT public.project_deleted_recovery_readiness(id)->>'code' FROM public.projects WHERE public_id='${publicId}';`), 'READY_FOR_RECOVERY');
+  const result = await client.rpc('recover_deleted_project_if_current', { p_public_id: publicId, p_admin_id: ADMIN_ID, p_expected_updated_at: psql(`SELECT updated_at::text FROM public.projects WHERE public_id='${publicId}';`), p_expected_deleted_at: psql(`SELECT deleted_at::text FROM public.projects WHERE public_id='${publicId}';`) });
+  assert.equal(result.error, null, result.error?.message);
+  assert.equal(result.data?.resultCode, 'RECOVERED');
+  assert.equal(psql(`SELECT status||'|'||(deleted_at IS NULL)::text||'|'||(public_removal_completed_at IS NOT NULL)::text FROM public.projects WHERE public_id='${publicId}';`), 'draft|true|true');
+  assert.equal(psql(`SELECT count(*)::text FROM public.media_assets m JOIN public.projects p ON p.id=m.project_id WHERE p.public_id='${publicId}' AND (m.is_public_approved IS DISTINCT FROM false OR m.public_url IS NOT NULL OR m.public_storage_bucket IS NOT NULL OR m.public_storage_path IS NOT NULL);`), '0');
+  assert.notEqual(publicationReadiness(publicId), 'READY', 'Recovery must not revive old approval/participant confirmation.');
+  assert.equal(psql(`SELECT jsonb_agg(jsonb_build_object('id',v.id,'snapshot',v.snapshot,'media',v.media_snapshot,'layout',v.layout_config_snapshot) ORDER BY v.id)::text FROM public.participant_previews v JOIN public.projects p ON p.id=v.project_id WHERE p.public_id='${publicId}';`), snapshotBefore);
+  assert.deepEqual(await readStorageEvidence(client, objects), bytesBefore, 'Recovery changed retained private/public physical objects.');
+  assertTablesUnchanged(ledgerBefore, 'M62 previously published recovery canonical ledger preservation');
+  console.log('PASS: M62 genuinely published/removed/deleted project recovers to private Draft; old approval stays unusable, immutable snapshots/ledger and physical objects retained');
+}
+
+async function waitForMaintenanceSchema(client: SupabaseClient): Promise<void> {
+  const before = fingerprintTables(['public.projects', 'public.media_assets', 'public.approval_records', 'public.participant_previews']);
+  psql("NOTIFY pgrst, 'reload schema';");
+  await waitForDisposableRpcReadiness([
+    { name: 'M62 layout authority', invoke: async signal => await client.rpc('update_project_layout_if_current', { p_public_id: 'absent-readiness-probe', p_expected_updated_at: null, p_layout_config: null, p_recipe_version_id: null, p_admin_id: null }).abortSignal(signal), isExpected: data => JSON.stringify(data) === '{"resultCode":"PERMISSION_DENIED"}' },
+    { name: 'M62 recovery authority', invoke: async signal => await client.rpc('recover_deleted_project_if_current', { p_public_id: 'absent-readiness-probe', p_expected_updated_at: null, p_expected_deleted_at: null, p_admin_id: null }).abortSignal(signal), isExpected: data => JSON.stringify(data) === '{"resultCode":"PERMISSION_DENIED"}' },
+  ]);
+  assertTablesUnchanged(before, 'M62 no-authority schema readiness probes');
+}
+
+async function verifyAssistiveV4Compatibility(client: SupabaseClient): Promise<void> {
+  const identity = createHash('sha1').update(projectId).digest('hex');
+  const common = { p_environment: 'staging', p_deployment_version: identity, p_ocr_capability: 'paddle-title/pp-ocrv6-small@3.7.0', p_language_capability: 'languagetool/en-au@6.6' };
+  const rpc = async (name: string, parameters: Record<string, unknown>) => { const result = await client.rpc(name, parameters); assert.equal(result.error, null, result.error?.message); return result.data as Record<string, unknown>; };
+  assert.equal((await rpc('upsert_assistive_worker_heartbeat', { ...common, p_pipeline_version: 'assistive-deterministic-checks/v3', p_worker_instance_id: 'maintenance-legacy-worker', p_health_state: 'READY' })).resultCode, 'HEARTBEAT_RECORDED');
+  assert.equal((await rpc('get_assistive_worker_availability', { ...common, p_pipeline_version: 'assistive-deterministic-checks/v4', p_freshness_seconds: 120 })).resultCode, 'UNAVAILABLE', 'A v3 worker must not satisfy the new v4 execution identity.');
+  assert.equal((await rpc('upsert_assistive_worker_heartbeat', { ...common, p_pipeline_version: 'assistive-deterministic-checks/v4', p_worker_instance_id: 'maintenance-current-worker', p_health_state: 'READY' })).resultCode, 'HEARTBEAT_RECORDED');
+  for (const version of ['v3', 'v4']) assert.equal((await rpc('get_assistive_worker_availability', { ...common, p_pipeline_version: `assistive-deterministic-checks/${version}`, p_freshness_seconds: 120 })).compatibleWorkerCount, 1);
+  assert.equal((await rpc('upsert_assistive_worker_heartbeat', { ...common, p_pipeline_version: 'assistive-deterministic-checks/v5', p_worker_instance_id: 'maintenance-unsupported-worker', p_health_state: 'READY' })).resultCode, 'VALIDATION_FAILED');
+  const registration = { p_deployment_version: identity, p_image_digest: 'sha256:' + 'e'.repeat(64), p_configuration_version: 'maintenance-proof/v1', p_registration_days: 1 };
+  assert.equal((await rpc('register_assistive_executor', registration)).resultCode, 'REGISTERED');
+  assert.equal(psql("SELECT pipeline_version FROM assistive_execution_control.executor_registrations WHERE environment='staging';"), 'assistive-deterministic-checks/v3', 'Legacy four-argument registration must retain its original version meaning.');
+  assert.equal((await rpc('register_assistive_executor', { ...registration, p_pipeline_version: 'assistive-deterministic-checks/v4' })).resultCode, 'REGISTERED');
+  assert.equal(psql("SELECT pipeline_version FROM assistive_execution_control.executor_registrations WHERE environment='staging';"), 'assistive-deterministic-checks/v4');
+  console.log('PASS: M62 preserves legacy v3 registration/evidence identity, accepts explicit v4 workers, and rejects cross-version availability and unsupported pipelines');
+}
+
+function verifyMaintenanceActorLifecycle(): void {
+  const before = fingerprintTables(['public.admin_users', 'public.user_roles', 'public.staff_provisioning_requests', 'public.projects', 'public.approval_records']);
+  assert.equal(psql(`\\set QUIET 1
+BEGIN;
+DO $actor$
+DECLARE actor_id uuid:=gen_random_uuid(); linked_id uuid:=gen_random_uuid(); stage text; result jsonb;
+BEGIN
+  INSERT INTO public.admin_users(id,email,full_name) VALUES(actor_id,'m62-pending-lifecycle@example.invalid','Synthetic lifecycle actor');
+  INSERT INTO public.user_roles(user_id,role) VALUES(actor_id,'editor');
+  FOREACH stage IN ARRAY ARRAY['deactivated','pending_activation'] LOOP
+    IF stage='deactivated' THEN UPDATE public.admin_users SET lifecycle_status='deactivated',deactivated_at=now() WHERE id=actor_id;
+    ELSE
+      UPDATE public.admin_users SET lifecycle_status='active',deactivated_at=NULL WHERE id=actor_id;
+      INSERT INTO public.staff_provisioning_requests(normalized_email,full_name,requested_roles,status,execution_token_hash,auth_ownership_token_hash,lease_expires_at,auth_user_id,auth_identity_owned,admin_user_id)
+      VALUES('m62-pending-lifecycle@example.invalid','Synthetic lifecycle actor',ARRAY['editor'],'pending_activation',repeat('a',64),repeat('b',64),now()+interval '1 day',linked_id,true,actor_id);
+    END IF;
+    result:=public.update_project_metadata('unattempted-lifecycle-project','','','','',2026,NULL,ARRAY[]::uuid[],ARRAY[]::uuid[],now(),actor_id,'','');
+    IF result->>'resultCode' IS DISTINCT FROM 'PERMISSION_DENIED' THEN RAISE EXCEPTION 'INACTIVE_METADATA_ACTOR_ACCEPTED'; END IF;
+  END LOOP;
+END; $actor$;
+SELECT 'METADATA_LIFECYCLE_FAILS_CLOSED';
+ROLLBACK;`), 'METADATA_LIFECYCLE_FAILS_CLOSED');
+  assertTablesUnchanged(before, 'M62 inactive/pending metadata actor probes');
+  console.log('PASS: M62 metadata rejects deactivated and pending-activation actors while retaining role history');
+}
+
+async function verifyNormalizedCatalogueConcurrency(): Promise<void> {
+  const first = interactivePsql('m62_name_first');
+  const second = interactivePsql('m62_name_second');
+  try {
+    await first.execute("BEGIN; INSERT INTO public.programs(name) VALUES('M62 Concurrent Exact Name');");
+    const observe = observeConcurrentPsql(second.execute(`DO $name$ BEGIN
+      BEGIN INSERT INTO public.programs(name) VALUES('m62 concurrent exact name');
+      EXCEPTION WHEN unique_violation THEN RETURN; END;
+      RAISE EXCEPTION 'NORMALIZED_DUPLICATE_CONCURRENTLY_ACCEPTED';
+    END; $name$; SELECT 'NORMALIZED_DUPLICATE_REFUSED';`));
+    await waitForDatabaseLockWait('m62_name_second');
+    await first.execute('COMMIT;');
+    assert.equal(await observe(), 'NORMALIZED_DUPLICATE_REFUSED');
+    assert.equal(psql("SELECT count(*)::text FROM public.programs WHERE lower(btrim(name))='m62 concurrent exact name';"), '1');
+    // Ordinary repeat imports rely on exact-name ON CONFLICT DO NOTHING, not an exception.
+    psql("INSERT INTO public.programs(name) VALUES('M62 Concurrent Exact Name') ON CONFLICT(name) DO NOTHING;");
+    assert.equal(psql("SELECT count(*)::text FROM public.programs WHERE name='M62 Concurrent Exact Name';"), '1');
+  } finally {
+    await first.execute('ROLLBACK;').catch(() => undefined);
+    await first.close(); await second.close();
+  }
+  console.log('PASS: normalized-name concurrent create allows one record and exact-name import upsert remains idempotent');
+}
+
+async function verifyMaintenanceReviewRegressions(client: SupabaseClient): Promise<void> {
+  const before = fingerprintTables(['public.projects', 'public.approval_records', 'public.programs', 'public.disciplines', 'public.industry_categories']);
+  assert.equal(psql(`\\set QUIET 1
+BEGIN;
+INSERT INTO public.approval_records(project_id,admin_id,action_taken,from_status,to_status,comments)
+SELECT id,'${ADMIN_ID}'::uuid,'update_metadata','draft','draft','M62 forgery negative control' FROM public.projects WHERE public_id='upgrade-maintenance-layout';
+SET LOCAL ROLE service_role;
+DO $audit$
+DECLARE ordinary_id uuid; protected_id uuid; protected_action text; rejected boolean; seen integer := 0;
+BEGIN
+  SELECT id INTO ordinary_id FROM public.approval_records WHERE comments='M62 forgery negative control';
+  IF ordinary_id IS NULL THEN RAISE EXCEPTION 'AUDIT_FIXTURE_MISSING'; END IF;
+  FOREACH protected_action IN ARRAY ARRAY['soft_delete','project_recovery','update_layout'] LOOP
+    rejected := false;
+    BEGIN UPDATE public.approval_records SET action_taken=protected_action WHERE id=ordinary_id;
+    EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'PROJECT_MAINTENANCE_AUDIT_IMMUTABLE' THEN RAISE; END IF; rejected:=true; END;
+    IF NOT rejected THEN RAISE EXCEPTION 'AUDIT_ACTION_FORGERY_ACCEPTED'; END IF;
+    rejected := false;
+    BEGIN INSERT INTO public.approval_records(project_id,admin_id,action_taken,from_status,to_status,comments)
+      SELECT project_id,admin_id,protected_action,from_status,to_status,'Forged insert must fail' FROM public.approval_records WHERE id=ordinary_id;
+    EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'PROJECT_MAINTENANCE_AUDIT_INSERT_FORBIDDEN' THEN RAISE; END IF; rejected:=true; END;
+    IF NOT rejected THEN RAISE EXCEPTION 'PROTECTED_AUDIT_INSERT_ACCEPTED'; END IF;
+  END LOOP;
+  FOR protected_id IN SELECT a.id FROM public.approval_records a JOIN public.projects p ON p.id=a.project_id
+    WHERE p.public_id IN ('upgrade-maintenance-layout','upgrade-maintenance-recovery') AND a.action_taken IN ('soft_delete','project_recovery','update_layout') LOOP
+    seen:=seen+1; rejected:=false;
+    BEGIN UPDATE public.approval_records SET action_taken='update_metadata' WHERE id=protected_id;
+    EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'PROJECT_MAINTENANCE_AUDIT_IMMUTABLE' THEN RAISE; END IF; rejected:=true; END;
+    IF NOT rejected THEN RAISE EXCEPTION 'PROTECTED_AUDIT_UPDATE_ACCEPTED'; END IF;
+    rejected:=false;
+    BEGIN DELETE FROM public.approval_records WHERE id=protected_id;
+    EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'PROJECT_MAINTENANCE_AUDIT_IMMUTABLE' THEN RAISE; END IF; rejected:=true; END;
+    IF NOT rejected THEN RAISE EXCEPTION 'PROTECTED_AUDIT_DELETE_ACCEPTED'; END IF;
+  END LOOP;
+  IF seen < 3 THEN RAISE EXCEPTION 'PROTECTED_AUDIT_FIXTURES_INCOMPLETE'; END IF;
+END; $audit$;
+RESET ROLE;
+SELECT 'AUDIT_TRANSITION_AND_MUTATION_REFUSED';
+ROLLBACK;`), 'AUDIT_TRANSITION_AND_MUTATION_REFUSED');
+  assert.equal(psql(`\\set QUIET 1
+BEGIN;
+INSERT INTO public.projects(public_id,title,year,status) VALUES('maintenance-invalid-old-layout','Synthetic invalid old layout',2026,'draft');
+DO $legacy$
+DECLARE old_config jsonb; result jsonb; expected_at timestamptz; valid_config jsonb;
+BEGIN
+  SELECT layout_config INTO valid_config FROM public.projects WHERE public_id='upgrade-maintenance-layout';
+  FOREACH old_config IN ARRAY ARRAY[NULL::jsonb,'{}'::jsonb,'null'::jsonb] LOOP
+    UPDATE public.projects SET layout_config=old_config WHERE public_id='maintenance-invalid-old-layout';
+    SELECT updated_at INTO expected_at FROM public.projects WHERE public_id='maintenance-invalid-old-layout';
+    result:=public.update_project_layout_if_current('maintenance-invalid-old-layout',expected_at,valid_config,NULL,'${ADMIN_ID}'::uuid);
+    IF result->>'resultCode' IS DISTINCT FROM 'LAYOUT_EVIDENCE_INVALID' THEN RAISE EXCEPTION 'INVALID_OLD_LAYOUT_ACCEPTED'; END IF;
+    IF EXISTS (SELECT 1 FROM public.projects WHERE public_id='maintenance-invalid-old-layout' AND layout_config IS DISTINCT FROM old_config) THEN RAISE EXCEPTION 'INVALID_OLD_LAYOUT_CHANGED'; END IF;
+  END LOOP;
+END; $legacy$;
+SELECT 'INVALID_PREVIOUS_LAYOUT_REFUSED';
+ROLLBACK;`), 'INVALID_PREVIOUS_LAYOUT_REFUSED');
+  assertTablesUnchanged(before, 'M62 audit/legacy-layout review regression rollback');
+  verifyMaintenanceActorLifecycle();
+  await verifyRetiredTaxonomyRuntime(client);
+  await verifyNormalizedCatalogueConcurrency();
+  console.log('PASS: M62 refuses audit action forgery, protected-row mutation and malformed previous layout evidence');
+}
+
+async function verifyRetiredTaxonomyRuntime(client: SupabaseClient): Promise<void> {
+  assert.equal(psql(`\\set QUIET 1
+BEGIN;
+DO $taxonomy$
+DECLARE v_program_id uuid:=gen_random_uuid(); v_discipline_id uuid:=gen_random_uuid(); v_industry_id uuid:=gen_random_uuid();
+  retained_id uuid; new_id uuid; category_id uuid; kind text; result jsonb; rejected boolean; current_at timestamptz; retained_before jsonb;
+BEGIN
+  INSERT INTO public.programs(id,name) VALUES(v_program_id,'M62 Retained Program');
+  INSERT INTO public.disciplines(id,name) VALUES(v_discipline_id,'M62 Retained Discipline');
+  INSERT INTO public.industry_categories(id,name) VALUES(v_industry_id,'M62 Retained Industry');
+  INSERT INTO public.projects(public_id,title,summary,year,status,program_name,study_program,discipline,industry,poster_text_public,accessibility_text_public)
+    VALUES('maintenance-retained-taxonomy','Synthetic retained taxonomy','Synthetic summary',2026,'draft','M62 Retained Program','M62 Retained Program','M62 Retained Discipline','M62 Retained Industry','Synthetic poster text','Synthetic description') RETURNING id INTO retained_id;
+  FOREACH kind IN ARRAY ARRAY['program','discipline','industryCategory'] LOOP
+    category_id:=CASE kind WHEN 'program' THEN v_program_id WHEN 'discipline' THEN v_discipline_id ELSE v_industry_id END;
+    result:=public.manage_taxonomy_lifecycle(kind,category_id,'rename','Different name',1,'${ADMIN_ID}'::uuid);
+    IF result->>'resultCode' IS DISTINCT FROM 'REFERENCED_RENAME_BLOCKED' OR result->>'referenceCount' IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'LEGACY_REFERENCE_RENAME_NOT_BLOCKED'; END IF;
+  END LOOP;
+  SELECT to_jsonb(p) INTO retained_before FROM public.projects p WHERE id=retained_id;
+  FOREACH kind IN ARRAY ARRAY['program','discipline','industryCategory'] LOOP
+    category_id:=CASE kind WHEN 'program' THEN v_program_id WHEN 'discipline' THEN v_discipline_id ELSE v_industry_id END;
+    result:=public.manage_taxonomy_lifecycle(kind,category_id,'retire',NULL,1,'${ADMIN_ID}'::uuid);
+    IF result->>'resultCode' IS DISTINCT FROM 'RETIRED' THEN RAISE EXCEPTION 'RETIRE_FIXTURE_FAILED'; END IF;
+  END LOOP;
+  IF (SELECT to_jsonb(p) FROM public.projects p WHERE id=retained_id) IS DISTINCT FROM retained_before THEN RAISE EXCEPTION 'RETIRE_REWROTE_PROJECT'; END IF;
+  INSERT INTO public.projects(public_id,title,year,status) VALUES('maintenance-new-taxonomy','Synthetic new reference',2026,'draft') RETURNING id INTO new_id;
+  rejected:=false;
+  BEGIN UPDATE public.projects SET program_id=v_program_id,program_name='M62 Retained Program' WHERE id=new_id;
+  EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'RETIRED_PROGRAM_NOT_AVAILABLE' THEN RAISE; END IF; rejected:=true; END;
+  IF NOT rejected THEN RAISE EXCEPTION 'NEW_RETIRED_PROGRAM_ACCEPTED'; END IF;
+  rejected:=false;
+  BEGIN INSERT INTO public.project_disciplines(project_id,discipline_id) VALUES(new_id,v_discipline_id);
+  EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'RETIRED_DISCIPLINE_NOT_AVAILABLE' THEN RAISE; END IF; rejected:=true; END;
+  IF NOT rejected THEN RAISE EXCEPTION 'NEW_RETIRED_DISCIPLINE_ACCEPTED'; END IF;
+  rejected:=false;
+  BEGIN INSERT INTO public.project_industry_categories(project_id,industry_category_id) VALUES(new_id,v_industry_id);
+  EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'RETIRED_INDUSTRY_NOT_AVAILABLE' THEN RAISE; END IF; rejected:=true; END;
+  IF NOT rejected THEN RAISE EXCEPTION 'NEW_RETIRED_INDUSTRY_ACCEPTED'; END IF;
+  -- Materializing this project's own retained legacy associations is not a new assignment.
+  SELECT updated_at INTO current_at FROM public.projects WHERE id=retained_id;
+  result:=public.update_project_metadata('maintenance-retained-taxonomy','Synthetic retained taxonomy','Synthetic summary','','',2026,v_program_id,ARRAY[v_discipline_id],ARRAY[v_industry_id],current_at,'${ADMIN_ID}'::uuid,'Synthetic poster text','Synthetic description');
+  IF result->>'resultCode' IS DISTINCT FROM 'SUCCESS' THEN RAISE EXCEPTION 'RETAINED_LEGACY_METADATA_SAVE_FAILED'; END IF;
+  SELECT updated_at INTO current_at FROM public.projects WHERE id=retained_id;
+  result:=public.update_project_metadata('maintenance-retained-taxonomy','Synthetic retained taxonomy revised','Synthetic summary','','',2026,v_program_id,ARRAY[v_discipline_id],ARRAY[v_industry_id],current_at,'${ADMIN_ID}'::uuid,'Synthetic poster text','Synthetic description');
+  IF result->>'resultCode' IS DISTINCT FROM 'SUCCESS' THEN RAISE EXCEPTION 'RETAINED_CANONICAL_METADATA_SAVE_FAILED'; END IF;
+  IF (SELECT count(*) FROM public.project_disciplines WHERE project_id=retained_id) <> 1 OR (SELECT count(*) FROM public.project_industry_categories WHERE project_id=retained_id) <> 1 THEN RAISE EXCEPTION 'RETAINED_METADATA_RELATIONS_CHANGED'; END IF;
+  FOREACH kind IN ARRAY ARRAY['program','discipline','industryCategory'] LOOP
+    category_id:=CASE kind WHEN 'program' THEN v_program_id WHEN 'discipline' THEN v_discipline_id ELSE v_industry_id END;
+    result:=public.manage_taxonomy_lifecycle(kind,category_id,'reactivate',NULL,2,'${ADMIN_ID}'::uuid);
+    IF result->>'resultCode' IS DISTINCT FROM 'REACTIVATED' THEN RAISE EXCEPTION 'REACTIVATION_FAILED'; END IF;
+  END LOOP;
+  UPDATE public.projects SET program_id=v_program_id,program_name='M62 Retained Program' WHERE id=new_id;
+  INSERT INTO public.project_disciplines(project_id,discipline_id) VALUES(new_id,v_discipline_id);
+  INSERT INTO public.project_industry_categories(project_id,industry_category_id) VALUES(new_id,v_industry_id);
+END; $taxonomy$;
+SELECT 'LEGACY_REFS_RETIRE_ASSIGNMENT_AND_REACTIVATION_PROVEN';
+ROLLBACK;`), 'LEGACY_REFS_RETIRE_ASSIGNMENT_AND_REACTIVATION_PROVEN');
+  const taxonomyId = psql("INSERT INTO public.industry_categories(name) VALUES ('M62 concurrent reference') RETURNING id::text;").split(/\r?\n/)[0];
+  const writer = interactivePsql('m62_taxonomy_reference_writer');
+  try {
+    await writer.execute("BEGIN; INSERT INTO public.projects(public_id,title,year,status,industry) VALUES ('maintenance-concurrent-taxonomy','Synthetic concurrent reference',2026,'draft','M62 concurrent reference');");
+    const attempt = await client.rpc('manage_taxonomy_lifecycle', { p_kind: 'industryCategory', p_taxonomy_id: taxonomyId, p_action: 'rename', p_name: 'M62 concurrent replacement', p_expected_lifecycle_version: 1, p_actor_admin_id: ADMIN_ID });
+    assert.equal(attempt.error, null, attempt.error?.message);
+    assert.equal(attempt.data?.resultCode, 'BUSY', 'Rename must not wait in a cycle with an in-flight project reference.');
+    await writer.execute('COMMIT;');
+    const retry = await client.rpc('manage_taxonomy_lifecycle', { p_kind: 'industryCategory', p_taxonomy_id: taxonomyId, p_action: 'rename', p_name: 'M62 concurrent replacement', p_expected_lifecycle_version: 1, p_actor_admin_id: ADMIN_ID });
+    assert.equal(retry.error, null, retry.error?.message);
+    assert.equal(retry.data?.resultCode, 'REFERENCED_RENAME_BLOCKED');
+    assert.equal(psql(`SELECT name||'|'||lifecycle_version::text FROM public.industry_categories WHERE id='${taxonomyId}'::uuid;`), 'M62 concurrent reference|1');
+  } finally { await writer.execute('ROLLBACK;').catch(() => undefined); await writer.close(); }
+  console.log('PASS: M62 legacy references block rename; retired new assignments fail, retained metadata edits work, reactivation restores assignments and concurrent references prevent rename');
+}
+
+/** Genuine M62 RPC rehearsal. Fixtures are disposable and every mutation is observed through the real RPC. */
+async function verifyGovernedMaintenanceRuntime(client: SupabaseClient): Promise<void> {
+  const layoutPublicId = 'upgrade-maintenance-layout';
+  const recoveryPublicId = 'upgrade-maintenance-recovery';
+  const legacyDeletedPublicId = 'upgrade-maintenance-legacy-deleted';
+  const layoutConfig = `{"templateId":"technical_detail","featuredMedia":"snapshots","sectionOrder":["solution","background","snapshots","video","team","links","citations","accessibilityText"],"hiddenSections":[]}`;
+  psql(`
+INSERT INTO public.projects (public_id, title, slug, summary, background, solution, year, program_id, program_name, status, source_folder, layout_config)
+SELECT '${layoutPublicId}', 'M62 layout fixture', '${layoutPublicId}', 'Synthetic layout summary.', 'Synthetic background.', 'Synthetic solution.', 2026, p.id, p.name, 'draft', 'upgrade-maintenance', '{"templateId":"poster_showcase","featuredMedia":"poster","sectionOrder":["background","solution","snapshots","video","team","links","citations","accessibilityText"],"hiddenSections":[]}'::jsonb
+FROM public.programs p ORDER BY p.name LIMIT 1;
+INSERT INTO public.media_assets (project_id, asset_type, file_name, storage_bucket, storage_path, mime_type, is_public_approved, public_url, public_storage_bucket, public_storage_path)
+SELECT p.id, 'poster_image', 'm62-layout.png', 'project-drafts-private', 'upgrade-maintenance/layout.png', 'image/png', false, NULL, NULL, NULL FROM public.projects p WHERE p.public_id='${layoutPublicId}';
+INSERT INTO public.participant_previews (project_id, token_hash, snapshot, media_snapshot, status, created_by, expires_at)
+SELECT p.id, pg_catalog.encode(extensions.digest('maintenance-layout-fixture-token','sha256'),'hex'), '{}'::jsonb, '[]'::jsonb, 'active', '${ADMIN_ID}'::uuid, pg_catalog.now()+interval '1 day' FROM public.projects p WHERE p.public_id='${layoutPublicId}';
+`);
+  const layoutUpdated = await client.rpc('update_project_layout_if_current', {
+    p_public_id: layoutPublicId,
+    p_expected_updated_at: psql(`SELECT updated_at::text FROM public.projects WHERE public_id='${layoutPublicId}';`),
+    p_layout_config: JSON.parse(layoutConfig),
+    p_recipe_version_id: null,
+    p_admin_id: ADMIN_ID,
+  });
+  assert.equal(layoutUpdated.error, null, layoutUpdated.error?.message);
+  assert.equal(layoutUpdated.data?.resultCode, 'UPDATED');
+  assert.equal(psql(`SELECT status || '|' || (SELECT count(*) FROM public.participant_previews preview WHERE preview.project_id=project.id AND preview.status='revoked')::text FROM public.projects project WHERE project.public_id='${layoutPublicId}';`), 'draft|1');
+  const layoutSame = await client.rpc('update_project_layout_if_current', {
+    p_public_id: layoutPublicId,
+    p_expected_updated_at: layoutUpdated.data?.updatedAt,
+    p_layout_config: JSON.parse(layoutConfig), p_recipe_version_id: null, p_admin_id: ADMIN_ID,
+  });
+  assert.equal(layoutSame.error, null, layoutSame.error?.message);
+  assert.equal(layoutSame.data?.resultCode, 'UNCHANGED');
+  assert.equal(psql(`SELECT storage_path FROM public.media_assets media JOIN public.projects project ON project.id=media.project_id WHERE project.public_id='${layoutPublicId}';`), 'upgrade-maintenance/layout.png');
+
+  psql(`
+INSERT INTO public.projects (public_id, title, slug, summary, year, status, source_folder, layout_config)
+VALUES ('${recoveryPublicId}', 'M62 recovery fixture', '${recoveryPublicId}', 'Synthetic recovery summary.', 2026, 'draft', 'upgrade-maintenance', '{"templateId":"poster_showcase","featuredMedia":"poster","sectionOrder":["background","solution","snapshots","video","team","links","citations","accessibilityText"],"hiddenSections":[]}'::jsonb);
+INSERT INTO public.media_assets (project_id, asset_type, file_name, storage_bucket, storage_path, mime_type, is_public_approved, public_url, public_storage_bucket, public_storage_path)
+SELECT p.id, 'poster_image', 'm62-recovery.png', 'project-drafts-private', 'upgrade-maintenance/recovery.png', 'image/png', true, 'https://synthetic.invalid/m62-recovery.png', 'project-public-assets', 'upgrade-maintenance/recovery.png' FROM public.projects p WHERE p.public_id='${recoveryPublicId}';
+INSERT INTO public.participant_previews (project_id, token_hash, snapshot, media_snapshot, status, created_by, expires_at)
+SELECT p.id, pg_catalog.encode(extensions.digest('maintenance-recovery-fixture-token','sha256'),'hex'), '{}'::jsonb, '[]'::jsonb, 'active', '${ADMIN_ID}'::uuid, pg_catalog.now()+interval '1 day' FROM public.projects p WHERE p.public_id='${recoveryPublicId}';
+`);
+  const deleted = await client.rpc('soft_delete_project_if_current', { p_public_id: recoveryPublicId, p_expected_updated_at: psql(`SELECT updated_at::text FROM public.projects WHERE public_id='${recoveryPublicId}';`), p_admin_id: ADMIN_ID });
+  assert.equal(deleted.error, null, deleted.error?.message);
+  assert.equal(deleted.data?.resultCode, 'DELETED');
+  verifyMaintenanceRecoveryNegatives(recoveryPublicId);
+  const recovery = await client.rpc('recover_deleted_project_if_current', { p_public_id: recoveryPublicId, p_expected_updated_at: psql(`SELECT updated_at::text FROM public.projects WHERE public_id='${recoveryPublicId}';`), p_expected_deleted_at: deleted.data?.deletedAt, p_admin_id: ADMIN_ID });
+  assert.equal(recovery.error, null, recovery.error?.message);
+  assert.equal(recovery.data?.resultCode, 'RECOVERED');
+  assert.equal(psql(`SELECT status || '|' || (deleted_at IS NULL)::text || '|' || (SELECT count(*) FROM media_assets media WHERE media.project_id=project.id AND media.is_public_approved=false AND media.public_url IS NULL)::text || '|' || (SELECT count(*) FROM participant_previews preview WHERE preview.project_id=project.id AND preview.status='revoked')::text FROM projects project WHERE public_id='${recoveryPublicId}';`), 'draft|true|1|1');
+  assert.equal(psql(`SELECT count(*)::text FROM approval_records audit JOIN projects project ON project.id=audit.project_id WHERE project.public_id='${recoveryPublicId}' AND audit.action_taken='project_recovery';`), '1');
+  const already = await client.rpc('recover_deleted_project_if_current', { p_public_id: recoveryPublicId, p_expected_updated_at: recovery.data?.updatedAt, p_expected_deleted_at: deleted.data?.deletedAt, p_admin_id: ADMIN_ID });
+  assert.equal(already.error, null, already.error?.message);
+  assert.equal(already.data?.resultCode, 'ALREADY_RECOVERED');
+
+  psql(`INSERT INTO public.projects (public_id, title, slug, summary, year, status, source_folder, deleted_at) VALUES ('${legacyDeletedPublicId}', 'M62 legacy deleted row', '${legacyDeletedPublicId}', 'Synthetic legacy tombstone.', 2026, 'deleted', 'upgrade-maintenance', pg_catalog.now());`);
+  const legacy = await client.rpc('recover_deleted_project_if_current', { p_public_id: legacyDeletedPublicId, p_expected_updated_at: psql(`SELECT updated_at::text FROM projects WHERE public_id='${legacyDeletedPublicId}';`), p_expected_deleted_at: psql(`SELECT deleted_at::text FROM projects WHERE public_id='${legacyDeletedPublicId}';`), p_admin_id: ADMIN_ID });
+  assert.equal(legacy.error, null, legacy.error?.message);
+  assert.equal(legacy.data?.resultCode, 'RECOVERY_EVIDENCE_REQUIRED');
+
+  const deletedList = await client.rpc('list_deleted_projects', { p_admin_id: ADMIN_ID, p_page: 1, p_page_size: 20, p_search: 'upgrade-maintenance' });
+  assert.equal(deletedList.error, null, deletedList.error?.message);
+  assert.ok(Array.isArray(deletedList.data?.items));
+  const deletedDetail = await client.rpc('get_deleted_project_detail', { p_public_id: legacyDeletedPublicId, p_admin_id: ADMIN_ID });
+  assert.equal(deletedDetail.error, null, deletedDetail.error?.message);
+  assert.equal(deletedDetail.data?.resultCode, 'FOUND');
+  const taxonomyId = psql("SELECT gen_random_uuid()::text;");
+  psql(`INSERT INTO public.industry_categories(id, name) VALUES ('${taxonomyId}', 'M62 Lifecycle Synthetic');`);
+  for (const [action, expected, code] of [['retire', 1, 'RETIRED'], ['reactivate', 2, 'REACTIVATED'], ['rename', 3, 'RENAMED'] as const]) {
+    const result = await client.rpc('manage_taxonomy_lifecycle', { p_kind: 'industryCategory', p_taxonomy_id: taxonomyId, p_action: action, p_name: action === 'rename' ? 'M62 Lifecycle Corrected' : null, p_expected_lifecycle_version: expected, p_actor_admin_id: ADMIN_ID });
+    assert.equal(result.error, null, result.error?.message); assert.equal(result.data?.resultCode, code);
+  }
+  assert.equal(psql(`SELECT count(*)::text FROM public.taxonomy_lifecycle_audit_events WHERE taxonomy_id='${taxonomyId}'::uuid;`), '3');
+  const unauthorized = await client.rpc('manage_taxonomy_lifecycle', { p_kind: 'industryCategory', p_taxonomy_id: taxonomyId, p_action: 'retire', p_name: null, p_expected_lifecycle_version: 4, p_actor_admin_id: '3f000000-0000-0000-8000-000000000061' });
+  assert.equal(unauthorized.error, null, unauthorized.error?.message);
+  assert.equal(unauthorized.data?.resultCode, 'PERMISSION_DENIED');
+  const raceVersion = psql(`SELECT updated_at::text FROM public.projects WHERE public_id='${layoutPublicId}';`);
+  const request = { p_public_id: layoutPublicId, p_expected_updated_at: raceVersion, p_admin_id: ADMIN_ID, p_recipe_version_id: null };
+  const invalidLayout = await client.rpc('update_project_layout_if_current', { ...request, p_layout_config: { ...JSON.parse(layoutConfig), templateId: null } });
+  assert.equal(invalidLayout.error, null, invalidLayout.error?.message);
+  assert.notEqual(invalidLayout.data?.resultCode, 'UPDATED', 'Null template must not authorize a layout write.');
+  const racers = await Promise.all(['none','video'].map(featuredMedia => client.rpc('update_project_layout_if_current', { ...request, p_layout_config: { ...JSON.parse(layoutConfig), featuredMedia } })));
+  for (const racer of racers) assert.equal(racer.error, null, racer.error?.message);
+  assert.deepEqual(racers.map(racer => racer.data?.resultCode).sort(), ['STALE_VERSION','UPDATED'], 'Two writes of the same observed revision must not both succeed.');
+  console.log('PASS: M62 layout native concurrent compare-and-set accepts one winner and refuses stale contender');
+  await verifyMaintenanceReviewRegressions(client);
+  await verifyPreviouslyPublishedRecoveryRuntime(client);
+  console.log('PASS: M62 runtime covers draft layout CAS/preview revocation, retained-media recovery, exact audit provenance, legacy tombstone refusal, deleted reads/detail, taxonomy lifecycle/CAS and non-admin refusal');
+}
+
 function softDeleteCode(publicId: string, expectedUpdatedAtSql: string, actorId = ADMIN_ID): string {
   return psql(
     `SELECT public.soft_delete_project_if_current('${publicId}', ${expectedUpdatedAtSql}, '${actorId}'::uuid)->>'resultCode';`,
@@ -5438,6 +5824,20 @@ async function verifyUpgrade(workdir: string, networkId: string): Promise<void> 
   await assertStorageUnchanged(storageClient, baseline, 'Migration 0061');
   await verifyGovernedSoftDeleteRuntime(storageClient);
 
+  const current61Storage: BaselineEvidence = {
+    ...baseline,
+    storageObjects: await readStorageEvidenceAfterTransientFailure(storageClient, storageInventory()),
+    storageRows: tableFingerprint('storage.objects'),
+  };
+  const current61Tables = fingerprintTables(CURRENT_58_TABLES);
+  const current61TaxonomyRows = Object.fromEntries(['programs','disciplines','industry_categories'].map(table => [table, psql(`SELECT COALESCE(jsonb_agg(to_jsonb(entry) ORDER BY id),'[]'::jsonb)::text FROM public.${table} entry;`)]));
+  applyRelease(workdir, networkId, 62);
+  assertAfter62(current61Tables, current61TaxonomyRows);
+  await assertStorageUnchanged(storageClient, current61Storage, 'Migration 0062');
+  await waitForMaintenanceSchema(storageClient);
+  await verifyGovernedMaintenanceRuntime(storageClient);
+  await verifyAssistiveV4Compatibility(storageClient);
+
   const applied = appliedMigrations();
   assert.equal(applied.length, RELEASE_MIGRATION_COUNT, 'The upgraded head is not the full release migration set.');
   assert.deepEqual(applied, repositoryMigrationVersions(), 'The upgraded history does not match the repository manifest.');
@@ -5484,7 +5884,7 @@ async function main(): Promise<void> {
     startAttempted = true;
     runSupabase('start', workdir, networkId);
     await verifyUpgrade(workdir, networkId);
-    console.log('PASS: staging migration 0048 -> 0061 upgrade rehearsal');
+  console.log('PASS: staging migration 0048 -> 0062 upgrade rehearsal');
     console.log('HOSTED_SYSTEMS_CONTACTED = NO');
     exitCode = 0;
   } catch (error) {

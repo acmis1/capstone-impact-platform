@@ -369,7 +369,7 @@ jobs:
       - name: Verify sixty-one migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 61
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 62
 
       - name: Verify exact Gate 4 schema evidence from the migrated Local catalog
         run: npm run check:gate4-schema-evidence:local --workspace=apps/admin-cms -- --local-self-check

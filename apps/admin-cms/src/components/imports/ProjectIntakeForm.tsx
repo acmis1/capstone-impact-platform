@@ -30,13 +30,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { cn } from '../../lib/utils';
 import { createLayoutConfigFromStock, resolveLayoutConfigByValue, type LayoutTemplateId } from '../../domain/layoutConfig';
 import type { LayoutRecipeVersion } from '../../layout-recipes/layoutRecipes';
+import {
+  createManualIntakeCheckpoint,
+  downloadIntakeProgressCheckpoint,
+  MAX_INTAKE_CHECKPOINT_BYTES,
+  parseIntakeProgressCheckpoint,
+} from '../ui/intake-progress-checkpoint';
+import { useUnsavedWorkGuard } from '../ui/unsaved-work';
 
 export interface ProjectIntakeFormProps {
   onPackageReady: (pkg: MaterializedPackageFiles) => Promise<void>;
   disabled?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectIntakeFormProps) {
+export function ProjectIntakeForm({ onPackageReady, disabled = false, onDirtyChange }: ProjectIntakeFormProps) {
   const [metadata, setMetadata] = useState<FormIntakeMetadata>(createInitialFormIntakeMetadata());
   const [media, setMedia] = useState<FormIntakeMediaState>(createInitialFormIntakeMediaState());
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -46,11 +54,26 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
   const [layoutRecipes, setLayoutRecipes] = useState<LayoutRecipeVersion[]>([]);
   const [selectedRecipeId, setSelectedRecipeId] = useState('');
   const [recipeLoadState, setRecipeLoadState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [dirty, setDirty] = useState(false);
+  const [checkpointNotice, setCheckpointNotice] = useState<string | null>(null);
+  const [checkpointError, setCheckpointError] = useState<string | null>(null);
 
   const submissionLockRef = useRef<boolean>(false);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
   const posterImageInputRef = useRef<HTMLInputElement>(null);
   const posterPdfInputRef = useRef<HTMLInputElement>(null);
+  const checkpointInputRef = useRef<HTMLInputElement>(null);
+
+  const { requestAction, dialog } = useUnsavedWorkGuard({
+    dirty,
+    onDiscard: () => setDirty(false),
+    guardDocumentNavigation: false,
+  });
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
 
   useEffect(() => {
     let active = true;
@@ -78,6 +101,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
   }, []);
 
   const handleMetadataChange = (field: keyof FormIntakeMetadata, value: string) => {
+    setDirty(true);
     setMetadata((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors((prev) => {
@@ -88,18 +112,29 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
     }
   };
 
-  const handleRecipeSelection = (recipeId: string) => {
+  const applyRecipeSelection = (recipeId: string) => {
     setSelectedRecipeId(recipeId);
     const recipe = layoutRecipes.find((candidate) => candidate.id === recipeId);
-    if (!recipe) return;
-    const resolved = resolveLayoutConfigByValue(recipe.config);
-    setMetadata((current) => ({
-      ...current,
-      templateId: resolved.templateId,
-      featuredMedia: resolved.featuredMedia,
-      sectionOrder: resolved.sectionOrder.join(', '),
-      hiddenSections: resolved.hiddenSections.join(', '),
-    }));
+    if (!recipe) {
+      const stock = createLayoutConfigFromStock('poster_showcase');
+      setMetadata((current) => ({
+        ...current,
+        templateId: stock.templateId,
+        featuredMedia: stock.featuredMedia,
+        sectionOrder: stock.sectionOrder.join(', '),
+        hiddenSections: '',
+      }));
+    } else {
+      const resolved = resolveLayoutConfigByValue(recipe.config);
+      setMetadata((current) => ({
+        ...current,
+        templateId: resolved.templateId,
+        featuredMedia: resolved.featuredMedia,
+        sectionOrder: resolved.sectionOrder.join(', '),
+        hiddenSections: resolved.hiddenSections.join(', '),
+      }));
+    }
+    setDirty(true);
     setErrors((current) => {
       const next = { ...current };
       delete next.layoutConfig;
@@ -107,19 +142,49 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
     });
   };
 
-  const handleStockLayoutChange = (field: 'templateId' | 'featuredMedia', value: string) => {
-    setSelectedRecipeId('');
-    setMetadata((current) => {
-      const templateId = (field === 'templateId' ? value : current.templateId) as LayoutTemplateId;
-      const stock = createLayoutConfigFromStock(templateId);
-      return {
-        ...current,
-        [field]: value,
-        sectionOrder: stock.sectionOrder.join(', '),
-        hiddenSections: '',
-      };
+  const handleRecipeSelection = (recipeId: string, trigger?: HTMLElement | null) => {
+    const isReturningToStock = recipeId === '';
+    requestAction(() => applyRecipeSelection(recipeId), {
+      forceConfirmation: isReturningToStock && selectedRecipeId !== '',
+      trigger,
+      title: isReturningToStock ? 'Return to stock layout?' : 'Apply saved recipe? ',
+      description: isReturningToStock
+        ? 'The saved recipe layout configuration will be replaced with the documented Poster showcase stock configuration.'
+        : 'The current layout configuration will be replaced by the saved recipe values.',
+      confirmLabel: isReturningToStock ? 'Use stock layout' : 'Apply recipe',
     });
+  };
+
+  const applyStockTemplate = (value: string) => {
+    const stock = createLayoutConfigFromStock(value as LayoutTemplateId);
+    setSelectedRecipeId('');
+    setMetadata((current) => ({
+      ...current,
+      templateId: stock.templateId,
+      featuredMedia: stock.featuredMedia,
+      sectionOrder: stock.sectionOrder.join(', '),
+      hiddenSections: '',
+    }));
+    setDirty(true);
     if (errors.layoutConfig) setErrors((current) => ({ ...current, layoutConfig: '' }));
+  };
+
+  const handleStockLayoutChange = (field: 'templateId' | 'featuredMedia', value: string, trigger?: HTMLElement | null) => {
+    if (field === 'featuredMedia') {
+      setSelectedRecipeId('');
+      setMetadata((current) => ({ ...current, featuredMedia: value }));
+      setDirty(true);
+      if (errors.layoutConfig) setErrors((current) => ({ ...current, layoutConfig: '' }));
+      return;
+    }
+    if (value === metadata.templateId) return;
+    requestAction(() => applyStockTemplate(value), {
+      forceConfirmation: true,
+      trigger,
+      title: 'Reset layout choices?',
+      description: 'Changing the base preset resets featured media, section order, and optional visibility to the documented stock configuration.',
+      confirmLabel: 'Reset layout choices',
+    });
   };
 
   const handlePosterImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -228,6 +293,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
   };
 
   const handleClearGalleryItem = (position: number) => {
+    setDirty(true);
     setMedia((prev) => ({
       ...prev,
       galleryImages: prev.galleryImages.map((g) =>
@@ -246,7 +312,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
     });
   };
 
-  const handleResetForm = () => {
+  const resetFormState = () => {
     if (disabled || isMaterializing) return;
     setMetadata(createInitialFormIntakeMetadata());
     setMedia(createInitialFormIntakeMediaState());
@@ -254,8 +320,76 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
     setSubmissionError(null);
     setVisibleGalleryCount(1);
     setSelectedRecipeId('');
+    setDirty(false);
+    setCheckpointNotice(null);
+    setCheckpointError(null);
     if (posterImageInputRef.current) posterImageInputRef.current.value = '';
     if (posterPdfInputRef.current) posterPdfInputRef.current.value = '';
+  };
+
+  const handleResetForm = (trigger?: HTMLElement | null) => {
+    requestAction(resetFormState, {
+      trigger,
+      description: 'All manual project information and selected files will be cleared.',
+      confirmLabel: 'Reset form',
+    });
+  };
+
+  const handleExportCheckpoint = () => {
+    try {
+      downloadIntakeProgressCheckpoint(
+        createManualIntakeCheckpoint(metadata, media, visibleGalleryCount),
+        'project-intake-progress.json',
+      );
+      setCheckpointError(null);
+      setCheckpointNotice('Checkpoint downloaded. It contains project information but no file bytes, credentials, validation results, or committed actions.');
+    } catch (error) {
+      setCheckpointError(error instanceof Error ? error.message : 'The checkpoint could not be downloaded.');
+    }
+  };
+
+  const applyRestoredCheckpoint = (checkpoint: Extract<ReturnType<typeof parseIntakeProgressCheckpoint>, { kind: 'manual-form' }>) => {
+    setMetadata({ ...createInitialFormIntakeMetadata(), ...checkpoint.metadata });
+    setMedia(() => {
+      const initial = createInitialFormIntakeMediaState();
+      return {
+        ...initial,
+        galleryImages: initial.galleryImages.map((item) => {
+          const saved = checkpoint.media.galleryImages.find((candidate) => candidate.position === item.position);
+          if (!saved) return item;
+          return { ...item, altText: saved.altText, contentKind: saved.contentKind, fullText: saved.fullText };
+        }),
+      };
+    });
+    setVisibleGalleryCount(checkpoint.visibleGalleryCount);
+    setSelectedRecipeId('');
+    setErrors({});
+    setSubmissionError(null);
+    setDirty(true);
+    setCheckpointError(null);
+    setCheckpointNotice('Checkpoint restored. Reselect poster/snapshot files and re-enter contact, team-member, supervisor and partner details omitted for privacy; then run a fresh project check before saving. Previous validation and ready status were not restored.');
+    if (posterImageInputRef.current) posterImageInputRef.current.value = '';
+    if (posterPdfInputRef.current) posterPdfInputRef.current.value = '';
+  };
+
+  const handleCheckpointRestore = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      if (file.size > MAX_INTAKE_CHECKPOINT_BYTES) throw new Error('The checkpoint file is too large.');
+      const checkpoint = parseIntakeProgressCheckpoint(await file.text());
+      if (checkpoint.kind !== 'manual-form') throw new Error('Choose a manual-entry checkpoint for this form.');
+      requestAction(() => applyRestoredCheckpoint(checkpoint), {
+        forceConfirmation: dirty,
+        trigger: checkpointInputRef.current,
+        title: 'Replace current intake draft?',
+        description: 'Restoring this checkpoint replaces the current manual-entry draft. Files, validation results, and any committed metadata or media actions are not restored.',
+        confirmLabel: 'Restore checkpoint',
+      });
+    } catch (error) {
+      setCheckpointError(error instanceof Error ? error.message : 'The checkpoint could not be restored.');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -309,7 +443,12 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
   const isFieldDisabled = disabled || isMaterializing;
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
+    <form
+      onSubmit={handleSubmit}
+      onChange={(event) => { if (!event.defaultPrevented) setDirty(true); }}
+      noValidate
+      className="flex flex-col gap-6"
+    >
       {/* Top Submission Error Alert */}
       {submissionError && (
         <Alert
@@ -444,7 +583,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="background">Project Background (Optional)</Label>
+              <Label htmlFor="background">Background (Optional project background / motivation)</Label>
               <Textarea
                 id="background"
                 value={metadata.background}
@@ -456,7 +595,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="solution">Solution / Impact (Optional)</Label>
+              <Label htmlFor="solution">Solution (Optional solution / impact)</Label>
               <Textarea
                 id="solution"
                 value={metadata.solution}
@@ -665,7 +804,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
             <select
               id="layoutRecipe"
               value={selectedRecipeId}
-              onChange={(event) => handleRecipeSelection(event.target.value)}
+              onChange={(event) => { event.preventDefault(); event.stopPropagation(); handleRecipeSelection(event.target.value, event.currentTarget); }}
               disabled={isFieldDisabled || recipeLoadState !== 'ready'}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -686,7 +825,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
               <select
                 id="templateId"
                 value={metadata.templateId}
-                onChange={(e) => handleStockLayoutChange('templateId', e.target.value)}
+                onChange={(e) => { e.preventDefault(); e.stopPropagation(); handleStockLayoutChange('templateId', e.target.value, e.currentTarget); }}
                 disabled={isFieldDisabled}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -701,7 +840,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
               <select
                 id="featuredMedia"
                 value={metadata.featuredMedia}
-                onChange={(e) => handleStockLayoutChange('featuredMedia', e.target.value)}
+                onChange={(e) => handleStockLayoutChange('featuredMedia', e.target.value, e.currentTarget)}
                 disabled={isFieldDisabled}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -716,6 +855,8 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
           <div className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
             <p><span className="font-medium text-foreground">Section order:</span> {metadata.sectionOrder}</p>
             <p className="mt-1"><span className="font-medium text-foreground">Hidden optional sections:</span> {metadata.hiddenSections || 'None'}</p>
+            <p className="mt-2">Snapshot gallery, Team &amp; group, and Poster accessibility description are fixed and cannot be hidden. Required title, summary, metadata, and poster regions remain fixed; optional fields may be absent.</p>
+            <p className="mt-1">Featuring video or the snapshot gallery pulls it out of ordinary order. The poster transcript and poster accessibility description are distinct.</p>
           </div>
           {errors.layoutConfig && (
             <p id="err-layoutConfig" className="text-xs text-destructive font-medium" role="alert">{errors.layoutConfig}</p>
@@ -809,7 +950,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center">
               <Label htmlFor="posterText" isRequired>
-                Poster Full Text
+                Poster Full Text (full transcript)
               </Label>
               <span className="text-xs text-muted-foreground">
                 {(metadata.posterText || '').trim().length} / {ACCESSIBLE_CONTENT_LIMITS.posterText.toLocaleString()}
@@ -836,7 +977,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center">
               <Label htmlFor="accessibilityText" isRequired>
-                Accessibility Description (Alt text)
+                Poster accessibility description (Alt text)
               </Label>
               <span className="text-xs text-muted-foreground">
                 {(metadata.accessibilityText || '').trim().length} / {ACCESSIBLE_CONTENT_LIMITS.accessibilityText.toLocaleString()}
@@ -1120,7 +1261,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setVisibleGalleryCount((prev) => Math.min(prev + 1, MAX_GALLERY_IMAGES))}
+                onClick={() => { setDirty(true); setVisibleGalleryCount((prev) => Math.min(prev + 1, MAX_GALLERY_IMAGES)); }}
                 disabled={isFieldDisabled}
               >
                 <Plus className="h-4 w-4 mr-1.5" aria-hidden="true" />
@@ -1131,12 +1272,28 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
         </CardContent>
       </Card>
 
+      <Card className="border-border-structural">
+        <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
+          <CardTitle className="text-sm font-semibold text-foreground">Local progress checkpoint</CardTitle>
+          <CardDescription className="text-xs text-muted-foreground">
+            Explicit download only. The bounded JSON contains project information and selection names, never contains file bytes, credentials, validation status, or committed actions.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-3 p-4 sm:px-6">
+          <Button type="button" variant="outline" onClick={handleExportCheckpoint} disabled={isFieldDisabled}>Download checkpoint</Button>
+          <Button type="button" variant="outline" onClick={() => checkpointInputRef.current?.click()} disabled={isFieldDisabled}>Restore checkpoint</Button>
+          <input ref={checkpointInputRef} type="file" accept="application/json,.json" onChange={handleCheckpointRestore} className="hidden" aria-label="Restore intake checkpoint file" />
+          {checkpointNotice && <p className="basis-full text-xs text-muted-foreground" role="status">{checkpointNotice}</p>}
+          {checkpointError && <p className="basis-full text-xs font-medium text-destructive" role="alert">{checkpointError}</p>}
+        </CardContent>
+      </Card>
+
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
         <Button
           type="button"
           variant="outline"
-          onClick={handleResetForm}
+          onClick={(event) => handleResetForm(event.currentTarget)}
           disabled={isFieldDisabled}
         >
           <RotateCcw className="h-4 w-4 mr-1.5" aria-hidden="true" />
@@ -1152,6 +1309,7 @@ export function ProjectIntakeForm({ onPackageReady, disabled = false }: ProjectI
           {isMaterializing ? 'Checking project…' : 'Check project and continue'}
         </Button>
       </div>
+      {dialog}
     </form>
   );
 }

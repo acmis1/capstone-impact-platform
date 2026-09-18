@@ -25,11 +25,17 @@ function cleanedLine(value: string): string | null {
 }
 
 function canJoin(previous: Phase1BoundingBox | null, next: Phase1BoundingBox | null): boolean {
-  if (previous === null || next === null) return true;
+  if (previous === null || next === null) return false;
   if (previous.unit !== next.unit || next.top < previous.top) return false;
   const previousHeight = Math.max(1, previous.bottom - previous.top);
   const nextHeight = Math.max(1, next.bottom - next.top);
-  return next.top - previous.bottom <= 2 * Math.min(previousHeight, nextHeight);
+  const smallest = Math.min(previousHeight, nextHeight);
+  const largest = Math.max(previousHeight, nextHeight);
+  // A wrapped heading has similar line scale and close vertical spacing. A small subtitle,
+  // institutional header or body paragraph must not inflate a title merely by being nearby.
+  if (largest / smallest > 1.5) return false;
+  if (Math.abs(previous.left - next.left) > 2 * largest) return false;
+  return next.top - previous.bottom <= 0.8 * smallest;
 }
 
 function combinedBox(boxes: Array<Phase1BoundingBox | null>): Phase1BoundingBox | null {
@@ -75,7 +81,10 @@ export function extractTitleCandidates(extraction: Phase1ExtractionResult): Titl
         boundingBox: box,
         blockIndexes: group.map((item) => item.index),
         firstIndex: block.index,
-        geometryScore: geometryScore(box) + (length - 1) * 2,
+        // Use average line prominence, never the union rectangle height (which rewards
+        // unrelated body lines and whitespace). Keep the union box solely as traceable evidence.
+        geometryScore: group.reduce((score, item) => score + geometryScore(item.bounding_box), 0) / length
+          + (length - 1) * 2,
       });
     }
   }

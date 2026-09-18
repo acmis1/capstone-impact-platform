@@ -873,8 +873,10 @@ function harnessDriver() {
           ? 'FEED_PARSE_FAILED'
           : 'FEED_RESPONSE_INVALID';
       check(Boolean(document.querySelector('.capstone-inline-error')), `${scenario} renders a bounded unavailable state`);
-      check(document.body.textContent.includes('Projects could not be loaded'), `${scenario} exposes a safe public error message`);
-      check(document.body.textContent.includes(expectedReason), `${scenario} exposes only its bounded public reason code`);
+      check(document.body.textContent.includes('Projects are temporarily unavailable'), `${scenario} exposes a safe public error message`);
+      check(document.querySelector('.capstone-retry-button')?.textContent === 'Retry', `${scenario} offers explicit visitor retry`);
+      check(!document.querySelector('.capstone-inline-error').textContent.includes(expectedReason), `${scenario} keeps diagnostic code out of visitor content`);
+      check(window.__CAPSTONE_HARNESS_DIAGNOSTICS.some(value => value.includes(expectedReason)), `${scenario} retains bounded diagnostic evidence`);
       check(!document.body.textContent.includes(window.__CAPSTONE_HARNESS_SECRET), `${scenario} does not disclose synthetic exception text`);
       check(!document.documentElement.innerHTML.includes(window.__CAPSTONE_HARNESS_SECRET), `${scenario} does not disclose malformed response excerpts in HTML`);
       finish();
@@ -978,7 +980,8 @@ function harnessDriver() {
 
     if (scenario === 'unsafe-record') {
       check(Boolean(document.querySelector('.capstone-inline-error')), 'unsafe record rejects the whole feed before rendering');
-      check(document.body.textContent.includes('FEED_RECORD_INVALID'), 'unsafe record exposes the bounded record-invalid reason');
+      check(!document.querySelector('.capstone-inline-error').textContent.includes('FEED_RECORD_INVALID'), 'unsafe record keeps internal code out of visitor text');
+      check(window.__CAPSTONE_HARNESS_DIAGNOSTICS.some(value => value.includes('FEED_RECORD_INVALID')), 'unsafe record retains bounded diagnostic evidence');
       check(!document.documentElement.innerHTML.includes(window.__CAPSTONE_HARNESS_SECRET), 'unsafe record marker never reaches generated HTML');
       check(!document.querySelector('[href^="javascript:"], [href^="data:"], [href^="vbscript:"], [src^="javascript:"], [src^="data:"]'), 'unsafe record creates no active unsafe URL');
       check(window.location.pathname === '/', 'unsafe record cannot trigger detail navigation');
@@ -1423,6 +1426,9 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases, runt
     window.__CAPSTONE_HARNESS_ERRORS = [];
     window.__CAPSTONE_HARNESS_WINDOW_ERRORS = [];
     window.__CAPSTONE_HARNESS_REJECTIONS = [];
+    window.__CAPSTONE_HARNESS_DIAGNOSTICS = [];
+    const originalConsoleWarn = console.warn.bind(console);
+    console.warn = (...args) => { window.__CAPSTONE_HARNESS_DIAGNOSTICS.push(args.map(String).join(' ')); originalConsoleWarn(...args); };
     const originalConsoleError = console.error.bind(console);
     console.error = (...args) => {
       window.__CAPSTONE_HARNESS_ERRORS.push(args.map(value => value instanceof Error ? value.message : String(value)).join(' '));

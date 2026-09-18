@@ -73,6 +73,9 @@
         discipline: 'All',
         industry: 'All'
     };
+    const FILTER_QUERY_KEYS = ['search', 'year', 'program', 'discipline', 'industry'];
+    const MAX_FILTER_VALUE_LENGTH = 240;
+    let feedLoadInFlight = false;
 
     // --- LIGHTBOX STATE ---
     let currentSnapshotIndex = 0;
@@ -98,6 +101,12 @@
         return cleaned.replace(/\s+/g, ' ').trim();
     };
 
+    const normalizeFilterValue = (rawValue) => {
+        if (typeof rawValue !== 'string') return '';
+        const normalized = rawValue.normalize('NFC').replace(/[\x00-\x1F\x7F]/g, '').trim();
+        return normalized.length <= MAX_FILTER_VALUE_LENGTH ? normalized : '';
+    };
+
     const normalizeSearchField = (value) => String(value || '')
         .normalize('NFC')
         .replace(/[\x00-\x1F\x7F]/g, '')
@@ -110,6 +119,15 @@
         const params = new URLSearchParams(window.location.search);
         return params.get(name);
     };
+
+    const readFiltersFromUrl = () => ({
+        search: normalizeSearchInput(getQueryParam('search')),
+        year: normalizeFilterValue(getQueryParam('year')) || 'All',
+        program: normalizeFilterValue(getQueryParam('program')) || 'All',
+        discipline: normalizeFilterValue(getQueryParam('discipline')) || 'All',
+        industry: normalizeFilterValue(getQueryParam('industry')) || 'All'
+    });
+
 
     // Duda only needs these preview/device flags to keep responsive route state stable.
     const DUDA_DEVICE_VALUES = new Set(['desktop', 'tablet', 'mobile']);
@@ -125,9 +143,25 @@
         return navigationParams;
     };
 
+    const getFilterNavigationParams = (filters = currentFilters) => {
+        const params = new URLSearchParams();
+        const search = normalizeSearchInput(filters.search);
+        if (search) params.set('search', search);
+
+        FILTER_QUERY_KEYS.slice(1).forEach((key) => {
+            const value = normalizeFilterValue(filters[key]);
+            if (value && value !== 'All') params.set(key, value);
+        });
+
+        return params;
+    };
+
     const buildDudaNavigationUrl = (path, projectId = null) => {
         const params = getDudaNavigationParams();
-        if (projectId !== null) params.set('id', String(projectId));
+        const filterParams = getFilterNavigationParams();
+        filterParams.forEach((value, key) => params.set(key, value));
+        const numericId = projectId === null ? null : parseProjectId(projectId);
+        if (numericId !== null) params.set('id', String(numericId));
         const query = params.toString();
         return `${path}${query ? `?${query}` : ''}`;
     };
@@ -144,8 +178,33 @@
         return buildDudaNavigationUrl(path, projectId);
     };
 
+    const readSelectedProject = () => {
+        try {
+            return window.localStorage?.getItem('selectedProjectId') || null;
+        } catch (error) {
+            return null;
+        }
+    };
+
     const saveSelectedProject = (id) => {
-        localStorage.setItem('selectedProjectId', id);
+        try {
+            window.localStorage?.setItem('selectedProjectId', String(id));
+        } catch (error) {
+            console.warn('[Showcase] SELECTED_PROJECT_STORAGE_UNAVAILABLE');
+        }
+    };
+
+    const removeSelectedProject = () => {
+        try {
+            window.localStorage?.removeItem('selectedProjectId');
+        } catch (error) {
+            console.warn('[Showcase] SELECTED_PROJECT_STORAGE_UNAVAILABLE');
+        }
+    };
+
+    const getRequestedProjectId = () => {
+        const queryId = getQueryParam('id');
+        return queryId !== null ? queryId : readSelectedProject();
     };
 
     const isMp4 = (url) => {
@@ -582,20 +641,24 @@
         const industries = new Set();
 
         allProjects.forEach(p => {
-            if (p.year) years.add(String(p.year).trim());
+            const year = normalizeFilterValue(p.year);
+            if (year) years.add(year);
 
-            const prog = String(p.program || p.studyProgram || '').trim();
+            const prog = normalizeFilterValue(p.program || p.studyProgram);
             if (prog) programs.add(prog);
 
             if (Array.isArray(p.disciplines)) {
                 p.disciplines.forEach(d => {
-                    if (d) disciplines.add(String(d).trim());
+                    const normalized = normalizeFilterValue(d);
+                    if (normalized) disciplines.add(normalized);
                 });
             } else if (p.discipline) {
-                disciplines.add(String(p.discipline).trim());
+                const normalized = normalizeFilterValue(p.discipline);
+                if (normalized) disciplines.add(normalized);
             }
 
-            if (p.industry) industries.add(String(p.industry).trim());
+            const industry = normalizeFilterValue(p.industry);
+            if (industry) industries.add(industry);
         });
 
         return {
@@ -604,6 +667,69 @@
             disciplines: ['All', ...Array.from(disciplines).sort()],
             industries: ['All', ...Array.from(industries).sort()]
         };
+    };
+
+    const validateCurrentFilters = (filters) => {
+        const options = getFilterOptions();
+        const optionKeyByFilter = {
+            year: 'years',
+            program: 'programs',
+            discipline: 'disciplines',
+            industry: 'industries'
+        };
+        const validValue = (key) => {
+            const value = normalizeFilterValue(filters[key]);
+            return options[optionKeyByFilter[key]].includes(value) ? value : 'All';
+        };
+
+        return {
+            search: normalizeSearchInput(filters.search),
+            year: validValue('year'),
+            program: validValue('program'),
+            discipline: validValue('discipline'),
+            industry: validValue('industry')
+        };
+    };
+
+    const replaceUrlWithAllowedState = (includeProjectId = false) => {
+        if (!window.history || typeof window.history.replaceState !== 'function') return;
+
+        const params = getDudaNavigationParams();
+        getFilterNavigationParams().forEach((value, key) => params.set(key, value));
+        if (includeProjectId) {
+            const rawId = getQueryParam('id');
+            const numericId = parseProjectId(rawId);
+            // Keep an invalid explicit ID invalid: never replace it with a remembered project.
+            if (rawId !== null) params.set('id', numericId === null ? 'invalid' : String(numericId));
+        }
+
+        const query = params.toString();
+        window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+    };
+
+    const updateFilterControls = () => {
+        const input = document.getElementById('filter-search');
+        if (input) {
+            const active = document.activeElement === input;
+            const start = active ? input.selectionStart : null;
+            const end = active ? input.selectionEnd : null;
+            input.value = currentFilters.search;
+            if (active && typeof start === 'number' && typeof end === 'number') {
+                input.setSelectionRange(Math.min(start, input.value.length), Math.min(end, input.value.length));
+            }
+        }
+        FILTER_QUERY_KEYS.slice(1).forEach((key) => {
+            const select = document.getElementById(`filter-${key}`);
+            if (select) select.value = currentFilters[key];
+        });
+    };
+
+    const hasActiveFilters = () => FILTER_QUERY_KEYS.some((key) => currentFilters[key] && currentFilters[key] !== 'All');
+
+    const syncFilterUrl = () => {
+        replaceUrlWithAllowedState(false);
+        const clearButton = document.getElementById('clear-capstone-filters');
+        if (clearButton) clearButton.disabled = !hasActiveFilters();
     };
 
     // --- CORE LOGIC ---
@@ -622,12 +748,23 @@
         return null;
     };
 
+    const renderFeedUnavailable = (target) => {
+        if (!target) return;
+        target.innerHTML = `
+            <div class="capstone-inline-error" role="alert">
+                <strong>Projects are temporarily unavailable.</strong>
+                <p>Please try again in a moment.</p>
+                <button type="button" class="capstone-retry-button" onclick="retryShowcase()">Retry</button>
+            </div>
+        `;
+    };
+
     const initShowcase = async (retryCount = 0) => {
         const root = document.getElementById('capstone-showcase-root');
         const detailContainer = document.getElementById('project-detail');
 
         const isListingPage = !!root;
-        const isDetailPage = !!(detailContainer && (getQueryParam('id') || localStorage.getItem('selectedProjectId')));
+        const isDetailPage = !!detailContainer;
 
         if (!isListingPage && !isDetailPage) {
             if (retryCount < 16) { // Retry every 300ms for up to 4.8 seconds
@@ -638,22 +775,20 @@
             return;
         }
 
+        if (feedLoadInFlight) return;
+        feedLoadInFlight = true;
+
         console.log(`[Showcase] Capstone script initializing... (Page: ${isDetailPage ? 'Detail' : 'Listing'}, Retry: ${retryCount})`);
 
         if (!CAPSTONE_FEED_URL) {
-            const errorHtml = `
-                <div class="capstone-inline-error" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 25px; border-radius: 12px; border: 1px solid #ef4444; text-align: center; margin: 30px auto; max-width: 600px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6;">
-                    <strong style="font-size: 1.15rem; display: block; margin-bottom: 5px; color: #f87171;">Projects could not be loaded.</strong>
-                    Please check the public feed connection.<br>
-                    <small style="opacity: 0.75; font-size: 0.8em; display: block; margin-top: 10px; color: #fca5a5;">Reason: FEED_CONFIGURATION_INVALID</small>
-                </div>
-            `;
+            console.warn('[Showcase] FEED_CONFIGURATION_INVALID');
             if (isDetailPage && detailContainer) {
-                detailContainer.innerHTML = errorHtml;
+                renderFeedUnavailable(detailContainer);
             } else if (isListingPage) {
                 const grid = ensureListingContainers() || root;
-                grid.innerHTML = errorHtml;
+                renderFeedUnavailable(grid);
             }
+            feedLoadInFlight = false;
             return;
         }
 
@@ -680,9 +815,11 @@
             }
             allProjects = normalizeFeedRecords(feed);
             console.log(`[Showcase] Records received: ${allProjects.length}`);
+            currentFilters = validateCurrentFilters(currentFilters);
+            replaceUrlWithAllowedState(isDetailPage);
 
             if (isDetailPage) {
-                const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
+                const projectId = getRequestedProjectId();
                 if (projectId) {
                     showDetail(projectId);
                 } else {
@@ -691,7 +828,7 @@
             } else if (isListingPage) {
                 const grid = ensureListingContainers();
                 if (grid) {
-                    localStorage.removeItem('selectedProjectId');
+                    removeSelectedProject();
                     renderListing();
                 } else {
                     console.error('[Showcase] Listing root found, but grid container could not be created/found');
@@ -702,19 +839,14 @@
                 ? err.publicReason
                 : 'FEED_RESPONSE_INVALID';
             console.warn(`[Showcase] ${publicReason}`);
-            const errorHtml = `
-                <div class="capstone-inline-error" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 25px; border-radius: 12px; border: 1px solid #ef4444; text-align: center; margin: 30px auto; max-width: 600px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6;">
-                    <strong style="font-size: 1.15rem; display: block; margin-bottom: 5px; color: #f87171;">Projects could not be loaded.</strong>
-                    Please check the public feed connection.<br>
-                    <small style="opacity: 0.75; font-size: 0.8em; display: block; margin-top: 10px; color: #fca5a5;">Reason: ${publicReason}</small>
-                </div>
-            `;
             if (isDetailPage && detailContainer) {
-                detailContainer.innerHTML = errorHtml;
+                renderFeedUnavailable(detailContainer);
             } else if (isListingPage) {
                 const grid = ensureListingContainers() || root;
-                grid.innerHTML = errorHtml;
+                renderFeedUnavailable(grid);
             }
+        } finally {
+            feedLoadInFlight = false;
         }
     };
 
@@ -740,7 +872,7 @@
         filtersContainer.innerHTML = `
             <div class="capstone-filter-group">
                 <label for="filter-search">Search projects</label>
-                <input id="filter-search" type="search" maxlength="100" placeholder="Search by title, project ID, partner, or team" value="${escapeHTML(currentFilters.search)}" oninput="handleSearchChange(this.value)">
+                <input id="filter-search" type="search" maxlength="100" placeholder="Search by title, project ID, partner, or team" value="${escapeHTML(currentFilters.search)}" oninput="handleSearchChange(this.value, this)" aria-describedby="capstone-result-count">
             </div>
             <div class="capstone-filter-group">
                 <label for="filter-year">Year</label>
@@ -766,7 +898,22 @@
                     ${options.industries.map(i => `<option value="${escapeHTML(i)}" ${currentFilters.industry === i ? 'selected' : ''}>${escapeHTML(i)}</option>`).join('')}
                 </select>
             </div>
+            <div class="capstone-filter-actions">
+                <p id="capstone-result-count" class="capstone-result-count" role="status" aria-live="polite"></p>
+                <button id="clear-capstone-filters" type="button" class="capstone-clear-button" onclick="clearFilters()" disabled>Clear search and filters</button>
+            </div>
         `;
+    };
+
+    const updateResultStatus = (visibleCount) => {
+        const status = document.getElementById('capstone-result-count');
+        if (status) {
+            status.textContent = visibleCount === 0
+                ? 'No projects match the current search or filters.'
+                : `Showing ${visibleCount} of ${allProjects.length} projects.`;
+        }
+        const clearButton = document.getElementById('clear-capstone-filters');
+        if (clearButton) clearButton.disabled = !hasActiveFilters();
     };
 
     const renderListingCards = () => {
@@ -776,39 +923,41 @@
         const filteredProjects = allProjects.filter(p => {
             const search = normalizeSearchField(currentFilters.search);
             if (search) {
-                // Approved full text of text-bearing gallery images is indexed too: the brief
-                // requires full text versions of image content for search as well as accessibility.
                 const searchableFields = [
                     p.title, p.publicId, p.industryPartner, p.groupName,
+                    p.summary, p.posterText, p.background, p.solution,
+                    ...(Array.isArray(p.teamMembers) ? p.teamMembers : []),
                     ...(Array.isArray(p.snapshotMedia) ? p.snapshotMedia : [])
                         .map(media => media && media.contentKind === "text_bearing" ? media.fullText : "")
                 ];
                 if (!searchableFields.some(field => normalizeSearchField(field).includes(search))) return false;
             }
 
-            if (currentFilters.year !== 'All' && String(p.year) !== currentFilters.year) return false;
+            if (currentFilters.year !== 'All' && normalizeFilterValue(p.year) !== currentFilters.year) return false;
 
             if (currentFilters.program !== 'All') {
-                const prog = String(p.program || p.studyProgram || '').trim();
+                const prog = normalizeFilterValue(p.program || p.studyProgram);
                 if (prog !== currentFilters.program) return false;
             }
 
             if (currentFilters.discipline !== 'All') {
                 if (Array.isArray(p.disciplines)) {
-                    if (!p.disciplines.map(d => String(d).trim()).includes(currentFilters.discipline)) return false;
+                    if (!p.disciplines.map(normalizeFilterValue).includes(currentFilters.discipline)) return false;
                 } else {
-                    const disc = String(p.discipline || '').trim();
+                    const disc = normalizeFilterValue(p.discipline);
                     if (disc !== currentFilters.discipline) return false;
                 }
             }
 
-            if (currentFilters.industry !== 'All' && String(p.industry || '') !== currentFilters.industry) return false;
+            if (currentFilters.industry !== 'All' && normalizeFilterValue(p.industry) !== currentFilters.industry) return false;
 
             return true;
         });
 
+        updateResultStatus(filteredProjects.length);
+
         if (filteredProjects.length === 0) {
-            grid.innerHTML = '<p style="text-align:center; padding: 60px 10px; color: #ffffff; font-size: 1.15rem; width: 100%;">No projects match the current search or filters.</p>';
+            grid.innerHTML = '<p class="capstone-empty-state" role="status">No projects match the current search or filters.</p>';
             return;
         }
 
@@ -830,6 +979,8 @@
                             <button class="capstone-poster-link" type="button" onclick="handleProjectClick(${p.id})" aria-label="View ${escapeHTML(p.title)} project detail">
                                 <img class="capstone-card-image" src="${escapeHTML(p.poster || 'https://via.placeholder.com/400x600?text=No+Poster')}" alt="${escapeHTML(p.title)}" loading="lazy">
                             </button>
+                            <h3 class="capstone-card-title">${escapeHTML(p.title)}</h3>
+                            <p class="capstone-card-context">${escapeHTML(normalizeFilterValue(p.program || p.studyProgram) || 'Program not specified')} · ${escapeHTML(normalizeFilterValue(p.year) || 'Year not specified')}</p>
                             <button class="capstone-card-btn" type="button" onclick="handleProjectClick(${p.id})" aria-label="Learn more about ${escapeHTML(p.title)}">Learn More</button>
                         </div>
                     `).join('')}
@@ -1347,7 +1498,7 @@
     };
 
     const openLightbox = (index, opener = null) => {
-        const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
+        const projectId = getRequestedProjectId();
         const numericId = parseProjectId(projectId);
         const project = numericId === null ? null : allProjects.find(p => p.id === numericId);
         if (!project) return;
@@ -1419,7 +1570,7 @@
     };
 
     const changeSnapshot = (dir) => {
-        const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
+        const projectId = getRequestedProjectId();
         const numericId = parseProjectId(projectId);
         const project = numericId === null ? null : allProjects.find(p => p.id === numericId);
         if (!project) return;
@@ -1460,18 +1611,50 @@
     };
 
     const handleFilterChange = (type, value) => {
-        currentFilters[type] = value;
+        if (!FILTER_QUERY_KEYS.includes(type) || type === 'search') return;
+        currentFilters[type] = validateCurrentFilters({ ...currentFilters, [type]: value })[type];
+        syncFilterUrl();
         renderListingCards();
     };
 
     const handleSearchChange = (value) => {
+        // Preserve the user's raw input/caret while typing (including spaces between words).
         currentFilters.search = normalizeSearchInput(value);
+        syncFilterUrl();
         renderListingCards();
+    };
+
+    const clearFilters = () => {
+        currentFilters = {
+            search: '',
+            year: 'All',
+            program: 'All',
+            discipline: 'All',
+            industry: 'All'
+        };
+        updateFilterControls();
+        syncFilterUrl();
+        renderListingCards();
+    };
+
+    const retryShowcase = () => {
+        if (feedLoadInFlight) return;
+        initShowcase();
+    };
+
+    const synchronizeUrlState = () => {
+        currentFilters = validateCurrentFilters(readFiltersFromUrl());
+        if (document.getElementById('capstone-showcase-root')) {
+            updateFilterControls();
+            renderListingCards();
+        }
     };
 
     // --- GLOBAL ATTACHMENTS FOR DUDA SCOPED RESOLUTION ---
     window.handleFilterChange = handleFilterChange;
     window.handleSearchChange = handleSearchChange;
+    window.clearFilters = clearFilters;
+    window.retryShowcase = retryShowcase;
     window.handleProjectClick = handleProjectClick;
     window.goBack = goBack;
     window.openLightbox = openLightbox;
@@ -1480,7 +1663,9 @@
     window.navigateLightbox = changeSnapshot;
 
     // --- RUNTIME ---
+    currentFilters = readFiltersFromUrl();
     document.addEventListener('DOMContentLoaded', () => initShowcase());
     window.addEventListener('load', () => initShowcase());
+    window.addEventListener('popstate', synchronizeUrlState);
 })();
 </script>

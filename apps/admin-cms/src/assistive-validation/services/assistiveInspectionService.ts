@@ -115,6 +115,8 @@ export async function loadAssistiveInspection(
     }
   }
 
+  if (run.pipelineVersion !== ASSISTIVE_PIPELINE_VERSION) staleState = 'STALE';
+
   const view = assistiveInspectionViewSchema.safeParse({
     runId: run.runId,
     runStatus: run.runStatus,

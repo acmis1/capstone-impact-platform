@@ -9,10 +9,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../lib/env', () => ({ getServerEnv: mocks.getServerEnv }));
 
 import { GET, HEAD } from './route';
+import { RELEASE_CAPABILITY_MAX_RESPONSE_BYTES } from '../../../deployment/deploymentReadinessEndpoint';
 
 const VALID_COMMIT = 'A75F4D8861CE693DDD264F9797D8AF656911154F';
 const RELEASE_CAPABILITY_SENTINEL =
-  '20260917120000_governed_project_soft_delete|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1|archived_project_republish_media_rearm_v1|governed_project_soft_delete_v1';
+  '20260918120000_governed_project_maintenance|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1|archived_project_republish_media_rearm_v1|governed_project_soft_delete_v1|governed_project_maintenance_v1';
 const VALID_ENV = {
   NEXT_PUBLIC_SUPABASE_URL: 'https://synthetic-readiness.supabase.co',
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_public-test-value',
@@ -147,8 +148,8 @@ describe('GET/HEAD /api/readiness', () => {
       databaseCapability: 'current',
       deploymentCommit: { state: 'valid', value: VALID_COMMIT.toLowerCase() },
       expectedMigrations: {
-        count: 61,
-        latest: '20260917120000_governed_project_soft_delete',
+        count: 62,
+        latest: '20260918120000_governed_project_maintenance',
       },
     });
   });
@@ -424,7 +425,7 @@ describe('GET/HEAD /api/readiness', () => {
     ['stale sentinel', JSON.stringify('20260906120000_public_removal_completion_reconciliation'), 'application/json'],
     ['malformed response', '{not-json', 'application/json'],
     ['wrong content type', JSON.stringify(RELEASE_CAPABILITY_SENTINEL), 'text/plain'],
-    ['oversized response', JSON.stringify('x'.repeat(385)), 'application/json'],
+    ['oversized response', JSON.stringify('x'.repeat(513)), 'application/json'],
   ])('fails closed on %s capability evidence', async (_label, payload, contentType) => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(payload, {
       status: 200,
@@ -461,4 +462,10 @@ describe('GET/HEAD /api/readiness', () => {
     expect(response.headers.get('Cache-Control')).toContain('no-store');
     expect(await response.text()).toBe('');
   });
+});
+
+
+it('keeps the exact current capability response within a finite byte ceiling', () => {
+  expect(Buffer.byteLength(JSON.stringify(RELEASE_CAPABILITY_SENTINEL), 'utf8')).toBeLessThanOrEqual(RELEASE_CAPABILITY_MAX_RESPONSE_BYTES);
+  expect(RELEASE_CAPABILITY_MAX_RESPONSE_BYTES).toBe(512);
 });

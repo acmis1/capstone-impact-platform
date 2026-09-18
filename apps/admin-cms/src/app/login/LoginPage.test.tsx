@@ -79,7 +79,7 @@ describe('LoginPage and LoginForm rendered contract', () => {
     mocks.searchParams = new URLSearchParams('error=SESSION_EXPIRED');
     render(<LoginPage />);
     expect(screen.getByRole('alert')).toBeDefined();
-    expect(screen.getByText(/Session expired\. Please click the invitation link again\./i)).toBeDefined();
+    expect(screen.getByText(/Your session expired\. Sign in again, or reopen the latest invitation link to finish account setup\./i)).toBeDefined();
   });
 
   it('maps PASSWORD_SET URL status to success alert message', () => {

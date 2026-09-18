@@ -11,24 +11,51 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { getImportSummaryMetrics, ImportMetricsSummary } from '../../../components/admin/ImportMetricsSummary';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { ErrorState } from '../../../components/ui/error-state';
+import { ImportHistoryFilters, ImportHistoryPagination } from '../../../components/imports/ImportHistoryControls';
+import { parseImportHistoryQuery, type ImportHistoryQuery } from '../../../import/importHistoryQuery';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ImportBatchesPage() {
+export default async function ImportBatchesPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
   let batches: ImportBatchRow[] = [];
   let loadError = false;
+  let total = 0;
   let canEdit = false;
 
+  let authContext: Awaited<ReturnType<typeof requireAdmin>>;
   try {
-    const authContext = await requireAdmin();
-    canEdit = hasPermission(authContext.permissions, 'projects.edit');
+    authContext = await requireAdmin();
   } catch {
-    // Non-blocking for audit log display if authenticated
+    return (
+      <ErrorState
+        title="Import records unavailable"
+        description="Your administrative session could not be verified. Sign in again to view import records."
+        headingLevel="h1"
+      />
+    );
+  }
+
+  if (!hasPermission(authContext.permissions, 'projects.read')) {
+    return (
+      <ErrorState
+        title="Access denied"
+        description="Your account cannot view import records."
+        headingLevel="h1"
+      />
+    );
+  }
+
+  canEdit = hasPermission(authContext.permissions, 'projects.edit');
+  let query: ImportHistoryQuery;
+  try { query = parseImportHistoryQuery(await searchParams ?? {}); } catch {
+    return <ErrorState headingLevel="h1" title="Invalid import-history filters" description="Use a valid page, a four-digit import year, and a batch name up to 100 characters." action={<Button asChild variant="outline"><Link href="/admin/imports">Reset filters</Link></Button>} />;
   }
 
   try {
     const repository = new ImportBatchRepository();
-    batches = await repository.listRecentImportBatches(50);
+    const result = await repository.listImportHistory(query);
+    batches = result.batches;
+    total = result.total;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown import batch load error';
     console.error('[Staging Import Batches Load Failure]:', message);
@@ -62,6 +89,7 @@ export default async function ImportBatchesPage() {
         )}
       </div>
 
+      <ImportHistoryFilters query={query} />
       {loadError ? (
         <ErrorState
           title="Import records could not be loaded"
@@ -74,13 +102,14 @@ export default async function ImportBatchesPage() {
         />
       ) : (
         <>
+          <p className="text-sm text-muted-foreground">The summary below covers the displayed page only.</p>
           <ImportMetricsSummary metrics={summaryMetrics} />
 
           {/* Import Batches Table Card */}
           <Card className="border-border-structural">
             <CardHeader className="border-b border-border py-4 px-6">
               <CardTitle className="text-base font-semibold text-foreground">
-                Recent imports
+                Import history
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -89,7 +118,7 @@ export default async function ImportBatchesPage() {
                   <EmptyState
                     icon={FileSpreadsheet}
                     title="No imports found"
-                    description="No project import batches have been recorded yet."
+                    description={query.q || query.year || query.status || query.page > 1 ? "No imports match this page or filter selection. Adjust or clear the filters." : "No project import batches have been recorded yet."}
                     action={
                       canEdit ? (
                         <Button asChild>
@@ -107,6 +136,7 @@ export default async function ImportBatchesPage() {
               )}
             </CardContent>
           </Card>
+          <ImportHistoryPagination query={query} total={total} />
         </>
       )}
     </div>

@@ -7,7 +7,8 @@ import { createClient } from '@supabase/supabase-js';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
 
 import { requireDisposableRuntime } from './publicFeedRuntimeSupport';
-const PIPELINE = 'assistive-deterministic-checks/v3';
+import { RELEASE_CAPABILITY_SENTINEL, EXPECTED_REPOSITORY_MIGRATION_COUNT } from '../deployment/hostedDeploymentReadiness';
+const PIPELINE = 'assistive-deterministic-checks/v4';
 const OCR = 'paddle-title/pp-ocrv6-small@3.7.0';
 const LANGUAGE = 'languagetool/en-au@6.6';
 const DEPLOYMENT = 'a'.repeat(40);
@@ -87,12 +88,12 @@ async function main(): Promise<void> {
 
   let failure: unknown = null;
   try {
-    await scenario('fresh schema contains exactly 61 migrations and the governed-soft-delete release capability', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '61');
+    await scenario('fresh schema matches the current manifest and exact release capability', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), String(EXPECTED_REPOSITORY_MIGRATION_COUNT));
       assert.equal(psql("SELECT to_regclass('public.assistive_worker_heartbeats') IS NOT NULL;"), 't');
       assert.equal(
         psql('SELECT public.get_release_capability_sentinel();'),
-        '20260917120000_governed_project_soft_delete|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1|archived_project_republish_media_rearm_v1|governed_project_soft_delete_v1',
+        RELEASE_CAPABILITY_SENTINEL,
       );
     });
 
@@ -218,7 +219,7 @@ async function main(): Promise<void> {
     });
 
     await scenario('a stale heartbeat fails unavailable after the fixed window', async () => {
-      psql(`UPDATE public.assistive_worker_heartbeats SET heartbeat_at=pg_catalog.statement_timestamp()-interval '61 seconds' WHERE worker_instance_id='${workerTwo}';`);
+      psql(`UPDATE public.assistive_worker_heartbeats SET heartbeat_at=pg_catalog.statement_timestamp()-interval '62 seconds' WHERE worker_instance_id='${workerTwo}';`);
       assert.deepEqual(await availability(), {
         resultCode: 'UNAVAILABLE', compatibleWorkerCount: 0, latestHeartbeatAt: null,
       });

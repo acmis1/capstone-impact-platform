@@ -57,7 +57,7 @@ describe('StaffInvitationForm rendered boundary', () => {
     renderForm();
 
     const descriptions = {
-      Administrator: 'Full project authority, including publication, archiving and staff management.',
+      Administrator: 'Full project authority, including publication, archiving, governed soft deletion/recovery, layouts, project categories and staff management.',
       Reviewer: 'Can read projects and complete review decisions.',
       Editor: 'Can import projects and submit eligible projects for review.',
     };

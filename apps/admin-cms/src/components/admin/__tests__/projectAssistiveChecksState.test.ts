@@ -298,7 +298,7 @@ describe('isLanguageFindingEligibleToApply', () => {
       languageCategory: 'LANGUAGE_SPELLING', ruleId: 'MORFOLOGIK_RULE_EN_AU',
       providerId: 'LANGUAGETOOL', providerVersion: '6.6', suggestions: ['receive'],
       explanation: 'Review this possible spelling issue.', inputHash: 'a'.repeat(64),
-      pipelineVersion: 'assistive-deterministic-checks/v3',
+      pipelineVersion: 'assistive-deterministic-checks/v4',
       policySha256: '3984b958741a5103791524d48ba262a81ef829695ddc122a728c12cc3e689148',
     },
   });

@@ -9,6 +9,7 @@ import type { PreviewAccessEvidence } from '../previews/participantPreviewAccess
 import { ParticipantPreviewExecutionError } from '../repositories/ParticipantPreviewRepository';
 import { postgresUuidSchema } from './projectMetadata';
 import { z } from 'zod';
+import { resolvedLayoutConfigSchema } from '../domain/layoutConfig';
 
 export const PROJECT_AUDIT_HISTORY_SELECT = 'id,admin_id,action_taken,from_status,to_status,comments,created_at,actor_full_name_snapshot,actor_email_snapshot,event_details,admin_users!approval_records_admin_id_fkey(full_name,email)';
 
@@ -80,6 +81,25 @@ const mediaAccessibilityEventDetailsSchema = z.object({
   after: z.object({ snapshotAltText: z.string() }).strict(),
 }).strict();
 
+const layoutEventDetailsSchema = z.object({
+  version: z.literal(1),
+  type: z.literal('project_layout'),
+  before: resolvedLayoutConfigSchema,
+  after: resolvedLayoutConfigSchema,
+  recipe: z.object({ id: postgresUuidSchema, name: z.string(), version: z.number().int().min(1) }).nullable(),
+  revokedActivePreviewCount: z.number().int().min(0),
+}).strict();
+
+const recoveryEventDetailsSchema = z.object({
+  version: z.literal(1),
+  type: z.literal('project_recovery'),
+  softDeleteAuditId: postgresUuidSchema,
+  deletedAt: z.string(),
+  before: z.object({ status: z.literal('deleted'), deletedAt: z.string() }).strict(),
+  after: z.object({ status: z.literal('draft'), deletedAt: z.null() }).strict(),
+  rearmedPublicMappingRows: z.number().int().min(0),
+}).strict();
+
 const auditHistoryRowSchema = z.object({
   id: postgresUuidSchema,
   admin_id: postgresUuidSchema.nullable(),
@@ -99,6 +119,8 @@ const auditHistoryRowSchema = z.object({
 
 export type ProjectMetadataEventDetails = z.infer<typeof metadataEventDetailsSchema>;
 export type MediaAccessibilityEventDetails = z.infer<typeof mediaAccessibilityEventDetailsSchema>;
+export type LayoutEventDetails = z.infer<typeof layoutEventDetailsSchema>;
+export type RecoveryEventDetails = z.infer<typeof recoveryEventDetailsSchema>;
 
 export interface AuditHistoryView {
   id: string;
@@ -112,6 +134,8 @@ export interface AuditHistoryView {
   metadataEventDetails: ProjectMetadataEventDetails | null;
   /** Populated instead of `metadataEventDetails` when the edit changed media accessibility. */
   mediaAccessibilityEventDetails: MediaAccessibilityEventDetails | null;
+  layoutEventDetails?: LayoutEventDetails | null;
+  recoveryEventDetails?: RecoveryEventDetails | null;
 }
 
 function nonEmptyString(value: string | null): string | null {
@@ -123,15 +147,23 @@ export function parseAuditHistoryRow(input: unknown): AuditHistoryView {
   const row = auditHistoryRowSchema.parse(input);
   let metadataEventDetails: ProjectMetadataEventDetails | null = null;
   let mediaAccessibilityEventDetails: MediaAccessibilityEventDetails | null = null;
+  let layoutEventDetails: LayoutEventDetails | null = null;
+  let recoveryEventDetails: RecoveryEventDetails | null = null;
   if (row.event_details) {
     // Discriminated on the stored `type`, so a media-accessibility record is never mistaken for a
     // malformed project-metadata one, and an unrecognised shape still degrades safely.
     const metadata = metadataEventDetailsSchema.safeParse(row.event_details);
     const mediaAccessibility = mediaAccessibilityEventDetailsSchema.safeParse(row.event_details);
+    const layout = layoutEventDetailsSchema.safeParse(row.event_details);
+    const recovery = recoveryEventDetailsSchema.safeParse(row.event_details);
     if (metadata.success) {
       metadataEventDetails = metadata.data;
     } else if (mediaAccessibility.success) {
       mediaAccessibilityEventDetails = mediaAccessibility.data;
+    } else if (layout.success) {
+      layoutEventDetails = layout.data;
+    } else if (recovery.success) {
+      recoveryEventDetails = recovery.data;
     } else {
       console.warn('[AuditHistory] Malformed event_details, degrading safely');
     }
@@ -153,6 +185,8 @@ export function parseAuditHistoryRow(input: unknown): AuditHistoryView {
     actorEmail: snapshotEmail ?? fallbackEmail,
     metadataEventDetails,
     mediaAccessibilityEventDetails,
+    layoutEventDetails,
+    recoveryEventDetails,
   };
 }
 

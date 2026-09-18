@@ -19,6 +19,7 @@ interface QueryExecutionLog {
   selectOpts?: unknown;
   isCol?: string;
   isVal?: unknown;
+  neqFilters?: Record<string, unknown>;
   orClause?: string;
   eqFilters?: Record<string, unknown>;
   inFilters?: Record<string, unknown[]>;
@@ -48,6 +49,11 @@ function createSequentialMockSupabaseClient(responses: Array<{ data: unknown[]; 
       is: vi.fn().mockImplementation((col, val) => {
         currentLog.isCol = col;
         currentLog.isVal = val;
+        return builder;
+      }),
+      neq: vi.fn().mockImplementation((col, val) => {
+        if (!currentLog.neqFilters) currentLog.neqFilters = {};
+        currentLog.neqFilters[col] = val;
         return builder;
       }),
       or: vi.fn().mockImplementation((clause) => {
@@ -127,6 +133,10 @@ function createCappedKeysetMockSupabaseClient(
           currentLog.isVal = value;
           return builder;
         }),
+        neq: vi.fn().mockImplementation((column, value) => {
+          currentLog.neqFilters = { ...(currentLog.neqFilters ?? {}), [column]: value };
+          return builder;
+        }),
         gt: vi.fn().mockImplementation((column, value) => {
           currentLog.gtFilters = { [column]: value };
           return builder;
@@ -180,6 +190,10 @@ function createExactLookupMockSupabaseClient(data: DatabaseProjectRow | null) {
       log.isVal = value;
       return builder;
     }),
+    neq: vi.fn().mockImplementation((column, value) => {
+      log.neqFilters = { ...(log.neqFilters ?? {}), [column]: value };
+      return builder;
+    }),
     maybeSingle: vi.fn().mockResolvedValue({ data, error: null }),
   };
   return {
@@ -205,6 +219,10 @@ function createTaxonomyAwareMockSupabaseClient(rows: DatabaseProjectRow[]) {
         is: vi.fn().mockImplementation((column, value) => {
           currentLog.isCol = column;
           currentLog.isVal = value;
+          return builder;
+        }),
+        neq: vi.fn().mockImplementation((column, value) => {
+          currentLog.neqFilters = { ...(currentLog.neqFilters ?? {}), [column]: value };
           return builder;
         }),
         eq: vi.fn().mockImplementation((column, value) => {
@@ -369,6 +387,7 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
     expect(log.eqFilters).toEqual({ public_id: 'target' });
     expect(log.isCol).toBe('deleted_at');
     expect(log.isVal).toBeNull();
+    expect(log.neqFilters).toEqual({ status: 'deleted' });
   });
 
   it('maps an absent or soft-deleted exact public-ID lookup to null', async () => {
@@ -396,6 +415,7 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
     expect(log.table).toBe('projects');
     expect(log.isCol).toBe('deleted_at');
     expect(log.isVal).toBeNull();
+    expect(log.neqFilters).toEqual({ status: 'deleted' });
     expect(log.ranges[0]).toEqual({ from: 0, to: 9 });
     expect(result.total).toBe(1);
     expect(result.projects.length).toBe(1);
@@ -578,6 +598,7 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
       expect(log.table).toBe('projects');
       expect(log.isCol).toBe('deleted_at');
       expect(log.isVal).toBeNull();
+      expect(log.neqFilters).toEqual({ status: 'deleted' });
       expect((log.selectOpts as { head?: boolean })?.head).toBe(true);
       // Must NOT contain full status row arrays
       expect(log.selectFields).toBe('id');
@@ -654,6 +675,7 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
     expect(log.selectFields).toBe('year, program_name, project_disciplines(disciplines(name)), project_industry_categories(industry_categories(name))');
     expect(log.isCol).toBe('deleted_at');
     expect(log.isVal).toBeNull();
+    expect(log.neqFilters).toEqual({ status: 'deleted' });
     expect(log.ranges[0]).toEqual({ from: 0, to: 499 });
 
     expect(options.years).toEqual(['2026', '2025']);
@@ -697,6 +719,7 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
       expect(log.selectFields).toBe('year, program_name, project_disciplines(disciplines(name)), project_industry_categories(industry_categories(name))');
       expect(log.isCol).toBe('deleted_at');
       expect(log.isVal).toBeNull();
+      expect(log.neqFilters).toEqual({ status: 'deleted' });
     }
 
     // Deduplication and sorting

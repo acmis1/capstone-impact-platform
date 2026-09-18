@@ -1,4 +1,8 @@
 import 'server-only';
+import { z } from 'zod';
+import { postgresUuidSchema } from '../projects/projectMetadata';
+import { readCatalogueRows } from './catalogueRows';
+import { withCatalogueUsage } from './catalogueUsage';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -8,7 +12,6 @@ import {
   TaxonomyConflictError,
 } from './taxonomy';
 
-type TaxonomyRow = { id: string; name: string };
 
 const TABLE_BY_KIND: Record<TaxonomyKind, string> = {
   program: 'programs',
@@ -22,34 +25,18 @@ export class SupabaseTaxonomyGateway implements TaxonomyGateway {
 
   async list(): Promise<Record<TaxonomyKind, TaxonomyEntry[]>> {
     const [programs, disciplines, industryCategories, projects, projectDisciplines, projectIndustries] = await Promise.all([
-      this.supabase.from('programs').select('id, name').order('name'),
-      this.supabase.from('disciplines').select('id, name').order('name'),
-      this.supabase.from('industry_categories').select('id, name').order('name'),
-      this.supabase.from('projects').select('program_id').not('program_id', 'is', null),
-      this.supabase.from('project_disciplines').select('discipline_id'),
-      this.supabase.from('project_industry_categories').select('industry_category_id'),
+      ...['programs', 'disciplines', 'industry_categories'].map(table => readCatalogueRows(this.supabase, table, 'id,name,retired_at,lifecycle_version', ['id'])),
+      readCatalogueRows(this.supabase, 'projects', 'id,program_id,program_name,study_program,discipline,industry', ['id']),
+      readCatalogueRows(this.supabase, 'project_disciplines', 'project_id,discipline_id', ['project_id', 'discipline_id']),
+      readCatalogueRows(this.supabase, 'project_industry_categories', 'project_id,industry_category_id', ['project_id', 'industry_category_id']),
     ]);
-    if (programs.error || disciplines.error || industryCategories.error || projects.error || projectDisciplines.error || projectIndustries.error) {
-      throw new Error('Taxonomy catalogue load failed');
-    }
-
-    const countById = (rows: Array<Record<string, string | null>>, key: string) => rows.reduce((counts, row) => {
-      const id = row[key];
-      if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
-      return counts;
-    }, new Map<string, number>());
-
-    const programUsage = countById((projects.data ?? []) as Array<Record<string, string | null>>, 'program_id');
-    const disciplineUsage = countById((projectDisciplines.data ?? []) as Array<Record<string, string | null>>, 'discipline_id');
-    const industryUsage = countById((projectIndustries.data ?? []) as Array<Record<string, string | null>>, 'industry_category_id');
-    const toEntries = (rows: TaxonomyRow[], usage: Map<string, number>): TaxonomyEntry[] =>
-      rows.map((row) => ({ ...row, usageCount: usage.get(row.id) ?? 0 }));
-
-    return {
-      program: toEntries((programs.data ?? []) as TaxonomyRow[], programUsage),
-      discipline: toEntries((disciplines.data ?? []) as TaxonomyRow[], disciplineUsage),
-      industryCategory: toEntries((industryCategories.data ?? []) as TaxonomyRow[], industryUsage),
+    const schema = z.array(z.object({ id: postgresUuidSchema, name: z.string().min(1).max(120), retired_at: z.string().datetime({ offset: true }).nullable(), lifecycle_version: z.number().int().min(1) }).strict());
+    const entries = (rows: unknown): TaxonomyEntry[] => {
+      const parsed = schema.safeParse(rows);
+      if (!parsed.success) throw new Error('Catalogue lifecycle data unavailable.');
+      return parsed.data.map(row => ({ id: row.id, name: row.name, retiredAt: row.retired_at, lifecycleVersion: row.lifecycle_version, usageCount: 0 }));
     };
+    return withCatalogueUsage({ program: entries(programs), discipline: entries(disciplines), industryCategory: entries(industryCategories) }, projects, projectDisciplines, projectIndustries);
   }
 
   async create(kind: TaxonomyKind, name: string): Promise<{ id: string; name: string }> {
@@ -63,5 +50,27 @@ export class SupabaseTaxonomyGateway implements TaxonomyGateway {
       throw new Error('Taxonomy create failed');
     }
     return data as { id: string; name: string };
+  }
+
+  async lifecycle(input: {
+    kind: TaxonomyKind;
+    taxonomyId: string;
+    action: 'retire' | 'reactivate' | 'rename';
+    name?: string;
+    expectedLifecycleVersion: number;
+    actorAdminId: string;
+  }) {
+    const { data, error } = await this.supabase.rpc('manage_taxonomy_lifecycle', {
+      p_kind: input.kind,
+      p_taxonomy_id: input.taxonomyId,
+      p_action: input.action,
+      p_name: input.name ?? null,
+      p_expected_lifecycle_version: input.expectedLifecycleVersion,
+      p_actor_admin_id: input.actorAdminId,
+    });
+    if (error || typeof data !== 'object' || data === null || !('resultCode' in data) || typeof data.resultCode !== 'string') {
+      throw new Error('Taxonomy lifecycle failed');
+    }
+    return data as { resultCode: string; id?: string; name?: string; retiredAt?: string | null; lifecycleVersion?: number; referenceCount?: number };
   }
 }

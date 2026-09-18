@@ -60,7 +60,7 @@ function jobGateway(inputHash: string): AssistiveJobGateway & { finalize: Return
     enqueue: vi.fn(), status: vi.fn(), cancel: vi.fn(), health: vi.fn(),
     claim: vi.fn().mockResolvedValue({
       resultCode: 'CLAIMED', jobId: JOB_ID, runId: RUN_ID, projectId: PROJECT_ID,
-      requestedBy: ACTOR_ID, inputHash, pipelineVersion: 'assistive-deterministic-checks/v3',
+      requestedBy: ACTOR_ID, inputHash, pipelineVersion: 'assistive-deterministic-checks/v4',
       attemptCount: 1, claimToken: TOKEN, leaseUntil: '2026-08-20T00:02:00Z',
     }),
     heartbeat: vi.fn().mockResolvedValue({ resultCode: 'HEARTBEAT', leaseUntil: '2026-08-20T00:03:00Z' }),
@@ -142,7 +142,7 @@ describe('assistive coordinator', () => {
     expect(submitted.status).toBe('COMPLETED');
     expect(submitted.findings.at(-1)).toMatchObject({
       checkType: 'LANGUAGE_SUGGESTION', affectedField: 'summary',
-      evidence: { inputHash, pipelineVersion: 'assistive-deterministic-checks/v3' },
+      evidence: { inputHash, pipelineVersion: 'assistive-deterministic-checks/v4' },
     });
   });
 

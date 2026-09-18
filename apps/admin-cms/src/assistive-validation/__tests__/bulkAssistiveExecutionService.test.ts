@@ -29,7 +29,7 @@ function run(inputHash: string, runStatus: AssistiveRunStatus): StoredAssistiveI
     runId: RUN_ID,
     projectId: '33333333-3333-4333-8333-333333333333',
     inputHash,
-    pipelineVersion: 'assistive-deterministic-checks/v3',
+    pipelineVersion: 'assistive-deterministic-checks/v4',
     runStatus,
     jobStatus: runStatus === 'QUEUED' ? 'QUEUED' : 'EXTRACTING',
     attemptCount: runStatus === 'QUEUED' ? 0 : 1,

@@ -73,7 +73,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const canReviewBulk = hasPermission(authContext.permissions, 'projects.review');
   const canRunAssistiveBulk = hasPermission(authContext.permissions, 'projects.edit');
   const canArchiveBulk = hasPermission(authContext.permissions, 'projects.archive');
-  const canDeleteBulk = hasPermission(authContext.permissions, 'projects.delete');
+  const canDeleteBulk = authContext.roles.includes('admin') && hasPermission(authContext.permissions, 'projects.delete');
   let archiveExecutionTarget: BulkArchiveExecutionTarget = null;
   if (canArchiveBulk) {
     try {
@@ -170,14 +170,18 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
         {canImport && (
           <div className="shrink-0">
-            <Button asChild>
-              <Link href="/admin/imports/new">
-                <Plus aria-hidden="true" />
-                New import
-              </Link>
-            </Button>
+            <div className="flex flex-wrap justify-end gap-2">
+              {canDeleteBulk && <Button asChild variant="outline"><Link href="/admin/projects/deleted"><FolderOpen aria-hidden="true" />Deleted projects</Link></Button>}
+              <Button asChild>
+                <Link href="/admin/imports/new">
+                  <Plus aria-hidden="true" />
+                  New import
+                </Link>
+              </Button>
+            </div>
           </div>
         )}
+        {!canImport && canDeleteBulk && <Button asChild variant="outline" className="shrink-0"><Link href="/admin/projects/deleted"><FolderOpen aria-hidden="true" />Deleted projects</Link></Button>}
       </div>
 
       {loadError || !clientResult || !metrics ? (

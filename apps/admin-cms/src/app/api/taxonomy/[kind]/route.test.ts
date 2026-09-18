@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
   createSupabaseAdminClient: vi.fn(() => ({ serviceRole: true })),
   create: vi.fn(),
+  lifecycle: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -14,6 +15,7 @@ vi.mock('../../../../lib/supabase/admin', () => ({ createSupabaseAdminClient: mo
 vi.mock('../../../../taxonomy/SupabaseTaxonomyGateway', () => ({
   SupabaseTaxonomyGateway: class {
     create = mocks.create;
+    lifecycle = mocks.lifecycle;
   },
 }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
@@ -40,11 +42,21 @@ function request(
   });
 }
 
+function patchRequest(body: unknown, origin = 'http://app.test') {
+  const payload = JSON.stringify(body);
+  return new NextRequest('http://app.test/api/taxonomy/program', {
+    method: 'PATCH',
+    headers: { origin, 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(payload)) },
+    body: payload,
+  });
+}
+
 describe('taxonomy mutation route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireAdmin.mockResolvedValue({ permissions: getPermissionsForRoles(['admin']) });
+    mocks.requireAdmin.mockResolvedValue({ adminUserId: 'server-admin', permissions: getPermissionsForRoles(['admin']) });
     mocks.create.mockResolvedValue({ id: '11111111-1111-1111-8111-111111111111', name: 'Future Program' });
+    mocks.lifecycle.mockResolvedValue({ resultCode: 'RETIRED', id: '11111111-1111-1111-8111-111111111111', name: 'Future Program', retiredAt: '2026-09-18T12:00:00.000Z', lifecycleVersion: 5 });
   });
 
   it('rejects cross-origin mutation before authentication or service-role access', async () => {
@@ -83,6 +95,17 @@ describe('taxonomy mutation route', () => {
 
   it('does not implement a taxonomy DELETE operation', () => {
     expect(taxonomyRoute).not.toHaveProperty('DELETE');
+  });
+
+  it('uses PATCH lifecycle authority with a server-derived actor and CAS version', async () => {
+    const response = await taxonomyRoute.PATCH(patchRequest({
+      action: 'retire', id: '11111111-1111-1111-8111-111111111111', expectedLifecycleVersion: 4,
+    }), context());
+    expect(response.status).toBe(200);
+    expect(mocks.lifecycle).toHaveBeenCalledWith({
+      kind: 'program', taxonomyId: '11111111-1111-1111-8111-111111111111', action: 'retire',
+      name: undefined, expectedLifecycleVersion: 4, actorAdminId: expect.any(String),
+    });
   });
 
   it('rejects missing and malformed actual JSON bodies safely', async () => {
