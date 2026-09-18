@@ -35,6 +35,115 @@ $$;
 REVOKE ALL ON FUNCTION public.parse_project_soft_delete_evidence_json(text)
 FROM PUBLIC, anon, authenticated, service_role;
 
+-- `jsonb` is deliberately not used for this integrity check: it normalizes object key order,
+-- numeric spelling, escapes, and whitespace before the member hash is computed. The canonical
+-- writer hashes JSON.stringify(record), so preserve the original `json` tokens and remove only
+-- formatting whitespace outside quoted strings. This is bounded to the existing artifact limit and
+-- is a writer-produced-artifact binding check, not a general arbitrary-JSON canonicalizer.
+CREATE FUNCTION public.project_soft_delete_artifact_members_match(
+  p_version_id uuid,
+  p_artifact_content text,
+  p_record_count integer
+)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_version public.public_feed_versions%ROWTYPE;
+  v_artifact json;
+  v_member_count integer;
+BEGIN
+  IF p_version_id IS NULL
+     OR p_artifact_content IS NULL
+     OR p_record_count IS NULL
+     OR (p_record_count BETWEEN 0 AND 2147483647) IS NOT TRUE
+     OR (pg_catalog.octet_length(p_artifact_content) BETWEEN 0 AND 10485760) IS NOT TRUE
+  THEN
+    RETURN false;
+  END IF;
+
+  SELECT version.* INTO v_version
+    FROM public.public_feed_versions version
+   WHERE version.id = p_version_id;
+  IF NOT FOUND
+     OR v_version.artifact_content IS NULL
+     OR (v_version.artifact_content = p_artifact_content) IS NOT TRUE
+     OR (v_version.record_count = p_record_count) IS NOT TRUE
+     OR (v_version.byte_count = pg_catalog.octet_length(p_artifact_content)) IS NOT TRUE
+  THEN
+    RETURN false;
+  END IF;
+
+  BEGIN
+    v_artifact := p_artifact_content::json;
+    IF pg_catalog.json_typeof(v_artifact) IS DISTINCT FROM 'array'
+       OR pg_catalog.json_array_length(v_artifact) IS DISTINCT FROM p_record_count
+    THEN
+      RETURN false;
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+        FROM pg_catalog.json_array_elements(v_artifact) AS item(value)
+       WHERE pg_catalog.json_typeof(item.value) IS DISTINCT FROM 'object'
+          OR ((item.value->>'publicId') ~ '^[A-Za-z0-9_-]{1,100}$') IS NOT TRUE
+    ) THEN
+      RETURN false;
+    END IF;
+
+    IF (SELECT pg_catalog.count(*) FROM pg_catalog.json_array_elements(v_artifact))
+       IS DISTINCT FROM
+       (SELECT pg_catalog.count(DISTINCT item.value->>'publicId')
+          FROM pg_catalog.json_array_elements(v_artifact) AS item(value))
+    THEN
+      RETURN false;
+    END IF;
+
+    SELECT pg_catalog.count(*) INTO v_member_count
+      FROM public.public_feed_version_members member
+     WHERE member.version_id = p_version_id;
+    IF (v_member_count = p_record_count) IS NOT TRUE THEN
+      RETURN false;
+    END IF;
+
+    RETURN NOT EXISTS (
+      SELECT 1
+        FROM pg_catalog.json_array_elements(v_artifact)
+          WITH ORDINALITY AS item(value, ordinality)
+        LEFT JOIN public.public_feed_version_members member
+          ON member.version_id = p_version_id
+         AND member.ordinal = item.ordinality - 1
+       WHERE member.version_id IS NULL
+          OR (member.public_id = item.value->>'publicId') IS NOT TRUE
+          OR (member.record_hash ~ '^[0-9a-f]{64}$') IS NOT TRUE
+          OR (member.record_hash = pg_catalog.encode(
+               extensions.digest(
+                 pg_catalog.convert_to(
+                   pg_catalog.regexp_replace(
+                     item.value::text,
+                     $p$("([^"\\]|\\.)*")|[[:space:]]+$p$,
+                     $r$\1$r$,
+                     'g'
+                   ),
+                   'UTF8'
+                 ),
+                 'sha256'
+               ),
+               'hex'
+             )) IS NOT TRUE
+    );
+  EXCEPTION WHEN others THEN
+    RETURN false;
+  END;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.project_soft_delete_artifact_members_match(uuid, text, integer)
+FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE FUNCTION public.project_soft_delete_decision(
   p_project_id uuid,
   p_public_id text,
@@ -411,6 +520,11 @@ BEGIN
              AND member.record_hash = manifest.value->>'recordHash'
         )
      )
+     OR public.project_soft_delete_artifact_members_match(
+          v_baseline_version.id,
+          v_baseline_version.artifact_content,
+          v_baseline_version.record_count
+        ) IS NOT TRUE
   THEN
     RETURN pg_catalog.jsonb_build_object(
       'resultCode', 'REMOVAL_EVIDENCE_AMBIGUOUS',
@@ -477,6 +591,11 @@ BEGIN
         WHERE member.version_id = v_head_version.id
           AND member.public_id = p_public_id
      )
+     OR public.project_soft_delete_artifact_members_match(
+          v_head_version.id,
+          v_head_version.artifact_content,
+          v_head_version.record_count
+        ) IS NOT TRUE
   THEN
     RETURN pg_catalog.jsonb_build_object(
       'resultCode', 'REMOVAL_EVIDENCE_AMBIGUOUS',
@@ -766,6 +885,11 @@ BEGIN
                AND member.record_hash = manifest.value->>'recordHash'
           )
        )
+       OR public.project_soft_delete_artifact_members_match(
+            v_removal_version.id,
+            v_removal_version.artifact_content,
+            v_removal_version.record_count
+          ) IS NOT TRUE
        OR (
          v_removal_version.audit_record_id IS NOT NULL
          AND (

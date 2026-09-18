@@ -56,6 +56,17 @@ describe('governed project soft delete migration', () => {
     expect(decision).toContain("(member.value->>'ordinal')::bigint > 2147483647");
   });
 
+  it('binds every retained member hash to original artifact JSON tokens and keeps the helper private', () => {
+    expect(migration).toContain('CREATE FUNCTION public.project_soft_delete_artifact_members_match');
+    expect(migration).toContain('v_artifact json;');
+    expect(migration).toContain('p_artifact_content::json');
+    expect(migration).toContain('item.value::text');
+    expect(migration).toContain('$p$("([^"\\\\]|\\\\.)*")|[[:space:]]+$p$');
+    expect(migration).toContain('REVOKE ALL ON FUNCTION public.project_soft_delete_artifact_members_match(uuid, text, integer)');
+    expect(decision.match(/public\.project_soft_delete_artifact_members_match\(/g)).toHaveLength(3);
+    expect(decision).toMatch(/project_soft_delete_artifact_members_match\([\s\S]*?\) IS NOT TRUE/);
+  });
+
   it('proves exact baseline subtraction, manifest members, and changed versus no-change version shape', () => {
     expect(decision).toContain("WHERE item.value->>'publicId' <> p_public_id");
     expect(decision).toContain('v_candidate IS DISTINCT FROM v_expected_candidate');

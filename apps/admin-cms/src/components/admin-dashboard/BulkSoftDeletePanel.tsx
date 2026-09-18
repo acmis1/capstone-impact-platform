@@ -3,8 +3,10 @@
 import * as React from 'react';
 import { LoaderCircle, ShieldAlert, Trash2 } from 'lucide-react';
 import type { ProjectIndexRow } from './projectDashboardHelpers';
-import type { SoftDeletePreflightResponse } from '../../projects/projectSoftDelete';
+import { isSafeBulkPublicId } from '../../projects/bulkProjectReview';
+import { SOFT_DELETE_MAX_SELECTION, type SoftDeletePreflightResponse } from '../../projects/projectSoftDelete';
 import {
+  parseBoundedSoftDeletePreflight,
   readBoundedSoftDeleteJson,
   runSoftDeleteBatch,
   SOFT_DELETE_OUTCOME_LABELS,
@@ -18,6 +20,32 @@ interface BulkSoftDeletePanelProps {
   canDelete: boolean;
   sharedBusy?: boolean;
   onBusyChange?: (busy: boolean) => void;
+}
+
+type BusyChange = NonNullable<BulkSoftDeletePanelProps['onBusyChange']>;
+const busyOwners = new WeakMap<BusyChange, symbol>();
+
+function acquireBusyLease(onBusyChange: BusyChange | undefined): (() => void) | null {
+  if (!onBusyChange) return null;
+  const owner = Symbol('soft-delete-busy');
+  busyOwners.set(onBusyChange, owner);
+  onBusyChange(true);
+  return () => {
+    if (busyOwners.get(onBusyChange) !== owner) return;
+    busyOwners.delete(onBusyChange);
+    onBusyChange(false);
+  };
+}
+
+function getBoundedSelectedPublicIds(selectedProjects: ProjectIndexRow[]): string[] | null {
+  const publicIds = selectedProjects.map((project) => project.publicId);
+  if (
+    publicIds.length < 1
+    || publicIds.length > SOFT_DELETE_MAX_SELECTION
+    || !publicIds.every((publicId): publicId is string => isSafeBulkPublicId(publicId))
+    || new Set(publicIds).size !== publicIds.length
+  ) return null;
+  return publicIds;
 }
 
 export function BulkSoftDeletePanel({
@@ -36,12 +64,25 @@ export function BulkSoftDeletePanel({
   const mounted = React.useRef(true);
   const requestController = React.useRef<AbortController | null>(null);
   const resultRef = React.useRef<HTMLDivElement>(null);
+  const busyRelease = React.useRef<(() => void) | null>(null);
+
+  const releaseBusy = () => {
+    const release = busyRelease.current;
+    busyRelease.current = null;
+    release?.();
+  };
+
+  const claimBusy = () => {
+    releaseBusy();
+    busyRelease.current = acquireBusyLease(onBusyChange);
+  };
 
   React.useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       requestController.current?.abort();
+      releaseBusy();
     };
   }, []);
 
@@ -53,6 +94,14 @@ export function BulkSoftDeletePanel({
 
   const runPreflight = async () => {
     if (inFlight.current || sharedBusy) return;
+    const selectedPublicIds = getBoundedSelectedPublicIds(selectedProjects);
+    if (!selectedPublicIds) {
+      setError('The selected projects could not be checked. No deletion request was made.');
+      setPreflight(null);
+      setAcknowledged(false);
+      setResult(null);
+      return;
+    }
     inFlight.current = true;
     const controller = new AbortController();
     requestController.current = controller;
@@ -60,36 +109,33 @@ export function BulkSoftDeletePanel({
     setChecking(true);
     setError(null);
     setResult(null);
+    setPreflight(null);
     setAcknowledged(false);
-    onBusyChange?.(true);
+    claimBusy();
     try {
       const response = await fetch('/api/projects/soft-delete/preflight', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicIds: selectedProjects.map((project) => project.publicId).filter(Boolean) }),
+        body: JSON.stringify({ publicIds: selectedPublicIds }),
         signal: controller.signal,
       });
       const data = await readBoundedSoftDeleteJson(response).catch(() => null);
       if (!mounted.current || controller.signal.aborted) return;
-      if (
-        !response.ok
-        || !data
-        || typeof data !== 'object'
-        || !('items' in data)
-        || !Array.isArray(data.items)
-      ) throw new Error('Preflight failed.');
-      setPreflight(data as SoftDeletePreflightResponse);
+      if (!response.ok) throw new Error('Preflight failed.');
+      const parsed = parseBoundedSoftDeletePreflight(data, selectedPublicIds);
+      if (!parsed) throw new Error('Preflight failed.');
+      setPreflight(parsed);
     } catch {
       if (!mounted.current) return;
       setError('The selected projects could not be checked. No deletion request was made.');
       setPreflight(null);
+      setAcknowledged(false);
     } finally {
       clearTimeout(timeout);
-      if (!mounted.current) return;
       inFlight.current = false;
       requestController.current = null;
-      setChecking(false);
-      onBusyChange?.(false);
+      releaseBusy();
+      if (mounted.current) setChecking(false);
     }
   };
 
@@ -101,7 +147,7 @@ export function BulkSoftDeletePanel({
     setRunning(true);
     setError(null);
     setResult(null);
-    onBusyChange?.(true);
+    claimBusy();
     try {
       const finalResult = await runSoftDeleteBatch({
         preflightItems: preflight.items,
@@ -115,10 +161,9 @@ export function BulkSoftDeletePanel({
         setError('The batch result is unknown. Inspect project and audit state before any retry.');
       }
     } finally {
-      if (!mounted.current) return;
       inFlight.current = false;
       requestController.current = null;
-      onBusyChange?.(false);
+      releaseBusy();
       if (mounted.current) setRunning(false);
     }
   };

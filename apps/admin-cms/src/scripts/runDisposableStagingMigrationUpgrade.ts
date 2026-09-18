@@ -4060,6 +4060,13 @@ function assertAfter61(
     'Migration 0061 exposed its malformed-evidence parser.',
   );
   assert.equal(
+    psql("SELECT has_function_privilege('service_role','public.project_soft_delete_artifact_members_match(uuid,text,integer)','EXECUTE')::text"
+      + " || '|' || has_function_privilege('anon','public.project_soft_delete_artifact_members_match(uuid,text,integer)','EXECUTE')::text"
+      + " || '|' || has_function_privilege('authenticated','public.project_soft_delete_artifact_members_match(uuid,text,integer)','EXECUTE')::text;"),
+    'false|false|false',
+    'Migration 0061 exposed its artifact/member integrity helper.',
+  );
+  assert.equal(
     psql("SELECT convalidated::text FROM pg_catalog.pg_constraint WHERE conname='projects_soft_delete_state_coherent';"),
     'false',
     'Migration 0061 unexpectedly validated or omitted its no-backfill lifecycle constraint.',
@@ -4085,9 +4092,83 @@ function softDeleteCode(publicId: string, expectedUpdatedAtSql: string, actorId 
 function javascriptRecordHashFromArtifact(artifactContent: string, publicId: string): string {
   const record = (JSON.parse(artifactContent) as PublicFeedRecord[]).find((candidate) => candidate.publicId === publicId);
   assert.ok(record, `The exact artifact did not contain retained member ${publicId}.`);
+  return javascriptRecordHash(record);
+}
+
+function javascriptRecordHash(record: unknown): string {
   const serialized = JSON.stringify(record);
-  assert.ok(serialized, `The retained member ${publicId} was not JSON-serializable.`);
+  if (typeof serialized !== 'string') throw new Error('SYNTHETIC_RECORD_NOT_JSON_SERIALIZABLE');
   return createHash('sha256').update(Buffer.from(serialized, 'utf8')).digest('hex');
+}
+
+function sqlUtf8TextExpression(value: string): string {
+  return `pg_catalog.convert_from(pg_catalog.decode('${Buffer.from(value, 'utf8').toString('base64')}', 'base64'), 'UTF8')`;
+}
+
+function softDeleteArtifactBindingParityProbe(versionId: string): string {
+  const records: Array<Record<string, unknown>> = [
+    {
+      publicId: 'upgrade-delete-hash-utf8',
+      title: 'Dự án – 日本語',
+      summary: 'UTF-8 generated record',
+    },
+    {
+      publicId: 'upgrade-delete-hash-escaped',
+      title: 'A "quoted" title \\ folder',
+      spacing: 'keep  two spaces\nand\ttabs',
+    },
+    {
+      publicId: 'upgrade-delete-hash-empty',
+      empty: '',
+      literal: '\\n not a newline',
+      controls: '\b\f\r',
+    },
+    {
+      publicId: 'upgrade-delete-hash-nested',
+      nested: { object: { value: 'nested' }, array: [null, 0, 1e+21] },
+    },
+  ];
+  const artifactContent = JSON.stringify(records, null, 2);
+  if (typeof artifactContent !== 'string') throw new Error('SYNTHETIC_ARTIFACT_NOT_JSON_SERIALIZABLE');
+  const artifactExpression = sqlUtf8TextExpression(artifactContent);
+  const feedHash = createHash('sha256').update(Buffer.from(artifactContent, 'utf8')).digest('hex');
+  const malformedArtifactContent = '{not-json';
+  const malformedArtifactExpression = sqlUtf8TextExpression(malformedArtifactContent);
+  const malformedFeedHash = createHash('sha256').update(Buffer.from(malformedArtifactContent, 'utf8')).digest('hex');
+  const memberValues = records.map((record, ordinal) => `
+    ('${versionId}'::uuid, ${ordinal}, '${record.publicId}', '${javascriptRecordHash(record)}')`).join(',');
+
+  return psql(`
+\\set QUIET 1
+BEGIN;
+ALTER TABLE public.public_feed_versions DISABLE TRIGGER reject_public_feed_version_mutation;
+ALTER TABLE public.public_feed_version_members DISABLE TRIGGER reject_public_feed_member_mutation;
+UPDATE public.public_feed_versions
+   SET artifact_content=${artifactExpression},
+       byte_count=pg_catalog.octet_length(${artifactExpression}),
+       feed_hash='${feedHash}',
+       record_count=${records.length}
+ WHERE id='${versionId}'::uuid;
+DELETE FROM public.public_feed_version_members WHERE version_id='${versionId}'::uuid;
+INSERT INTO public.public_feed_version_members(version_id, ordinal, public_id, record_hash)
+VALUES${memberValues};
+ALTER TABLE public.public_feed_version_members ENABLE TRIGGER reject_public_feed_member_mutation;
+ALTER TABLE public.public_feed_versions ENABLE TRIGGER reject_public_feed_version_mutation;
+SELECT public.project_soft_delete_artifact_members_match('${versionId}'::uuid, ${artifactExpression}, ${records.length})::text;
+SELECT public.project_soft_delete_artifact_members_match('${versionId}'::uuid, NULL::text, ${records.length})::text;
+SELECT public.project_soft_delete_artifact_members_match('${versionId}'::uuid, pg_catalog.repeat('x', 10485761), ${records.length})::text;
+SELECT public.project_soft_delete_artifact_members_match(NULL::uuid, ${artifactExpression}, ${records.length})::text;
+SELECT public.project_soft_delete_artifact_members_match('${versionId}'::uuid, ${artifactExpression}, NULL::integer)::text;
+ALTER TABLE public.public_feed_versions DISABLE TRIGGER reject_public_feed_version_mutation;
+UPDATE public.public_feed_versions
+   SET artifact_content=${malformedArtifactExpression},
+       byte_count=pg_catalog.octet_length(${malformedArtifactExpression}),
+       feed_hash='${malformedFeedHash}'
+ WHERE id='${versionId}'::uuid;
+ALTER TABLE public.public_feed_versions ENABLE TRIGGER reject_public_feed_version_mutation;
+SELECT public.project_soft_delete_artifact_members_match('${versionId}'::uuid, ${malformedArtifactExpression}, ${records.length})::text;
+ROLLBACK;
+`);
 }
 
 function softDeleteMemberHashProbe(targetPublicId: string, memberPublicId: string, versionId: string, expectedHash: string, replacementHash: string): string {
@@ -4540,6 +4621,19 @@ COMMIT;
       `F3 exact JavaScript hash did not match the stored member row for ${versionId}.`,
     );
   }
+  assert.equal(
+    psql(`SELECT COALESCE(pg_catalog.bool_and(public.project_soft_delete_artifact_members_match(
+      version.id, version.artifact_content, version.record_count
+    )), false)::text FROM public.public_feed_versions version
+    WHERE version.id IN ('${f3BaselineVersionId}'::uuid, '${f3RemovalVersionId}'::uuid, '${f3CurrentHeadVersionId}'::uuid);`),
+    'true',
+    'Normal baseline, selected-removal, or current-head artifact/member binding was rejected.',
+  );
+  assert.equal(
+    softDeleteArtifactBindingParityProbe(f3BaselineVersionId),
+    'true\nfalse\nfalse\nfalse\nfalse\nfalse',
+    'The artifact/member helper did not accept Node-generated UTF-8 records or refuse malformed, oversized, and NULL inputs.',
+  );
   const f3WrongHashes = ['a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64), 'd'.repeat(64)];
   f3WrongHashes.forEach((wrongHash, index) => assert.notEqual(wrongHash, f3ExpectedHashes[index % 3]));
   const f3ProbeResults = [

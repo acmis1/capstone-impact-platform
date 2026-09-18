@@ -75,11 +75,78 @@ describe('soft delete batch coordinator', () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  it('treats a 500 response claiming a known refusal as UNKNOWN', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      json({ success: false, code: 'CURRENTLY_PUBLIC', error: 'still public' }, 500),
+    );
+
+    const result = await runSoftDeleteBatch({
+      preflightItems: [item('p-1'), item('p-2')],
+      fetchImpl,
+    });
+
+    expect(result.items.map((entry) => entry.outcome)).toEqual(['UNKNOWN', 'NOT_ATTEMPTED']);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['more than the bounded selection', Array.from({ length: 51 }, (_, index) => item(`p-${index}`))],
+    ['duplicate project IDs', [item('p-1'), item('p-1')]],
+    ['an invalid eligible timestamp', [{ ...item('p-1'), updatedAt: 'not-a-date' }]],
+    ['a nonsensical disposition', [{ ...item('p-1'), disposition: 'unexpected' }]],
+    ['a nonsensical decision code', [{ ...item('p-1'), reasonCode: 'UNEXPECTED_CODE' }]],
+  ] as Array<[string, unknown]>)('rejects %s before scheduling deletion', async (_label, preflightItems) => {
+    const fetchImpl = vi.fn();
+
+    await expect(runSoftDeleteBatch({
+      preflightItems: preflightItems as SoftDeletePreflightItem[],
+      fetchImpl,
+    })).rejects.toThrow('Invalid soft delete preflight');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('treats timeout as UNKNOWN because the transaction may have committed', async () => {
     const fetchImpl = vi.fn((_input, init) => new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
     }));
     const result = await runSoftDeleteBatch({ preflightItems: [item('p-1'), item('p-2')], fetchImpl, timeoutMs: 1 });
     expect(result.items.map((entry) => entry.outcome)).toEqual(['UNKNOWN', 'NOT_ATTEMPTED']);
+  });
+
+  it('treats a late response after timeout abort as UNKNOWN even when transport ignores abort', async () => {
+    const fetchImpl = vi.fn((_input, init) => new Promise<Response>((resolve) => {
+      init?.signal?.addEventListener('abort', () => {
+        setTimeout(() => resolve(deleted('p-1')), 1);
+      }, { once: true });
+    }));
+
+    const result = await runSoftDeleteBatch({
+      preflightItems: [item('p-1'), item('p-2')],
+      fetchImpl,
+      timeoutMs: 1,
+    });
+
+    expect(result.items.map((entry) => entry.outcome)).toEqual(['UNKNOWN', 'NOT_ATTEMPTED']);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('treats a late response after caller abort as UNKNOWN and does not retry', async () => {
+    const requestController = new AbortController();
+    const fetchImpl = vi.fn((_input, init) => new Promise<Response>((resolve) => {
+      init?.signal?.addEventListener('abort', () => {
+        setTimeout(() => resolve(deleted('p-1')), 1);
+      }, { once: true });
+    }));
+
+    const resultPromise = runSoftDeleteBatch({
+      preflightItems: [item('p-1'), item('p-2')],
+      fetchImpl,
+      signal: requestController.signal,
+    });
+    requestController.abort();
+
+    const result = await resultPromise;
+    expect(result.items.map((entry) => entry.outcome)).toEqual(['UNKNOWN', 'NOT_ATTEMPTED']);
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 });

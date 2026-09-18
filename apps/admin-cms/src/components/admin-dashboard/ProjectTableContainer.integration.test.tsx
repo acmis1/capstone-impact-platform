@@ -776,4 +776,100 @@ describe('ProjectTableContainer mobile card presentation', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm and soft-delete 1 project' })).toBeTruthy());
   });
+
+  it('releases old delete busy ownership across keyed selection and permission changes', async () => {
+    const secondRow: ProjectIndexRow = { ...baseRow, id: 'project-2', publicId: 'P-2', title: 'Bravo' };
+    const secondResult: ProjectIndexResult = { ...result, rows: [secondRow] };
+    let requestNumber = 0;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      requestNumber += 1;
+      const publicId = requestNumber === 1 ? 'P-1' : 'P-2';
+      return new Promise<Response>((resolve) => {
+        init?.signal?.addEventListener('abort', () => {
+          setTimeout(() => resolve(new Response(JSON.stringify({
+            summary: { total: 1, eligible: 1, blocked: 0, alreadyDeleted: 0 },
+            items: [{
+              publicId,
+              title: publicId === 'P-1' ? 'Atlas' : 'Bravo',
+              status: 'approved',
+              updatedAt: '2026-02-01',
+              disposition: 'eligible',
+              reasonCode: 'ELIGIBLE',
+              reason: 'Eligible.',
+              previouslyPublished: false,
+            }],
+          }), { status: 200 })), 0);
+        }, { once: true });
+      });
+    });
+
+    const view = render(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={result}
+            canDeleteBulk
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Atlas' }))[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Review delete batch' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    view.rerender(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={secondResult}
+            canDeleteBulk
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Review delete batch' })).toBeNull();
+      expect(screen.getAllByRole('checkbox', { name: 'Select Bravo' }).every((input) => !(input as HTMLInputElement).disabled)).toBe(true);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Bravo' }))[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Review delete batch' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Clear selection' }) as HTMLButtonElement).disabled).toBe(true));
+
+    view.rerender(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={secondResult}
+            canDeleteBulk={false}
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Review delete batch' })).toBeNull());
+
+    view.rerender(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer
+            query={parseProjectListQuery({})}
+            result={secondResult}
+            canDeleteBulk
+          />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Review delete batch' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Review delete batch' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Clear selection' }) as HTMLButtonElement).disabled).toBe(true));
+  });
 });

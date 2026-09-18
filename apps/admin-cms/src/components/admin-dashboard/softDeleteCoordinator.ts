@@ -1,4 +1,12 @@
-import type { SoftDeletePreflightItem } from '../../projects/projectSoftDelete';
+import { isSafeBulkPublicId } from '../../projects/bulkProjectReview';
+import {
+  SOFT_DELETE_DECISION_CODES,
+  SOFT_DELETE_MAX_SELECTION,
+  type SoftDeleteDecisionCode,
+  type SoftDeletePreflightItem,
+  type SoftDeletePreflightResponse,
+} from '../../projects/projectSoftDelete';
+import { WORKFLOW_STATUSES, type WorkflowStatus } from '../../domain/workflowStatus';
 
 const MAX_RESPONSE_BYTES = 32 * 1024;
 
@@ -28,8 +36,131 @@ export interface SoftDeleteTransport {
   (input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
 }
 
-function prepare(items: SoftDeletePreflightItem[]): SoftDeleteBatchItemResult[] {
-  return items.map((item) => {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isBoundedCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isValidTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string'
+    && value.length > 0
+    && value.length <= 100
+    && Number.isFinite(Date.parse(value))
+  );
+}
+
+function isValidStatus(value: unknown): value is WorkflowStatus | null {
+  return value === null || (typeof value === 'string' && WORKFLOW_STATUSES.includes(value as WorkflowStatus));
+}
+
+function isValidDisposition(value: unknown): value is SoftDeletePreflightItem['disposition'] {
+  return value === 'eligible' || value === 'blocked' || value === 'already_deleted';
+}
+
+function isValidDecisionCode(value: unknown): value is SoftDeleteDecisionCode {
+  return typeof value === 'string' && SOFT_DELETE_DECISION_CODES.includes(value as SoftDeleteDecisionCode);
+}
+
+function isValidSoftDeletePreflightItem(value: unknown): value is SoftDeletePreflightItem {
+  if (!isRecord(value)) return false;
+  if (
+    !isSafeBulkPublicId(value.publicId)
+    || typeof value.title !== 'string'
+    || !isValidStatus(value.status)
+    || (value.updatedAt !== null && !isValidTimestamp(value.updatedAt))
+    || !isValidDisposition(value.disposition)
+    || !isValidDecisionCode(value.reasonCode)
+    || typeof value.reason !== 'string'
+    || typeof value.previouslyPublished !== 'boolean'
+  ) return false;
+  if (value.disposition === 'eligible') {
+    return value.reasonCode === 'ELIGIBLE' && isValidTimestamp(value.updatedAt);
+  }
+  if (value.disposition === 'already_deleted') {
+    return value.reasonCode === 'ALREADY_DELETED';
+  }
+  return value.reasonCode !== 'ELIGIBLE' && value.reasonCode !== 'ALREADY_DELETED';
+}
+
+function hasBoundedUniquePublicIds(publicIds: readonly unknown[]): publicIds is readonly string[] {
+  return (
+    publicIds.length >= 1
+    && publicIds.length <= SOFT_DELETE_MAX_SELECTION
+    && publicIds.every(isSafeBulkPublicId)
+    && new Set(publicIds).size === publicIds.length
+  );
+}
+
+export function parseBoundedSoftDeletePreflight(
+  body: unknown,
+  selectedPublicIds: readonly string[],
+): SoftDeletePreflightResponse | null {
+  if (!hasBoundedUniquePublicIds(selectedPublicIds) || !isRecord(body) || !isRecord(body.summary) || !Array.isArray(body.items)) {
+    return null;
+  }
+
+  const summary = body.summary;
+  const items = body.items;
+  if (
+    items.length !== selectedPublicIds.length
+    || items.length > SOFT_DELETE_MAX_SELECTION
+    || !isBoundedCount(summary.total)
+    || !isBoundedCount(summary.eligible)
+    || !isBoundedCount(summary.blocked)
+    || !isBoundedCount(summary.alreadyDeleted)
+    || summary.total !== items.length
+    || !items.every(isValidSoftDeletePreflightItem)
+  ) return null;
+
+  const itemIds = items.map((item) => item.publicId);
+  const selectedIdSet = new Set(selectedPublicIds);
+  const itemIdSet = new Set(itemIds);
+  if (
+    itemIdSet.size !== itemIds.length
+    || itemIdSet.size !== selectedIdSet.size
+    || itemIds.some((publicId) => !selectedIdSet.has(publicId))
+  ) return null;
+
+  const computed = items.reduce(
+    (counts, item) => {
+      if (item.disposition === 'eligible') counts.eligible += 1;
+      if (item.disposition === 'blocked') counts.blocked += 1;
+      if (item.disposition === 'already_deleted') counts.alreadyDeleted += 1;
+      return counts;
+    },
+    { eligible: 0, blocked: 0, alreadyDeleted: 0 },
+  );
+  if (
+    summary.eligible !== computed.eligible
+    || summary.blocked !== computed.blocked
+    || summary.alreadyDeleted !== computed.alreadyDeleted
+    || summary.eligible + summary.blocked + summary.alreadyDeleted !== summary.total
+  ) return null;
+
+  return {
+    summary: {
+      total: summary.total,
+      eligible: summary.eligible,
+      blocked: summary.blocked,
+      alreadyDeleted: summary.alreadyDeleted,
+    },
+    items,
+  };
+}
+
+function prepare(items: unknown): SoftDeleteBatchItemResult[] {
+  if (!Array.isArray(items)) {
+    throw new Error('Invalid soft delete preflight.');
+  }
+  const publicIds = items.map((item) => isRecord(item) ? item.publicId : undefined);
+  if (!hasBoundedUniquePublicIds(publicIds) || !items.every(isValidSoftDeletePreflightItem)) {
+    throw new Error('Invalid soft delete preflight.');
+  }
+  return (items as SoftDeletePreflightItem[]).map((item) => {
     if (item.disposition === 'already_deleted') {
       return { ...item, outcome: 'ALREADY_DELETED', detail: item.reason, auditRecorded: false };
     }
@@ -68,10 +199,6 @@ export async function readBoundedSoftDeleteJson(response: Response): Promise<unk
   } finally {
     reader.releaseLock();
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function classifyResponse(response: Response, body: unknown, item: SoftDeleteBatchItemResult): {
@@ -119,13 +246,15 @@ function classifyResponse(response: Response, body: unknown, item: SoftDeleteBat
   if (code === 'STALE_VERSION' && response.status === 409) {
     return { outcome: 'STALE', detail: 'The project changed after preflight. It was not deleted.', auditRecorded: false, stop: false };
   }
+  if (response.status === 404 && code === 'PROJECT_NOT_FOUND') {
+    return { outcome: 'INELIGIBLE', detail, auditRecorded: false, stop: false };
+  }
   if (
-    response.status === 404
-    || [
-      'PROJECT_NOT_FOUND', 'DELETE_STATE_AMBIGUOUS', 'PUBLISHED_REQUIRES_ARCHIVE',
-      'REMOVAL_PENDING', 'STATUS_INELIGIBLE', 'PUBLICATION_OR_REMOVAL_PENDING',
-      'CURRENTLY_PUBLIC', 'CANONICAL_FEED_UNAVAILABLE', 'REMOVAL_EVIDENCE_REQUIRED',
-      'REMOVAL_EVIDENCE_AMBIGUOUS',
+    response.status === 409
+    && [
+      'DELETE_STATE_AMBIGUOUS', 'PUBLISHED_REQUIRES_ARCHIVE', 'REMOVAL_PENDING',
+      'STATUS_INELIGIBLE', 'PUBLICATION_OR_REMOVAL_PENDING', 'CURRENTLY_PUBLIC',
+      'CANONICAL_FEED_UNAVAILABLE', 'REMOVAL_EVIDENCE_REQUIRED', 'REMOVAL_EVIDENCE_AMBIGUOUS',
     ].includes(code)
   ) {
     return { outcome: 'INELIGIBLE', detail, auditRecorded: false, stop: false };
