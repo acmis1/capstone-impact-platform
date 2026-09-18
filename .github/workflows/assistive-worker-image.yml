@@ -53,6 +53,8 @@ jobs:
           platforms: linux/amd64
           provenance: false
           push: false
+          build-args: |
+            CAPSTONE_DEPLOYMENT_VERSION=${{ github.sha }}
           tags: ghcr.io/${{ github.repository }}/capstone-assistive-worker:${{ github.sha }}
           outputs: type=oci,dest=/tmp/capstone-assistive-worker.oci.tar
 
@@ -125,6 +127,8 @@ jobs:
           platforms: linux/amd64
           provenance: false
           push: true
+          build-args: |
+            CAPSTONE_DEPLOYMENT_VERSION=${{ github.sha }}
           tags: ghcr.io/${{ github.repository }}/capstone-assistive-worker:${{ github.sha }}
 
       - name: Build and publish scheduled dispatcher image
