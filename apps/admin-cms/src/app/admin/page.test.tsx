@@ -207,6 +207,7 @@ describe('Admin projects page authorization boundary', () => {
 
     mocks.requireAdmin.mockResolvedValueOnce({
       ...AUTHORIZED_CONTEXT,
+      roles: ['admin'],
       permissions: ['projects.read', 'projects.review', 'projects.delete'],
     });
     mocks.listProjectsPage.mockResolvedValueOnce({

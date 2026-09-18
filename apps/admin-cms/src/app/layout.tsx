@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { RuntimeEnvironmentPresentation } from "../components/auth/RuntimeEnvironmentPresentation";
+import { parseRuntimeDisplayEnvironment } from "../domain/institution";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,7 +30,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body className="min-h-screen bg-background text-foreground antialiased">{children}</body>
+      <body className="min-h-screen bg-background text-foreground antialiased">
+        <RuntimeEnvironmentPresentation environment={parseRuntimeDisplayEnvironment(process.env.CAPSTONE_RUNTIME_ENV)}>
+          {children}
+        </RuntimeEnvironmentPresentation>
+      </body>
     </html>
   );
 }

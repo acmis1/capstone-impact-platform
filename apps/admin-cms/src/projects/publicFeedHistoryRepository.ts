@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { parsePublicFeedHistoryFilters, type PublicFeedHistoryFilters } from './publicFeedHistoryQuery';
 import { SupabasePublicFeedLedgerRepositoryCore } from '../repositories/SupabasePublicFeedLedgerRepositoryCore';
 
 export interface PublicFeedHistoryListItem {
@@ -74,6 +75,7 @@ export async function readPublicFeedHistory(
   supabase: SupabaseClient,
   selectedVersionNumber?: number,
   requestedPage = 1,
+  requestedFilters: Partial<PublicFeedHistoryFilters> = {},
 ): Promise<PublicFeedHistoryView> {
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const offset = (page - 1) * PUBLIC_FEED_HISTORY_PAGE_SIZE;
@@ -83,12 +85,15 @@ export async function readPublicFeedHistory(
       'id,version_number,operation,publication_mode,previous_version_id,restored_from_version_id,affected_public_id,authorizing_actor_id,completion_actor_id,byte_count,feed_hash,record_count,created_at',
     ).eq('version_number', selectedVersionNumber).maybeSingle()
     : Promise.resolve({ data: null, error: null });
+  const filters = parsePublicFeedHistoryFilters(requestedFilters);
+  let versionQuery = supabase.from('public_feed_versions').select('id,version_number,operation,publication_mode,previous_version_id,restored_from_version_id,affected_public_id,authorizing_actor_id,completion_actor_id,byte_count,feed_hash,record_count,created_at');
+  if (filters.project) versionQuery = versionQuery.eq('affected_public_id', filters.project);
+  if (filters.operation) versionQuery = versionQuery.eq('operation', filters.operation);
+  if (filters.from) versionQuery = versionQuery.gte('created_at', filters.from + 'T00:00:00Z');
+  if (filters.to) versionQuery = versionQuery.lt('created_at', new Date(Date.parse(filters.to + 'T00:00:00Z') + 86400000).toISOString());
   const [headResult, versionsResult, selectedResult, projectsResult, blockingResult] = await Promise.all([
     supabase.from('public_feed_head').select('current_version_id,generation,rollback_enabled').eq('singleton', true).maybeSingle(),
-    supabase.from('public_feed_versions').select(
-      'id,version_number,operation,publication_mode,previous_version_id,restored_from_version_id,affected_public_id,authorizing_actor_id,completion_actor_id,byte_count,feed_hash,record_count,created_at',
-    ).order('version_number', { ascending: false })
-      .range(offset, offset + PUBLIC_FEED_HISTORY_PAGE_SIZE),
+    versionQuery.order('version_number', { ascending: false }).range(offset, offset + PUBLIC_FEED_HISTORY_PAGE_SIZE),
     selection,
     supabase.from('projects').select('public_id,title,status,deleted_at').is('deleted_at', null),
     supabase.from('public_feed_operations')

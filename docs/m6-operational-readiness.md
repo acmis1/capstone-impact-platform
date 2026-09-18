@@ -2,7 +2,7 @@
 
 This document is the canonical PP1 M6 operational-readiness contract for the active Admin/CMS. It defines what the repository can prove now, what a supervised hosted rehearsal must prove later, and which decisions remain with the institution. It does not authorize a deployment, hosted mutation, restore, rollback, DNS change, Duda change, email, or secret access.
 
-Executable application code, migrations, and tests on the reviewed commit remain the source of truth. The current package contains 59 migration files ending at `20260916120000_archived_project_restore`; hosted staging remains verified through Migration 0058, and Migration 0059 is repository-only in this change; `npm run check:operational-readiness` verifies the repository manifest and fails closed when it changes unexpectedly.
+Executable code, the checked migration manifest and exact-head tests remain authoritative for a candidate. Hosted delivery is determined separately from `/api/readiness` and a dated rollout receipt, not a hard-coded count in this guide. The 18 September 2026 release `79fe1b333d16fafe9aa15e5572e230d74640f365` completed a 61-migration staging rollout/self-verification. Subsequent maintenance candidates add a forward migration and need their own rehearsal, data-preservation and matched worker/application evidence. Staff UAT was not performed because staff were unavailable; developer self-verification is not institutional sign-off.
 
 ## Evidence vocabulary
 

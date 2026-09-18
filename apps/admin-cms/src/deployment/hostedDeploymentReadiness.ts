@@ -5,7 +5,7 @@
  * deployment readiness separately executes one immutable, read-only capability sentinel.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 61;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 62;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -69,10 +69,11 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260916120000_archived_project_restore.sql',
   '20260917090000_archived_project_republish_media_rearm.sql',
   '20260917120000_governed_project_soft_delete.sql',
+  '20260918120000_governed_project_maintenance.sql',
 ] as const;
 
 export const RELEASE_CAPABILITY_SENTINEL =
-  '20260917120000_governed_project_soft_delete|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1|archived_project_republish_media_rearm_v1|governed_project_soft_delete_v1';
+  '20260918120000_governed_project_maintenance|active_staff_catalog_rls_v1|staff_lifecycle_v1|staging_feed_rollback_capability_v1|preview_response_observation_v1|assistive_worker_environment_identity_v1|gallery_text_equivalent_v1|layout_recipe_library_v1|archived_project_restore_v1|archived_project_republish_media_rearm_v1|governed_project_soft_delete_v1|governed_project_maintenance_v1';
 
 export const REQUIRED_CORE_TABLES = [
   'programs',
@@ -146,6 +147,10 @@ export const REQUIRED_LAYOUT_RECIPE_TABLES = [
   'layout_recipe_audit_events',
 ] as const;
 
+export const REQUIRED_PROJECT_MAINTENANCE_TABLES = [
+  'taxonomy_lifecycle_audit_events',
+] as const;
+
 export const ALL_REQUIRED_TABLES = [
   ...REQUIRED_CORE_TABLES,
   ...REQUIRED_IMPORT_LEDGER_TABLES,
@@ -156,6 +161,7 @@ export const ALL_REQUIRED_TABLES = [
   ...REQUIRED_NOTIFICATION_TABLES,
   ...REQUIRED_ASSISTIVE_TABLES,
   ...REQUIRED_LAYOUT_RECIPE_TABLES,
+  ...REQUIRED_PROJECT_MAINTENANCE_TABLES,
 ] as const;
 
 export type RequiredRpcSignature = {
@@ -210,6 +216,11 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('get_project_reconciliation_readiness', ['p_public_id', 'p_admin_id', 'p_private_bucket'], ['text', 'uuid', 'text']),
   rpc('get_project_soft_delete_preflight', ['p_public_ids', 'p_admin_id'], ['text[]', 'uuid']),
   rpc('soft_delete_project_if_current', ['p_public_id', 'p_expected_updated_at', 'p_admin_id'], ['text', 'timestamptz', 'uuid']),
+  rpc('update_project_layout_if_current', ['p_public_id', 'p_expected_updated_at', 'p_layout_config', 'p_recipe_version_id', 'p_admin_id'], ['text', 'timestamptz', 'jsonb', 'uuid', 'uuid']),
+  rpc('recover_deleted_project_if_current', ['p_public_id', 'p_expected_updated_at', 'p_expected_deleted_at', 'p_admin_id'], ['text', 'timestamptz', 'timestamptz', 'uuid']),
+  rpc('list_deleted_projects', ['p_admin_id', 'p_page', 'p_page_size', 'p_search'], ['uuid', 'integer', 'integer', 'text']),
+  rpc('get_deleted_project_detail', ['p_public_id', 'p_admin_id'], ['text', 'uuid']),
+  rpc('manage_taxonomy_lifecycle', ['p_kind', 'p_taxonomy_id', 'p_action', 'p_name', 'p_expected_lifecycle_version', 'p_actor_admin_id'], ['text', 'uuid', 'text', 'text', 'integer', 'uuid']),
   rpc('reserve_publication_attempt', ['p_public_id', 'p_admin_id', 'p_private_bucket', 'p_confirmed_preview_id', 'p_confirmed_at'], ['text', 'uuid', 'text', 'uuid', 'timestamptz']),
   rpc('prepare_publication_attempt', ['p_attempt_id', 'p_execution_token', 'p_private_bucket', 'p_candidate_record_count', 'p_candidate_feed_hash', 'p_candidate_feed_content', 'p_feed_storage_bucket', 'p_feed_storage_path', 'p_feed_public_url', 'p_previous_feed_existed', 'p_previous_feed_content', 'p_media_manifest'], ['uuid', 'uuid', 'text', 'integer', 'text', 'text', 'text', 'text', 'text', 'boolean', 'text', 'jsonb']),
   rpc('claim_publication_attempt', ['p_public_id', 'p_admin_id'], ['text', 'uuid']),
@@ -265,6 +276,7 @@ export const REQUIRED_RPC_SIGNATURES = [
   // Migration 0047 execution control. The dispatcher-side routines live in a separate schema that
   // is never exposed through the Data API, so only these service-role routines appear here.
   rpc('register_assistive_executor', ['p_deployment_version', 'p_image_digest', 'p_configuration_version', 'p_registration_days'], ['text', 'text', 'text', 'integer']),
+  rpc('register_assistive_executor', ['p_deployment_version', 'p_image_digest', 'p_configuration_version', 'p_registration_days', 'p_pipeline_version'], ['text', 'text', 'text', 'integer', 'text']),
   rpc('claim_assistive_execution_reservation', ['p_reservation_token', 'p_generation', 'p_worker_instance_id', 'p_deployment_version', 'p_image_digest', 'p_execution_mode'], ['uuid', 'bigint', 'text', 'text', 'text', 'text']),
   rpc('settle_assistive_execution_reservation', ['p_reservation_token', 'p_generation', 'p_outcome', 'p_processed_job_count'], ['uuid', 'bigint', 'text', 'integer']),
   rpc('get_assistive_executor_availability', ['p_pipeline_version', 'p_deployment_version', 'p_image_digest', 'p_ocr_capability', 'p_language_capability'], ['text', 'text', 'text', 'text', 'text']),

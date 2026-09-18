@@ -9,6 +9,7 @@ import { createSupabaseAdminClient } from '../../../../lib/supabase/admin';
 import { SupabaseTaxonomyGateway } from '../../../../taxonomy/SupabaseTaxonomyGateway';
 import {
   createTaxonomyEntry,
+  transitionTaxonomyEntry,
   parseTaxonomyKind,
   type TaxonomyActionResult,
 } from '../../../../taxonomy/taxonomy';
@@ -19,10 +20,14 @@ const MAX_REQUEST_BYTES = 2_048;
 type RouteContext = { params: Promise<{ kind: string }> };
 
 function statusFor(result: TaxonomyActionResult): number {
-  if (result.ok) return 201;
+  if (result.ok) return result.code === 'CREATED' ? 201 : 200;
   switch (result.code) {
     case 'INVALID_INPUT': return 400;
     case 'DUPLICATE': return 409;
+    case 'BUSY':
+    case 'STALE_VERSION':
+    case 'REFERENCED_RENAME_BLOCKED': return 409;
+    case 'PERMISSION_DENIED': return 403;
     case 'PERSISTENCE_FAILED': return 500;
   }
   return 500;
@@ -88,7 +93,7 @@ async function resolveAuthorizedKind(request: NextRequest, context: RouteContext
   if (!canManageTaxonomy(adminContext.permissions)) {
     return { response: NextResponse.json({ success: false, code: 'PERMISSION_DENIED', error: getPublicAuthErrorMessage('PERMISSION_DENIED') }, { status: 403, headers: NO_STORE_HEADERS }) };
   }
-  return { kind };
+  return { kind, adminContext };
 }
 
 /** Admin-only catalogue creation. The acting user's authority is derived exclusively from the session. */
@@ -101,6 +106,30 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
     const result = await createTaxonomyEntry(
       new SupabaseTaxonomyGateway(createSupabaseAdminClient()),
       authorized.kind,
+      parsedBody.body,
+    );
+    if (result.ok) revalidatePath('/admin/taxonomy');
+    return NextResponse.json({ success: result.ok, ...result }, { status: statusFor(result), headers: NO_STORE_HEADERS });
+  } catch (error) {
+    if (error instanceof AdminAuthError) {
+      return NextResponse.json({ success: false, code: error.type, error: getPublicAuthErrorMessage(error.type) }, { status: getAuthErrorHttpStatus(error.type), headers: NO_STORE_HEADERS });
+    }
+    console.error('[Taxonomy API]: INTERNAL_FAILURE');
+    return NextResponse.json({ success: false, code: 'PERSISTENCE_FAILED', error: 'The catalogue change could not be completed. Try again.' }, { status: 500, headers: NO_STORE_HEADERS });
+  }
+}
+
+/** Retire, reactivate, or rename one catalogue row through the CAS lifecycle authority. */
+export async function PATCH(request: NextRequest, context: RouteContext): Promise<NextResponse> {
+  try {
+    const authorized = await resolveAuthorizedKind(request, context);
+    if ('response' in authorized && authorized.response) return authorized.response;
+    const parsedBody = await readBoundedJson(request);
+    if ('response' in parsedBody) return parsedBody.response;
+    const result = await transitionTaxonomyEntry(
+      new SupabaseTaxonomyGateway(createSupabaseAdminClient()),
+      authorized.kind,
+      authorized.adminContext.adminUserId,
       parsedBody.body,
     );
     if (result.ok) revalidatePath('/admin/taxonomy');

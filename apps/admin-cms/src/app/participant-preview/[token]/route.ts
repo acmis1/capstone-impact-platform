@@ -192,7 +192,7 @@ async function renderPreviewResponse(token: string, correctionError?: Correction
   // page rather than a page that shows them an image nobody can describe.
   let html: string;
   try {
-    html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews, responseState, correctionForm });
+    html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews, responseState, correctionForm, expiresAt: resolved.expiresAt });
   } catch {
     return unavailableResponse(404);
   }

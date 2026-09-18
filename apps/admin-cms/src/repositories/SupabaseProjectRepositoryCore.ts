@@ -338,6 +338,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
         .from('projects')
         .select(PROJECT_WITH_RELATIONS_SELECT)
         .is('deleted_at', null)
+        .neq('status', 'deleted')
         .order('public_id', { ascending: true })
         .limit(PROJECT_LIST_PAGE_SIZE);
       if (cursor !== null) query = query.gt('public_id', cursor);
@@ -396,7 +397,8 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     let dbQuery = this.supabase
       .from('projects')
       .select(projectSelectForQuery(query), selectOpts)
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .neq('status', 'deleted');
 
     // Apply search
     if (query.search) {
@@ -510,21 +512,25 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       this.supabase
         .from('projects')
         .select('id', { count: 'exact', head: true })
-        .is('deleted_at', null),
+        .is('deleted_at', null)
+        .neq('status', 'deleted'),
       this.supabase
         .from('projects')
         .select('id', { count: 'exact', head: true })
         .is('deleted_at', null)
+        .neq('status', 'deleted')
         .in('status', ['approved', 'published']),
       this.supabase
         .from('projects')
         .select('id', { count: 'exact', head: true })
         .is('deleted_at', null)
+        .neq('status', 'deleted')
         .eq('status', 'in_review'),
       this.supabase
         .from('projects')
         .select('id', { count: 'exact', head: true })
         .is('deleted_at', null)
+        .neq('status', 'deleted')
         .eq('status', 'archived'),
     ]);
 
@@ -567,6 +573,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
         .from('projects')
         .select('year, program_name, project_disciplines(disciplines(name)), project_industry_categories(industry_categories(name))')
         .is('deleted_at', null)
+        .neq('status', 'deleted')
         .order('id', { ascending: true })
         .range(from, to);
 
@@ -624,6 +631,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       .select(PROJECT_WITH_RELATIONS_SELECT)
       .eq('public_id', publicId)
       .is('deleted_at', null)
+      .neq('status', 'deleted')
       .maybeSingle();
 
     if (error) {

@@ -24,7 +24,7 @@ import { runOnDemandAssistiveWorker } from '../assistive-validation/services/onD
  */
 
 const DB_CONTAINER = 'supabase_db_capstone-impact-platform';
-const PIPELINE = 'assistive-deterministic-checks/v3';
+const PIPELINE = 'assistive-deterministic-checks/v4';
 const COMMIT = 'a'.repeat(40);
 const OTHER_COMMIT = 'c'.repeat(40);
 const DIGEST = `sha256:${'b'.repeat(64)}`;
@@ -331,13 +331,13 @@ async function main(): Promise<void> {
         p_deployment_version: COMMIT,
         p_image_digest: DIGEST,
         p_configuration_version: 'zero-cost-executor/v1',
-        p_registration_days: 30,
+        p_pipeline_version: PIPELINE, p_registration_days: 30,
       });
       assert.equal(registered.resultCode, 'REGISTERED');
       assert.equal(
         (await rpc('register_assistive_executor', {
           p_deployment_version: 'not-a-commit', p_image_digest: DIGEST,
-          p_configuration_version: 'zero-cost-executor/v1', p_registration_days: 30,
+          p_configuration_version: 'zero-cost-executor/v1', p_pipeline_version: PIPELINE, p_registration_days: 30,
         })).resultCode,
         'VALIDATION_FAILED',
       );

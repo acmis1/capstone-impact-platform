@@ -24,7 +24,7 @@ const ROLE_LABELS: Record<AdminRole, string> = {
 };
 
 const ROLE_DESCRIPTIONS: Record<AdminRole, string> = {
-  admin: 'Full project authority, including publication, archiving and staff management.',
+  admin: 'Full project authority, including publication, archiving, governed soft deletion/recovery, layouts, project categories and staff management.',
   reviewer: 'Can read projects and complete review decisions.',
   editor: 'Can import projects and submit eligible projects for review.',
 };

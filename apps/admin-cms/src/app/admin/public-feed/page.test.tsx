@@ -399,7 +399,7 @@ describe('PublicFeedHistoryPage', () => {
       const cells = getActivityTable().getAllByRole('cell');
       expect(cells[0].textContent).toBe('Initial setup');
       expect(cells[1].textContent).toBe('—');
-      expect(getActivityTable().queryAllByText('Initial setup')).toHaveLength(1);
+      expect(getActivityTable().getAllByRole('cell').filter(cell => cell.textContent === 'Initial setup')).toHaveLength(1);
     });
 
     it('labels the record-count column as the resulting published total, not the action volume', async () => {

@@ -14,11 +14,11 @@ type PreviewTextSection = Exclude<LayoutSectionId, 'snapshots' | 'video'>;
 
 const SYNTHETIC_CONTENT: Record<PreviewTextSection, { title: string; body: string }> = {
   background: {
-    title: 'Background',
+    title: 'Project background / motivation',
     body: 'Synthetic context: a representative project motivation appears here when supplied.',
   },
   solution: {
-    title: 'Solution',
+    title: 'Solution & impact',
     body: 'Synthetic outcome: a representative solution or impact statement appears here when supplied.',
   },
   team: {
@@ -53,16 +53,19 @@ function PreviewSection({ section }: { section: PreviewTextSection }) {
 }
 
 export function LayoutRecipePreview({ config }: { config: ResolvedLayoutConfig }) {
-  const effectiveFeaturedMedia = resolveEffectiveFeaturedMedia(config);
-  const orderedSections = getOrderedPreviewSections(config, effectiveFeaturedMedia);
+  const [sample, setSample] = React.useState<'rich' | 'poster-only'>('rich');
+  const headingId = React.useId();
+  const rich = sample === 'rich';
+  const effectiveFeaturedMedia = resolveEffectiveFeaturedMedia(config, { poster: true, snapshots: rich, video: rich && !config.hiddenSections.includes('video') });
+  const orderedSections = getOrderedPreviewSections(config, effectiveFeaturedMedia).filter(section => rich || section === 'team' || section === 'accessibilityText');
   const template = LAYOUT_TEMPLATE_PRESENTATION[config.templateId];
   const presetClass = `layout-preset-${config.templateId}`;
 
   return (
-    <section aria-labelledby="recipe-preview-heading" className="flex flex-col gap-3">
+    <section aria-labelledby={headingId} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 id="recipe-preview-heading" className="text-lg font-semibold">Representative public preview</h2>
+          <h2 id={headingId} className="text-lg font-semibold">Representative public preview</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Synthetic illustrative content only — this is not project or publication proof.
           </p>
@@ -70,12 +73,16 @@ export function LayoutRecipePreview({ config }: { config: ResolvedLayoutConfig }
         <span className="text-xs font-semibold text-muted-foreground">{template.label}</span>
       </div>
 
+      <label className="flex flex-col gap-1 text-sm">Example content
+        <select aria-label="Example content" value={sample} onChange={event => setSample(event.target.value as 'rich' | 'poster-only')} className="h-10 rounded-md border border-input bg-background px-3">
+          <option value="rich">Poster, gallery, video and optional text</option><option value="poster-only">Poster and required content only</option>
+        </select>
+      </label>
       <div
-        id="project-detail"
         data-preset={config.templateId}
         className={`${presetClass} cip-module rounded-xl border p-4 shadow-sm transition-colors sm:p-5 ${
           config.templateId === 'technical_detail'
-            ? 'border-stone-300 bg-stone-50 text-slate-900'
+            ? 'border-stone-300 bg-stone-50 text-slate-900 font-serif'
             : config.templateId === 'media_rich'
               ? 'border-blue-400/40 bg-slate-950 text-slate-50'
               : 'border-orange-200/20 bg-stone-950 text-stone-50'
@@ -117,22 +124,15 @@ export function LayoutRecipePreview({ config }: { config: ResolvedLayoutConfig }
         )}
 
         <div data-layout-region="ordered" className="mt-4 flex flex-col gap-4">
-          {orderedSections.map((section) => {
-            if (section === 'snapshots' || section === 'video') return null;
-            return <PreviewSection key={section} section={section as PreviewTextSection} />;
+          {orderedSections.map(section => {
+            if (section === 'snapshots' || section === 'video') return (
+              <section key={section} data-layout-section={section} className="border-t border-current/15 pt-3">
+                <h4 className="text-sm font-semibold">{LAYOUT_SECTION_PRESENTATION[section].label}</h4>
+                <p className="mt-1 text-sm opacity-85">Synthetic {section === 'snapshots' ? 'snapshot gallery' : 'project video'} in its configured position, not promoted to featured media.</p>
+              </section>
+            );
+            return <PreviewSection key={section} section={section} />;
           })}
-          {orderedSections.includes('snapshots') && (
-            <section data-layout-section="snapshots" className="border-t border-current/15 pt-3">
-              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] opacity-70">Snapshot gallery</p>
-              <p className="mt-1 text-sm opacity-85">Richer example content is available here when snapshots are not the featured region.</p>
-            </section>
-          )}
-          {orderedSections.includes('video') && (
-            <section data-layout-section="video" className="border-t border-current/15 pt-3">
-              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] opacity-70">Project video</p>
-              <p className="mt-1 text-sm opacity-85">Optional video remains in this configured order when it is not featured or hidden.</p>
-            </section>
-          )}
         </div>
 
         <section data-layout-region="poster" className="poster-body mt-4 border-t border-current/15 pt-3">

@@ -228,6 +228,7 @@ function renderResponseSection(responseState: ParticipantPreviewResponseState, c
         <p>Confirm that the information in this exact preview is ready for staff to continue reviewing.</p>
         <form method="POST">
           <input type="hidden" name="action" value="confirm" />
+          <label class="confirmation-acknowledgement"><input type="checkbox" required /> I have reviewed this exact project version and understand that confirmation does not publish it.</label>
           <button type="submit" class="confirm-button">Confirm project details</button>
         </form>
       </div>
@@ -736,6 +737,8 @@ const PAGE_STYLE = `
   .correction-file-field label { font-weight: 700; display: block; }
   .correction-file-field input { display: block; width: 100%; max-width: 100%; min-width: 0; font: inherit; }
   .correction-file-field input:focus-visible, #package-error:focus { outline: 3px solid #176b87; outline-offset: 3px; }
+  .confirmation-acknowledgement { display: flex; align-items: flex-start; gap: .65rem; margin: 1rem 0; line-height: 1.5; }
+  .confirmation-acknowledgement input { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; margin-top: .2rem; }
   #package-error { border: 2px solid #8b2525; padding: 1rem; margin: 1rem 0; }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
@@ -748,8 +751,11 @@ export function renderParticipantPreviewPage(params: {
   media: ParticipantPreviewMediaViewRef[];
   responseState: ParticipantPreviewResponseState;
   correctionForm?: CorrectionFormState;
+  expiresAt?: string;
 }): string {
   const { snapshot, media, responseState } = params;
+  if (params.expiresAt !== undefined && !Number.isFinite(Date.parse(params.expiresAt))) throw new ParticipantPreviewEvidenceError('Invalid preview expiry evidence');
+  const expiryNotice = params.expiresAt ? `<p class="response-time">Preview link expires <time datetime="${escapeHtml(params.expiresAt)}">${escapeHtml(new Date(params.expiresAt).toUTCString())}</time>. Request a new link from your coordinator after that time.</p>` : '';
   const configuredContent = snapshot.layoutConfig
     ? renderConfiguredParticipantContent(snapshot, media)
     : `${renderOverview(snapshot)}
@@ -781,6 +787,8 @@ export function renderParticipantPreviewPage(params: {
     <div class="private-notice" role="note">
       <p class="private-notice__title">This is a private preview prepared for the project team.</p>
       <p class="private-notice__body">It is not publicly listed or searchable. Confirmation does not publish the project.</p>
+      <p class="private-notice__body">This is a content confirmation view of the exact saved project, not a pixel-for-pixel preview of the public showcase. Public colours, typography and fixed template regions may look different.</p>
+      ${expiryNotice}
     </div>
   </header>
   <div class="review-layout">

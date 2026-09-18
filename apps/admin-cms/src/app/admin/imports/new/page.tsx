@@ -94,7 +94,7 @@ export default async function NewImportPreviewPage() {
             Import projects
           </h1>
           <p className="text-sm text-muted-foreground">
-            Check project files and import them into the test environment.
+            Check project files and review the results before importing them.
           </p>
         </div>
 

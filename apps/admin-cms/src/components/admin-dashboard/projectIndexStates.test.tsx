@@ -29,7 +29,7 @@ vi.mock('../../repositories/SupabaseProjectRepository', () => ({
 }));
 
 vi.mock('../../auth/requireAdmin', () => ({
-  requireAdmin: vi.fn(async () => ({ permissions: ['projects.edit'] })),
+  requireAdmin: vi.fn(async () => ({ permissions: ['projects.edit'], roles: ['editor'] })),
 }));
 
 import { requireAdmin } from '../../auth/requireAdmin';
@@ -309,7 +309,7 @@ describe('Projects index page states', () => {
 
     cleanup();
     vi.mocked(requireAdmin).mockResolvedValueOnce({
-      permissions: ['projects.review'],
+      permissions: ['projects.review'], roles: ['reviewer'],
     } as Awaited<ReturnType<typeof requireAdmin>>);
 
     await renderAdminPage();

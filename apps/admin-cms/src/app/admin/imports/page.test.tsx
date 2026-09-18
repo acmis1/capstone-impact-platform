@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ImportBatchRow } from '../../../repositories/ImportBatchRepositoryCore';
 import ImportBatchesPage from './page';
 
-const repository = vi.hoisted(() => ({ constructed: vi.fn(), listRecentImportBatches: vi.fn() }));
+const repository = vi.hoisted(() => ({ constructed: vi.fn(), listImportHistory: vi.fn() }));
 const auth = vi.hoisted(() => ({ requireAdmin: vi.fn() }));
 const permissions = vi.hoisted(() => ({ hasPermission: vi.fn() }));
 const table = vi.hoisted(() => ({ render: vi.fn() }));
@@ -15,7 +15,7 @@ vi.mock('../../../repositories/ImportBatchRepository', () => ({
     constructor() {
       repository.constructed();
     }
-    listRecentImportBatches = repository.listRecentImportBatches;
+    listImportHistory = repository.listImportHistory;
   },
 }));
 
@@ -63,7 +63,7 @@ describe('Imports index summary', () => {
     auth.requireAdmin.mockReset();
     auth.requireAdmin.mockResolvedValue({ permissions: ['projects.read', 'projects.edit'] });
     repository.constructed.mockReset();
-    repository.listRecentImportBatches.mockReset();
+    repository.listImportHistory.mockReset();
     permissions.hasPermission.mockReset();
     permissions.hasPermission.mockReturnValue(true);
     table.render.mockReset();
@@ -72,13 +72,13 @@ describe('Imports index summary', () => {
   afterEach(cleanup);
 
   it('preserves the five exact batch metrics in one semantic operational surface', async () => {
-    repository.listRecentImportBatches.mockResolvedValue(BATCHES);
+    repository.listImportHistory.mockResolvedValue({ batches: BATCHES, total: BATCHES.length });
 
     render(await ImportBatchesPage());
 
     const summary = screen.getByRole('region', { name: 'Import batch summary' });
     expect(summary.className).toContain('rounded-xl border border-border-structural bg-card shadow-xs');
-    expect(screen.getByRole('heading', { name: 'Recent imports', level: 3 }).closest('[data-slot="card"]')?.className).toContain('border-border-structural');
+    expect(screen.getByRole('heading', { name: 'Import history', level: 3 }).closest('[data-slot="card"]')?.className).toContain('border-border-structural');
     expect(summary.querySelectorAll('dl')).toHaveLength(1);
     expect(summary.querySelectorAll('dt')).toHaveLength(5);
     expect(valueFor('Recent imports').textContent).toBe('3');
@@ -98,9 +98,7 @@ describe('Imports index summary', () => {
   });
 
   it('uses neutral value presentation for healthy zero failed, warning, and error counts', async () => {
-    repository.listRecentImportBatches.mockResolvedValue([
-      { ...BATCHES[0], warning_count: 0, error_count: 0 },
-    ]);
+    repository.listImportHistory.mockResolvedValue({ batches: [{ ...BATCHES[0], warning_count: 0, error_count: 0 }], total: 1 });
     permissions.hasPermission.mockImplementation((_permissions: unknown, required: string) => required === 'projects.read');
 
     render(await ImportBatchesPage());
@@ -114,14 +112,14 @@ describe('Imports index summary', () => {
   });
 
   it('keeps the empty and bounded load-error states outside the summary/table path', async () => {
-    repository.listRecentImportBatches.mockResolvedValueOnce([]);
+    repository.listImportHistory.mockResolvedValueOnce({ batches: [], total: 0 });
     render(await ImportBatchesPage());
     expect(screen.getByText('No imports found')).toBeTruthy();
     expect(table.render).not.toHaveBeenCalled();
 
     cleanup();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    repository.listRecentImportBatches.mockRejectedValueOnce(new Error('repository unavailable'));
+    repository.listImportHistory.mockRejectedValueOnce(new Error('repository unavailable'));
     render(await ImportBatchesPage());
     expect(screen.getByRole('alert')).toBeTruthy();
     expect(screen.getByText('Import records could not be loaded')).toBeTruthy();
@@ -137,18 +135,18 @@ describe('Imports index summary', () => {
 
     expect(screen.getByText('Import records unavailable')).toBeTruthy();
     expect(repository.constructed).not.toHaveBeenCalled();
-    expect(repository.listRecentImportBatches).not.toHaveBeenCalled();
+    expect(repository.listImportHistory).not.toHaveBeenCalled();
   });
 
   it('keeps reviewer read access while withholding edit controls', async () => {
     auth.requireAdmin.mockResolvedValueOnce({ permissions: ['projects.read'] });
     permissions.hasPermission.mockImplementation((_permissions: unknown, required: string) => required === 'projects.read');
-    repository.listRecentImportBatches.mockResolvedValueOnce([]);
+    repository.listImportHistory.mockResolvedValueOnce({ batches: [], total: 0 });
 
     render(await ImportBatchesPage());
 
     expect(repository.constructed).toHaveBeenCalledTimes(1);
-    expect(repository.listRecentImportBatches).toHaveBeenCalledWith(50);
+    expect(repository.listImportHistory).toHaveBeenCalledWith({ page: 1, q: '', year: '', status: '' });
     expect(screen.getByText('No imports found')).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Import projects' })).toBeNull();
   });

@@ -1,0 +1,469 @@
+{
+  "provenance": "Exact PDFium native text/geometry from synthetic staging demo posters; no OCR, metadata-driven selection or live data.",
+  "image": "capstone-assistive-worker:79fe1b333d16fafe9aa15e5572e230d74640f365",
+  "records": [
+    {
+      "publicId": "pp1-demo-ready-20260918-a",
+      "sourceSha256": "43fd0f1c84aeb87c2b8c45954a4f6f212fab5582e968ac45652febb78915d841",
+      "expectedDocumentTitle": "Campus Water Insight",
+      "blocks": [
+        {
+          "page_number": 1,
+          "text": "Campus Water Insight",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 46.31999969482422,
+            "top": 37.8900146484375,
+            "right": 341.1299743652344,
+            "bottom": 66.57000732421875,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "SYNTHETIC DEMONSTRATION ONLY - NO REAL STUDENT DATA",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.637001037597656,
+            "top": 80.41900634765625,
+            "right": 447.1549072265625,
+            "bottom": 90.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "Team: Synthetic Water Team | Academic year: 2026",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 110.41900634765625,
+            "right": 346.2749938964844,
+            "bottom": 122.76901245117188,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "A synthetic dashboard helps campus staff review water use and identify unusual readings.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 140.5360107421875,
+            "right": 561.9448852539062,
+            "bottom": 152.84698486328125,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "BACKGROUND",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.96200180053711,
+            "top": 170.41900634765625,
+            "right": 137.5469970703125,
+            "bottom": 180.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "Campus water measurements arrive in separate files and are difficult to compare.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.571998596191406,
+            "top": 200.41900634765625,
+            "right": 512.0380249023438,
+            "bottom": 212.67800903320312,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "SOLUTION",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.637001037597656,
+            "top": 230.41900634765625,
+            "right": 110.46800231933594,
+            "bottom": 240.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "The prototype combines sample readings into a clear dashboard and highlights unusual usage.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 260.6659851074219,
+            "right": 590.1420288085938,
+            "bottom": 272.84698486328125,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "EVIDENCE",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 46.11800003051758,
+            "top": 290.41900634765625,
+            "right": 110.36400604248047,
+            "bottom": 300.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "All measurements and project details are synthetic fixtures for workflow testing.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 320.5360107421875,
+            "right": 498.3100280761719,
+            "bottom": 332.84698486328125,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "Team members: Synthetic Member 1A, Synthetic Member 1B",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 350.41900634765625,
+            "right": 398.4830017089844,
+            "bottom": 362.7690124511719,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "publicId": "pp1-demo-ready-20260918-b",
+      "sourceSha256": "b902798473db931b122509ba66af26c035c37985d2d7baf59cbdd0dbac3a4dfe",
+      "expectedDocumentTitle": "Neighbourhood Heat Watch",
+      "blocks": [
+        {
+          "page_number": 1,
+          "text": "Neighbourhood Heat Watch",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 47.279998779296875,
+            "top": 38.46002197265625,
+            "right": 413.219970703125,
+            "bottom": 66.57000732421875,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "SYNTHETIC DEMONSTRATION ONLY - NO REAL STUDENT DATA",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.637001037597656,
+            "top": 80.41900634765625,
+            "right": 447.1549072265625,
+            "bottom": 90.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "Team: Synthetic Heat Team | Academic year: 2026",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 110.41900634765625,
+            "right": 339.05999755859375,
+            "bottom": 122.76901245117188,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "A synthetic neighbourhood dashboard displays sample temperature readings and heat alerts.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 140.66598510742188,
+            "right": 579.2999877929688,
+            "bottom": 152.84698486328125,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "BACKGROUND",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.96200180053711,
+            "top": 170.41900634765625,
+            "right": 137.5469970703125,
+            "bottom": 180.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "Residents need understandable information about changing local heat conditions.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 46.14400100708008,
+            "top": 200.5360107421875,
+            "right": 512.8438720703125,
+            "bottom": 212.84698486328125,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "SOLUTION",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.637001037597656,
+            "top": 230.41900634765625,
+            "right": 110.46800231933594,
+            "bottom": 240.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "The prototype organises sample sensor readings and presents accessible heat summaries.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 260.6659851074219,
+            "right": 568.4189453125,
+            "bottom": 272.84698486328125,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "EVIDENCE",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 46.11800003051758,
+            "top": 290.41900634765625,
+            "right": 110.36400604248047,
+            "bottom": 300.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "All measurements and project details are synthetic fixtures for workflow testing.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 320.5360107421875,
+            "right": 498.3100280761719,
+            "bottom": 332.84698486328125,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "Team members: Synthetic Member 2A, Synthetic Member 2B",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 350.41900634765625,
+            "right": 398.4830017089844,
+            "bottom": 362.7690124511719,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "publicId": "pp1-demo-ready-20260918-c",
+      "sourceSha256": "d0d4388caab18a61f8f8fce70f5cb7c6676eae1426a609b3a050852d6608ff92",
+      "expectedDocumentTitle": "Reuse Exchange Directory",
+      "blocks": [
+        {
+          "page_number": 1,
+          "text": "Reuse Exchange Directory",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 47.63999938964844,
+            "top": 38.46002197265625,
+            "right": 401.4599609375,
+            "bottom": 66.57000732421875,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "SYNTHETIC DEMONSTRATION ONLY - NO REAL STUDENT DATA",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.637001037597656,
+            "top": 80.41900634765625,
+            "right": 447.1549072265625,
+            "bottom": 90.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "Team: Synthetic Reuse Team | Academic year: 2026",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 110.41900634765625,
+            "right": 349.17401123046875,
+            "bottom": 122.76901245117188,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "A synthetic directory helps campus groups discover reusable furniture and equipment.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 140.5360107421875,
+            "right": 538.0770263671875,
+            "bottom": 152.84698486328125,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "BACKGROUND",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.96200180053711,
+            "top": 170.41900634765625,
+            "right": 137.5469970703125,
+            "bottom": 180.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "Useful campus items can be overlooked when reuse information is scattered.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 46.027000427246094,
+            "top": 200.5360107421875,
+            "right": 486.7660217285156,
+            "bottom": 212.67800903320312,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "SOLUTION",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.637001037597656,
+            "top": 230.41900634765625,
+            "right": 110.46800231933594,
+            "bottom": 240.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "The prototype provides a searchable directory with clear categories and accessibility",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 260.6659851074219,
+            "right": 529.6529541015625,
+            "bottom": 272.84698486328125,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "information.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.87099838256836,
+            "top": 290.5360107421875,
+            "right": 111.781005859375,
+            "bottom": 300.1820068359375,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "EVIDENCE",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 46.11800003051758,
+            "top": 320.41900634765625,
+            "right": 110.36400604248047,
+            "bottom": 330.2340087890625,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "All measurements and project details are synthetic fixtures for workflow testing.",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 350.5360107421875,
+            "right": 498.3100280761719,
+            "bottom": 362.84698486328125,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        },
+        {
+          "page_number": 1,
+          "text": "Team members: Synthetic Member 3A, Synthetic Member 3B",
+          "source": "NATIVE_PDF",
+          "bounding_box": {
+            "left": 45.18199920654297,
+            "top": 380.41900634765625,
+            "right": 398.4830017089844,
+            "bottom": 392.7689971923828,
+            "unit": "PDF_POINTS_TOP_LEFT"
+          },
+          "confidence": null
+        }
+      ]
+    }
+  ]
+}

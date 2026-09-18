@@ -43,11 +43,13 @@ export function useUnsavedWorkGuard({
 }) {
   const [pending, setPending] = React.useState<PendingAction | null>(null);
   const restoreFocusRef = React.useRef(true);
+  const confirmedDepartureRef = React.useRef(false);
+  const allowedTraversalRef = React.useRef<string | null>(null);
   const restoreTargetRef = React.useRef<HTMLElement | null>(null);
 
   React.useEffect(() => {
     const protect = (event: BeforeUnloadEvent) => {
-      if (!dirty) return;
+      if (!dirty || confirmedDepartureRef.current) return;
       event.preventDefault();
       event.returnValue = '';
     };
@@ -84,7 +86,8 @@ export function useUnsavedWorkGuard({
     restoreTargetRef.current = null;
     setPending(null);
     onDiscard();
-    action.run();
+    confirmedDepartureRef.current = true;
+    try { action.run(); } finally { queueMicrotask(() => { confirmedDepartureRef.current = false; }); }
   }, [onDiscard, pending]);
 
   React.useEffect(() => {
@@ -123,6 +126,29 @@ export function useUnsavedWorkGuard({
     document.addEventListener('click', guardLink, true);
     return () => document.removeEventListener('click', guardLink, true);
   }, [dirty, guardDocumentNavigation, navigate, requestAction]);
+
+  React.useEffect(() => {
+    if (!guardDocumentNavigation || !dirty) return;
+    type TraverseEvent = Event & { navigationType: string; hashChange: boolean; destination: { url: string; key: string } };
+    type NativeNavigation = EventTarget & { traverseTo: (key: string) => { committed: Promise<unknown>; finished: Promise<unknown> } };
+    const navigation = (window as unknown as { navigation?: NativeNavigation }).navigation;
+    if (!navigation) return; // Unload/link guards remain available in browsers without Navigation API.
+    const guard = (raw: Event) => {
+      const event = raw as TraverseEvent;
+      if (event.navigationType !== 'traverse' || event.hashChange || !event.cancelable) return;
+      if (allowedTraversalRef.current === event.destination.key) { allowedTraversalRef.current = null; return; }
+      if (new URL(event.destination.url).origin !== window.location.origin) return;
+      event.preventDefault();
+      requestAction(() => {
+        allowedTraversalRef.current = event.destination.key;
+        const result = navigation.traverseTo(event.destination.key);
+        void result.committed.catch(() => { allowedTraversalRef.current = null; });
+        void result.finished.catch(() => { allowedTraversalRef.current = null; });
+      });
+    };
+    navigation.addEventListener('navigate', guard);
+    return () => navigation.removeEventListener('navigate', guard);
+  }, [dirty, guardDocumentNavigation, requestAction]);
 
   const dialog = (
     <AlertDialog open={pending !== null} onOpenChange={(open) => { if (!open) handleCancel(); }}>

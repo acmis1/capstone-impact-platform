@@ -53,7 +53,7 @@ describe('LayoutRecipeManager', () => {
     expect(screen.queryByRole('option', { name: /Earlier layout/ })).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Edit active recipe'), { target: { value: active.id } });
-    fireEvent.click(screen.getByRole('button', { name: 'Move Solution up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move Solution & impact up' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save as new version' }));
 
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));

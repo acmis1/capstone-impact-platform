@@ -62,7 +62,7 @@ export type ProjectMetadataErrorCode =
   | 'INTERNAL_FAILURE'
   | 'NO_CHANGES';
 
-export type MetadataOption = { id: string; name: string };
+export type MetadataOption = { id: string; name: string; retiredAt?: string | null };
 
 export interface ProjectMetadataView {
   publicId: string;

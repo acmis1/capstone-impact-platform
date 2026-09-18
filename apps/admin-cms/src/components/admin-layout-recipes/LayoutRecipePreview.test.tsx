@@ -47,3 +47,27 @@ describe('LayoutRecipePreview', () => {
     expect(screen.getByText(/falls back to available video/i)).toBeTruthy();
   });
 });
+
+describe('representative preview ordering and content availability', () => {
+  afterEach(cleanup);
+  it('keeps gallery/video at their exact configured positions when not featured', () => {
+    const config = createLayoutConfigFromStock('poster_showcase');
+    config.featuredMedia = 'none';
+    config.sectionOrder = ['video', 'snapshots', 'team', 'background', 'solution', 'links', 'citations', 'accessibilityText'];
+    render(<LayoutRecipePreview config={config} />);
+    expect(Array.from(document.querySelectorAll('[data-layout-region="ordered"] > [data-layout-section]')).map(e => e.getAttribute('data-layout-section'))).toEqual(config.sectionOrder);
+  });
+  it('shows absent-content fallback and keeps required text when using a poster-only example', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const config = createLayoutConfigFromStock('media_rich');
+    config.featuredMedia = 'video';
+    render(<LayoutRecipePreview config={config} />);
+    fireEvent.change(screen.getByLabelText('Example content'), { target: { value: 'poster-only' } });
+    expect(document.querySelector('[data-featured-media="poster"]')).toBeTruthy();
+    expect(document.querySelector('[data-layout-section="background"]')).toBeNull();
+    expect(document.querySelector('[data-layout-section="snapshots"]')).toBeNull();
+    expect(document.querySelector('[data-layout-section="team"]')).toBeTruthy();
+    expect(document.querySelector('[data-layout-section="accessibilityText"]')).toBeTruthy();
+    expect(screen.getByText(/Required summary region/)).toBeTruthy();
+  });
+});

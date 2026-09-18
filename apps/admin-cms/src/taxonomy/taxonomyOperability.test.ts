@@ -47,7 +47,7 @@ describe('MG-03 named and future programme operability', () => {
     expect(metadataStage).toContain("'LOOKUP_NOT_FOUND'");
     expect(metadataStage).toContain('program_id');
     expect(metadataStage).toContain('program_name');
-    expect(publicLayer).toContain("const prog = String(p.program || p.studyProgram || '').trim();");
+    expect(publicLayer).toContain("const prog = normalizeFilterValue(p.program || p.studyProgram);");
     expect(publicLayer).toContain('options.programs.map');
     expect(publicLayer).toContain("currentFilters.program !== 'All'");
   });

@@ -50,6 +50,7 @@ export class SupabaseAssistiveExecutionControlRepository implements AssistiveExe
       p_image_digest: input.imageDigest,
       p_configuration_version: input.configurationVersion,
       p_registration_days: EXECUTOR_REGISTRATION_DAYS,
+      p_pipeline_version: ASSISTIVE_PIPELINE_VERSION,
     });
   }
 

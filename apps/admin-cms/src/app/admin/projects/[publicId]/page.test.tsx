@@ -132,7 +132,7 @@ describe('Project detail authorization boundary', () => {
     mocks.events.length = 0;
     mocks.requireAdmin.mockImplementation(async () => {
       mocks.events.push('auth');
-      return { permissions: ['projects.read'], adminUserId: 'admin-1' };
+      return { permissions: ['projects.read'], roles: ['reviewer'], adminUserId: 'admin-1' };
     });
     mocks.hasPermission.mockReturnValue(false);
     mocks.canManageParticipantPreview.mockReturnValue(false);

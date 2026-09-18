@@ -281,7 +281,7 @@ export function LayoutRecipeManager({ initialRecipes }: { initialRecipes: Layout
 
           <div className="rounded-lg border border-border/80 bg-muted/20 p-4 text-sm">
             <p className="font-semibold text-foreground">Fixed and optional regions</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Required title, summary, metadata, and poster regions stay fixed. Snapshot gallery, Team &amp; group, and Poster accessibility description are always visible. Optional fields may be absent. Poster transcript and poster alt text are distinct.</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Required title, summary, metadata, and poster regions stay fixed. A supplied snapshot gallery cannot be hidden. Team &amp; group and the poster accessibility description remain visible. Optional fields may be absent. Poster transcript and poster alt text are distinct.</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {Object.entries(LAYOUT_SECTION_PRESENTATION).map(([section, presentation]) => <p key={section} className="text-xs text-muted-foreground"><span className="font-medium text-foreground">{presentation.label}:</span> {presentation.helper}</p>)}
             </div>

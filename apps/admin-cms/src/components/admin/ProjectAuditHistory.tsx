@@ -1,4 +1,6 @@
 import React from 'react';
+import { RecordTimestamp } from '../ui/record-timestamp';
+import { layoutTemplateLabel } from '../../domain/projectRecordPresentation';
 import type { AuditHistoryView, ProjectMetadataEventDetails } from '../../projects/projectDetailAuxiliaryData';
 import { cn } from '../../lib/utils';
 import { Badge } from '../ui/badge';
@@ -13,14 +15,20 @@ interface ProjectAuditHistoryProps {
 
 const AUDIT_ACTION_LABELS: Record<string, string> = {
   approve: 'Approved',
+  publish: 'Published',
+  restore: 'Archived project restored',
+  soft_delete: 'Project deleted (data retained)',
+  unpublish: 'Removed from showcase',
   request_changes: 'Changes requested',
   archive: 'Archived',
   update_metadata: 'Project information updated',
   submit_for_review: 'Submitted for review',
+  update_layout: 'Project layout updated',
+  project_recovery: 'Deleted project recovered',
 };
 
-function auditActionLabel(action: string): string {
-  return AUDIT_ACTION_LABELS[action] ?? action.replace(/_/g, ' ');
+export function auditActionLabel(action: string): string {
+  return Object.hasOwn(AUDIT_ACTION_LABELS, action) ? AUDIT_ACTION_LABELS[action] : action.replace(/_/g, ' ');
 }
 
 /** Long free text keeps its own scroll container so one huge value cannot dominate the page. */
@@ -97,9 +105,7 @@ function AuditEntry({ record }: { record: AuditHistoryView }) {
     <li className="p-4 sm:px-6">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
         <span className="text-sm font-semibold text-foreground">{auditActionLabel(record.action)}</span>
-        <time className="text-xs text-muted-foreground" dateTime={record.timestamp || undefined}>
-          {record.timestamp ? new Date(record.timestamp).toLocaleString() : 'Time not recorded'}
-        </time>
+        <RecordTimestamp className="text-xs text-muted-foreground" value={record.timestamp} />
       </div>
 
       <p className="mt-1 break-words text-xs text-muted-foreground">
@@ -158,6 +164,17 @@ function AuditEntry({ record }: { record: AuditHistoryView }) {
             </div>
           </details>
         </div>
+      )}
+
+      {record.layoutEventDetails && (
+        <div className="mt-2.5 text-xs leading-relaxed text-muted-foreground">
+          <p><span className="font-medium text-foreground-subtle">Layout configuration:</span> {layoutTemplateLabel(record.layoutEventDetails.before.templateId)} → {layoutTemplateLabel(record.layoutEventDetails.after.templateId)}; {record.layoutEventDetails.revokedActivePreviewCount} active preview{record.layoutEventDetails.revokedActivePreviewCount === 1 ? '' : 's'} revoked.</p>
+          {record.layoutEventDetails.recipe && <p className="mt-1">Applied recipe {record.layoutEventDetails.recipe.name} v{record.layoutEventDetails.recipe.version} by value.</p>}
+        </div>
+      )}
+
+      {record.recoveryEventDetails && (
+        <p className="mt-2.5 text-xs leading-relaxed text-muted-foreground">Recovered to private Draft; {record.recoveryEventDetails.rearmedPublicMappingRows} media public mapping row{record.recoveryEventDetails.rearmedPublicMappingRows === 1 ? '' : 's'} rearmed.</p>
       )}
     </li>
   );

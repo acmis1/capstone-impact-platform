@@ -126,3 +126,22 @@ describe('recipe-backed participant preview composition', () => {
     })).toThrow(ParticipantPreviewEvidenceError);
   });
 });
+
+describe('participant clarity without changing response authority', () => {
+  it('shows authoritative expiry and distinguishes content confirmation from public styling', () => {
+    const html = renderParticipantPreviewPage({ snapshot: { ...baseSnapshot, layoutConfig: createLayoutConfigFromStock('media_rich') }, media, responseState: { type: 'unresponded' }, expiresAt: '2026-09-25T12:00:00.000Z' });
+    expect(html).toContain('datetime="2026-09-25T12:00:00.000Z"');
+    expect(html).toContain('Fri, 25 Sep 2026 12:00:00 GMT');
+    expect(html).toContain('not a pixel-for-pixel preview');
+    expect(html).toContain('<input type="checkbox" required />');
+    expect(html).toContain('name="action" value="confirm"');
+    expect(html).not.toContain('type="checkbox" name=');
+    expect(html).not.toContain('<script>');
+  });
+  it('rejects malformed explicit expiry and does not add acknowledgement controls after confirmation', () => {
+    expect(() => renderParticipantPreviewPage({ snapshot: baseSnapshot, media, responseState: { type: 'unresponded' }, expiresAt: 'not-a-date<script>' })).toThrow(ParticipantPreviewEvidenceError);
+    const html = renderParticipantPreviewPage({ snapshot: baseSnapshot, media, responseState: { type: 'confirmed', confirmedAt: '2026-09-18T12:00:00.000Z' }, expiresAt: '2026-09-25T12:00:00.000Z' });
+    expect(html).not.toContain('type="checkbox" required');
+    expect(html).toContain('Preview link expires');
+  });
+});

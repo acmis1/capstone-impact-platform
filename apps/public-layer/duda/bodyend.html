@@ -128,7 +128,6 @@
         industry: normalizeFilterValue(getQueryParam('industry')) || 'All'
     });
 
-    currentFilters = readFiltersFromUrl();
 
     // Duda only needs these preview/device flags to keep responsive route state stable.
     const DUDA_DEVICE_VALUES = new Set(['desktop', 'tablet', 'mobile']);
@@ -1664,6 +1663,7 @@
     window.navigateLightbox = changeSnapshot;
 
     // --- RUNTIME ---
+    currentFilters = readFiltersFromUrl();
     document.addEventListener('DOMContentLoaded', () => initShowcase());
     window.addEventListener('load', () => initShowcase());
     window.addEventListener('popstate', synchronizeUrlState);

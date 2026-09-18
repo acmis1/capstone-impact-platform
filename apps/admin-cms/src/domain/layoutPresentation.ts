@@ -6,18 +6,18 @@ export const LAYOUT_SECTION_PRESENTATION: Record<LayoutSectionId, {
   optional: boolean;
 }> = {
   background: {
-    label: 'Background',
+    label: 'Project background / motivation',
     helper: 'Optional project background or motivation; it is not the poster.',
     optional: true,
   },
   solution: {
-    label: 'Solution',
+    label: 'Solution & impact',
     helper: 'Optional solution or impact; it is not the required public summary.',
     optional: true,
   },
   snapshots: {
     label: 'Snapshot gallery',
-    helper: 'Fixed gallery region; it cannot be hidden.',
+    helper: 'When supplied, the gallery cannot be hidden; it follows section order unless featured.',
     optional: false,
   },
   video: {
@@ -89,12 +89,14 @@ export function resolveEffectiveFeaturedMedia(
   config: ResolvedLayoutConfig,
   available: PreviewMediaAvailability = DEFAULT_PREVIEW_MEDIA,
 ): 'poster' | 'snapshots' | 'video' | null {
-  if (config.featuredMedia === 'none') return null;
+  const visible = { ...available, video: available.video && !config.hiddenSections.includes('video') };
+  // Match the maintained renderer: poster-only projects retain their poster even with no preferred feature.
+  if (config.featuredMedia === 'none') return visible.poster && !visible.video && !visible.snapshots ? 'poster' : null;
   const preferred = config.featuredMedia === 'auto' ? null : config.featuredMedia;
-  if (preferred && available[preferred]) return preferred;
-  if (available.video) return 'video';
-  if (available.snapshots) return 'snapshots';
-  if (available.poster) return 'poster';
+  if (preferred && visible[preferred]) return preferred;
+  if (visible.video) return 'video';
+  if (visible.snapshots) return 'snapshots';
+  if (visible.poster) return 'poster';
   return null;
 }
 
@@ -103,7 +105,7 @@ export function getOrderedPreviewSections(
   effectiveFeaturedMedia: ReturnType<typeof resolveEffectiveFeaturedMedia>,
 ): LayoutSectionId[] {
   return config.sectionOrder.filter((section) => {
-    if (config.hiddenSections.includes(section as never)) return false;
+    if (config.hiddenSections.some(hidden => hidden === section)) return false;
     if (section === 'snapshots' && effectiveFeaturedMedia === 'snapshots') return false;
     if (section === 'video' && effectiveFeaturedMedia === 'video') return false;
     return true;

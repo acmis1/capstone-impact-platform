@@ -14,6 +14,8 @@ function createSupabaseStub(tables: Record<string, Row[]>): SupabaseClient {
           rows = rows.filter((row) => row[column] === value);
           return query;
         },
+        gte: (column: string, value: string) => { rows = rows.filter(row => String(row[column]) >= value); return query; },
+        lt: (column: string, value: string) => { rows = rows.filter(row => String(row[column]) < value); return query; },
         is: (column: string, value: unknown) => {
           rows = rows.filter((row) => row[column] === value);
           return query;
@@ -136,5 +138,27 @@ describe('public feed history pagination', () => {
       leaseExpiresAt: '2026-08-27T12:00:00.000Z',
       storageUncertaintyUntil: '2026-08-27T12:01:00.000Z',
     });
+  });
+});
+
+describe('publishing history filtering retains immutable head authority', () => {
+  it('applies exact project and operation filters before pagination', async () => {
+    const view = await readPublicFeedHistory(historyStub(), undefined, 1, { project: 'synthetic-project', operation: 'publication' });
+    expect(view.versions).toHaveLength(50);
+    expect(view.versions.every(item => item.affectedPublicId === 'synthetic-project' && item.operation === 'publication')).toBe(true);
+    expect(view.currentVersionNumber).toBe(125);
+    expect(view.hasOlder).toBe(true);
+    const setup = await readPublicFeedHistory(historyStub(), undefined, 1, { operation: 'baseline' });
+    expect(setup.versions.map(item => item.versionNumber)).toEqual([1]);
+    expect(setup.currentVersionNumber).toBe(125);
+  });
+  it('handles inclusive dates and empty results without replacing canonical head facts', async () => {
+    const selected = await readPublicFeedHistory(historyStub(), undefined, 1, { from: '2026-08-25', to: '2026-08-25' });
+    expect(selected.versions).toHaveLength(50);
+    const excluded = await readPublicFeedHistory(historyStub(), undefined, 1, { from: '2026-08-26' });
+    expect(excluded.versions).toHaveLength(0);
+    expect(excluded.currentVersionNumber).toBe(125);
+    await expect(readPublicFeedHistory(historyStub(), undefined, 1, { from: '2026-02-30' })).rejects.toThrow();
+    await expect(readPublicFeedHistory(historyStub(), undefined, 1, { from: '2026-09-01', to: '2026-08-01' })).rejects.toThrow();
   });
 });

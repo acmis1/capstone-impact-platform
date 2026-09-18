@@ -15,27 +15,27 @@ describe('BrowserImportFormIntakeFlow - Form Intake in BrowserImportPreviewClien
   it('toggles between Upload project package and Enter project using form tabs', () => {
     render(<BrowserImportPreviewClient />);
 
-    const packageTab = screen.getByRole('tab', { name: /Upload project package/i });
-    const formTab = screen.getByRole('tab', { name: /Enter project using form/i });
+    const packageTab = screen.getByRole('button', { name: /Upload project package/i });
+    const formTab = screen.getByRole('button', { name: /Enter project using form/i });
 
-    expect(packageTab.getAttribute('aria-selected')).toBe('true');
-    expect(formTab.getAttribute('aria-selected')).toBe('false');
+    expect(packageTab.getAttribute('aria-pressed')).toBe('true');
+    expect(formTab.getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('heading', { name: 'Choose project folder' })).toBeTruthy();
     expect(screen.queryByText(/1\. Project Identification/i)).toBeNull();
 
     // Switch to Form tab
     fireEvent.click(formTab);
 
-    expect(formTab.getAttribute('aria-selected')).toBe('true');
-    expect(packageTab.getAttribute('aria-selected')).toBe('false');
+    expect(formTab.getAttribute('aria-pressed')).toBe('true');
+    expect(packageTab.getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByText(/1\. Project Identification/i)).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Choose project folder' })).toBeNull();
 
     // Switch back to Package tab
     fireEvent.click(packageTab);
 
-    expect(packageTab.getAttribute('aria-selected')).toBe('true');
-    expect(formTab.getAttribute('aria-selected')).toBe('false');
+    expect(packageTab.getAttribute('aria-pressed')).toBe('true');
+    expect(formTab.getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('heading', { name: 'Choose project folder' })).toBeTruthy();
     expect(screen.queryByText(/1\. Project Identification/i)).toBeNull();
   });
@@ -116,7 +116,7 @@ describe('BrowserImportFormIntakeFlow - Form Intake in BrowserImportPreviewClien
     render(<BrowserImportPreviewClient />);
 
     // Switch to Form tab
-    fireEvent.click(screen.getByRole('tab', { name: /Enter project using form/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Enter project using form/i }));
 
     // Fill minimum required fields
     fireEvent.change(screen.getByLabelText(/Project Identifier \(Public ID\)/i), { target: { value: 'form-project-01' } });

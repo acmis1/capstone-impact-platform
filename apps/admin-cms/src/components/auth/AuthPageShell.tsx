@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { INSTITUTION_NAME, SCHOOL_NAME } from '../../domain/institution';
+import { AuthEnvironmentBadge } from './RuntimeEnvironmentPresentation';
 import { AppMark } from '../ui/app-mark';
 import { Card } from '../ui/card';
 
@@ -17,10 +19,8 @@ export function AuthPageShell({
     <div className="min-h-screen bg-background px-4 py-6 text-foreground sm:px-6 lg:px-12">
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-5xl flex-col">
         <header className="flex items-center justify-between pb-8 text-xs text-muted-foreground">
-          <span className="font-medium tracking-tight">RMIT University</span>
-          <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-foreground">
-            Staging Environment
-          </span>
+          <span className="font-medium tracking-tight">{INSTITUTION_NAME}</span>
+          <AuthEnvironmentBadge />
         </header>
 
         <main className="flex flex-1 items-center justify-center py-6">
@@ -30,7 +30,7 @@ export function AuthPageShell({
                 <AppMark size="md" />
                 <div className="text-left">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    School of Computing Technologies
+                    {SCHOOL_NAME}
                   </p>
                   <p className="text-xs font-medium text-primary">Admin &amp; Editorial Operations</p>
                 </div>

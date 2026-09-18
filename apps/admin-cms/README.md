@@ -47,7 +47,7 @@ The explicit `npm run verify:release-evaluation` command runs the deterministic 
 | Published-only feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled live cutover pending |
 | Public deployment ledger | Yes | Exact-byte versions, explicit head, controlled writer/recovery, history UI, reconciliation, and disposable-Local/verified-staging rollback policies are tested | Active hosted enablement and production acceptance remain separate |
 | Duda integration | Maintained presentation package | `apps/public-layer` renderer and approved-feed contract have loopback and bounded Duda TEST evidence | Live Duda publication remains pending authorization |
-| Database schema/RLS | Versioned | Tests and SQL contracts cover 61 repository migrations; hosted staging remains verified through Migration 0058 | Migrations 0059-0061 hosted delivery, production verification and institutional acceptance remain pending |
+| Database schema/RLS | Versioned | The checked repository migration manifest and exact-head runtime rehearsal define the candidate contract | Hosted version must be matched to `/api/readiness` and the dated rollout receipt; institutional acceptance is separate |
 | Automated testing | Yes | Vitest offline suite, onboarding precheck, and merged-main CI | Hosted staging smoke is separate from human/UAT acceptance |
 | Production publication paths | Implemented, disabled | Exact production identity and enablement policies and routes are tested | Undeployed, unauthorized, and not live; hardening and controlled cutover pending |
 
@@ -211,7 +211,7 @@ Do not blindly reinitialize an already-applied environment. Use the [Supabase mi
 
 ## Database and migrations
 
-The repository contains 61 timestamped migrations through Migration `0061`, `20260917120000_governed_project_soft_delete.sql`; hosted staging remains verified through Migration `0058`, `20260914100000_layout_recipe_library.sql`. Migration 0058 was applied and verified on 2026-09-15; existing project, media, feed, and history data remained preserved, historical participant previews retained `NULL` layout snapshots, the new layout-recipe tables remained empty, and the then-current release sentinel was verified. Migrations 0059-0061 are repository-only in this change and have not been applied to hosted staging. The migration set remains manually governed for authorized isolated environments: never target `Prototype/`, recovery, or unrelated environments, and never blindly reinitialize an already provisioned environment. Production migration delivery and verification remain pending.
+The repository migration manifest is the current source of truth; never infer hosted delivery from files being present. The completed 18 September 2026 staging rollout of `79fe1b333d16fafe9aa15e5572e230d74640f365` applied and self-verified 61 migrations, preserving original Storage bytes and feed/history. This is a dated baseline, not a claim that later candidates are deployed. Governed maintenance adds the forward Migration 0062 and needs its own exact-head rehearsal and rollout evidence. Never target `Prototype/`, blindly reinitialize existing environments, or confuse staging self-verification with staff/production acceptance.
 
 - [`20260601035138_staging_schema.sql`](../../infra/supabase/migrations/20260601035138_staging_schema.sql) defines the relational schema, constraints, indexes and timestamps.
 - [`20260601035139_staging_rls_policies.sql`](../../infra/supabase/migrations/20260601035139_staging_rls_policies.sql) establishes the restrictive Row-Level Security baseline.
@@ -449,7 +449,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - Project-team-authored public content is read-only in the project workspace; staff use the complete correction-package review/acceptance path. Broader staff acceptance remains pending.
 - Reviewer/editor permission-matrix UAT remains pending.
 - Project detail is the next major UI modernization area.
-- The repository contains 61 migrations through Migration 0061; hosted staging remains verified through Migration 0058, and Migrations 0059-0061 hosted delivery, production delivery and institutional acceptance remain pending.
+- Resolve the candidate migration count from the checked manifest; resolve hosted status from `/api/readiness` and the exact dated deployment receipt. Repository presence, CI success, deployment, and institutional acceptance are distinct states.
 - Participant preview/confirmation is implemented. Deployment history and disposable-Local/verified-staging rollback code are implemented; hosted enablement remains separately governed and production rollback remains unavailable.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.

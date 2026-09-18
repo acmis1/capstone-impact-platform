@@ -189,3 +189,14 @@ describe('loadAssistiveInspection service', () => {
     }
   });
 });
+
+it('never labels an older-pipeline in-flight run as current evidence', async () => {
+  const gateway = mockPersistenceGateway();
+  const raw = await gateway.loadInspection(PROJECT_ID, ASSISTIVE_PIPELINE_VERSION) as { run: Record<string, unknown>; findings: unknown[]; resultCode: string };
+  raw.run = { ...raw.run, pipelineVersion: 'assistive-deterministic-checks/v3', runStatus: 'RUNNING', jobStatus: 'EXTRACTING', completedAt: null };
+  vi.mocked(gateway.loadInspection).mockResolvedValue(raw);
+  const input = mockInputGateway();
+  const result = await loadAssistiveInspection(gateway, input, { projectId: PROJECT_ID, privateBucket: BUCKET, runId: RUN_ID });
+  expect(result.ok && result.found && result.inspection.staleState).toBe('STALE');
+  expect(input.download).not.toHaveBeenCalled();
+});

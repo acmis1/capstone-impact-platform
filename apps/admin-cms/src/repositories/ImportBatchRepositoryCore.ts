@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { IMPORT_HISTORY_PAGE_SIZE, type ImportHistoryQuery } from '../import/importHistoryQuery';
 
 export interface ImportBatchRow {
   id: string;
@@ -81,6 +82,24 @@ export interface ImportBatchReviewProjectRow {
 
 export class ImportBatchRepositoryCore {
   constructor(protected readonly supabase: SupabaseClient) {}
+
+  async listImportHistory(query: ImportHistoryQuery): Promise<{ batches: ImportBatchRow[]; total: number }> {
+    let request = this.supabase.from('import_batches').select('*', { count: 'exact' });
+    if (query.q) {
+      const literal = query.q.replace(/[\\%_]/g, character => '\\' + character);
+      request = request.ilike('batch_name', '%' + literal + '%');
+    }
+    if (query.status) request = request.eq('status', query.status);
+    if (query.year) {
+      request = request.gte('created_at', query.year + '-01-01T00:00:00Z')
+        .lt('created_at', String(Number(query.year) + 1) + '-01-01T00:00:00Z');
+    }
+    const start = (query.page - 1) * IMPORT_HISTORY_PAGE_SIZE;
+    const { data, error, count } = await request.order('created_at', { ascending: false })
+      .order('id', { ascending: false }).range(start, start + IMPORT_HISTORY_PAGE_SIZE - 1);
+    if (error || !Array.isArray(data) || typeof count !== 'number' || count < 0) throw new Error('Import history unavailable');
+    return { batches: data as ImportBatchRow[], total: count };
+  }
 
   async listRecentImportBatches(limit: number = 20): Promise<ImportBatchRow[]> {
     const { data, error } = await this.supabase

@@ -1,10 +1,12 @@
 import Link from 'next/link';
+import { publicFeedHistoryHref, type PublicFeedHistoryFilters } from '../../projects/publicFeedHistoryQuery';
 import { Button } from '../ui/button';
 
 export function PublicFeedHistoryPagination(props: {
   page: number;
   hasNewer: boolean;
   hasOlder: boolean;
+  filters?: PublicFeedHistoryFilters;
 }) {
   if (!props.hasNewer && !props.hasOlder) return null;
   return (
@@ -12,7 +14,7 @@ export function PublicFeedHistoryPagination(props: {
       <div>
         {props.hasNewer && (
           <Button asChild variant="outline">
-            <Link href={`/admin/public-feed?page=${props.page - 1}`}>Newer versions</Link>
+            <Link href={publicFeedHistoryHref(props.page - 1, props.filters)}>Newer versions</Link>
           </Button>
         )}
       </div>
@@ -20,7 +22,7 @@ export function PublicFeedHistoryPagination(props: {
       <div>
         {props.hasOlder && (
           <Button asChild variant="outline">
-            <Link href={`/admin/public-feed?page=${props.page + 1}`}>Older versions</Link>
+            <Link href={publicFeedHistoryHref(props.page + 1, props.filters)}>Older versions</Link>
           </Button>
         )}
       </div>

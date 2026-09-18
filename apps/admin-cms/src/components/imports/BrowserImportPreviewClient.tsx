@@ -276,6 +276,11 @@ export default function BrowserImportPreviewClient() {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
     if (files.length === 0) return;
+    // First folder selection does not discard the already-confirmed School reference.
+    if (selectedFiles.length === 0 && !formDirty) {
+      applyFolderSelection(files);
+      return;
+    }
     requestAction(() => applyFolderSelection(files), {
       trigger: folderButtonRef.current,
       description: 'The current project folder selection, preview, and uncommitted choices will be replaced.',

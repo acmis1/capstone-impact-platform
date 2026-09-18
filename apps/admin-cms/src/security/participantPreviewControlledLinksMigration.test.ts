@@ -67,16 +67,16 @@ describe('participant-preview controlled-links migration (0050)', () => {
   it('preserves the forward-only migration and every manifest agrees', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
 
-    expect(files).toHaveLength(61);
-    expect(files.at(-12)).toBe(FILENAME);
-    expect(files.at(-13)).toBe(IMPORT_MIGRATION);
+    expect(files).toHaveLength(62);
+    expect(files.at(-13)).toBe(FILENAME);
+    expect(files.at(-14)).toBe(IMPORT_MIGRATION);
 
     expect([...EXPECTED_MIGRATION_FILENAMES]).toEqual(files);
     expect([...EXPECTED_REPOSITORY_MIGRATIONS]).toEqual(files);
-    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(61);
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(62);
 
     const ci = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
-    expect(ci).toContain("test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 61");
+    expect(ci).toContain("test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 62");
   });
 
   it('edits no migration that already exists on origin/main', () => {

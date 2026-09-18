@@ -36,12 +36,12 @@ function extractFunction(sql: string, functionName: string): string {
 
 describe('Migration 0057 gallery full-text equivalents', () => {
   it('remains additive Migration 0057 before the later additive lifecycle migrations', () => {
-    expect(migrationFiles).toHaveLength(61);
-    expect(migrationFiles.at(-5)).toBe(migrationName);
-    expect(migrationFiles.at(-4)).toBe('20260914100000_layout_recipe_library.sql');
-    expect(migrationFiles.at(-3)).toBe('20260916120000_archived_project_restore.sql');
-    expect(migrationFiles.at(-2)).toBe('20260917090000_archived_project_republish_media_rearm.sql');
-    expect(migrationFiles.at(-1)).toBe('20260917120000_governed_project_soft_delete.sql');
+    expect(migrationFiles).toHaveLength(62);
+    expect(migrationFiles[56]).toBe(migrationName);
+    expect(migrationFiles[57]).toBe('20260914100000_layout_recipe_library.sql');
+    expect(migrationFiles[58]).toBe('20260916120000_archived_project_restore.sql');
+    expect(migrationFiles[59]).toBe('20260917090000_archived_project_republish_media_rearm.sql');
+    expect(migrationFiles[60]).toBe('20260917120000_governed_project_soft_delete.sql');
 
     const schemaSection = source.slice(0, source.indexOf('-- 2. finalize_browser_import_media_stage'));
     expect(schemaSection).toContain('ADD COLUMN IF NOT EXISTS image_content_kind text');

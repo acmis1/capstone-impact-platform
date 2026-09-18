@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { parsePublicFeedHistoryFilters, publicFeedHistoryHref, type PublicFeedHistoryFilters } from '../../../projects/publicFeedHistoryQuery';
+import { PublicFeedHistoryFilterForm } from '../../../components/admin/PublicFeedHistoryFilterForm';
 import { ArrowRight } from 'lucide-react';
 import { requireAdmin } from '../../../auth/requireAdmin';
 import { canPreparePublication } from '../../../auth/permissions';
@@ -77,17 +79,21 @@ function describeActivity(detail: NonNullable<PublicFeedHistoryView['detail']>):
 export default async function PublicFeedHistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ version?: string; page?: string }>;
+  searchParams: Promise<{ version?: string; page?: string; project?: string; operation?: string; from?: string; to?: string }>;
 }) {
   const admin = await requireAdmin();
   const query = await searchParams;
+  let filters: PublicFeedHistoryFilters;
+  try { filters = parsePublicFeedHistoryFilters(query); } catch {
+    return <ErrorState headingLevel="h1" title="Invalid publishing-history filters" description="Use a valid project ID and a real, ordered date range." action={<Button asChild variant="outline"><Link href="/admin/public-feed">Reset filters</Link></Button>} />;
+  }
   const requested = Number(query.version);
   const selectedVersion = Number.isSafeInteger(requested) && requested > 0 ? requested : undefined;
   const requestedPage = Number(query.page);
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   let view: PublicFeedHistoryView | null = null;
   try {
-    view = await readPublicFeedHistory(createSupabaseAdminClient(), selectedVersion, page);
+    view = await readPublicFeedHistory(createSupabaseAdminClient(), selectedVersion, page, filters);
   } catch {
     console.error('[Public feed history]: HISTORY_READ_FAILED');
   }
@@ -268,6 +274,7 @@ export default async function PublicFeedHistoryPage({
       {/* Publishing Activity Table */}
       <section aria-labelledby="publishing-activity-heading" className="space-y-3">
         <h2 id="publishing-activity-heading" className="text-lg font-semibold text-foreground">Publishing activity</h2>
+        <PublicFeedHistoryFilterForm filters={filters} />
         {view.versions.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">No publishing activity recorded yet.</p>
         ) : (
@@ -290,7 +297,7 @@ export default async function PublicFeedHistoryPage({
                       {translateOperation(item.operation, item.publicationMode)}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {item.affectedPublicId ? item.affectedPublicId : '—'}
+                      {item.affectedPublicId ? <Link href={`/admin/projects/${encodeURIComponent(item.affectedPublicId)}`} className="text-primary underline">{item.affectedPublicId}</Link> : '—'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
                       <PublishingTimestamp value={item.createdAt} />
@@ -298,7 +305,7 @@ export default async function PublicFeedHistoryPage({
                     <td className="px-4 py-3 text-muted-foreground">{item.actorDisplay}</td>
                     <td className="px-4 py-3 tabular-nums text-muted-foreground">{item.recordCount}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs">
-                      <Link className="text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href={`/admin/public-feed?page=${view.page}&version=${item.versionNumber}`}>
+                      <Link className="text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href={publicFeedHistoryHref(view.page, filters, item.versionNumber)}>
                         v{item.versionNumber}
                       </Link>
                       {item.current && <Badge variant="success" className="ml-2">Current</Badge>}
@@ -309,7 +316,7 @@ export default async function PublicFeedHistoryPage({
             </table>
           </div>
         )}
-        <PublicFeedHistoryPagination page={view.page} hasNewer={view.hasNewer} hasOlder={view.hasOlder} />
+        <PublicFeedHistoryPagination page={view.page} hasNewer={view.hasNewer} hasOlder={view.hasOlder} filters={filters} />
       </section>
 
       {/* Selected Version / Activity Details */}

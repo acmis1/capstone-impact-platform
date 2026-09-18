@@ -43,7 +43,7 @@ const rpcResponseSchema = z.union([successRpcResponseSchema, noChangesRpcRespons
 
 export interface ProjectMetadataGateway {
   loadProject(publicId: string, options?: MetadataOptions): Promise<ProjectSnapshot | null>;
-  loadOptions(): Promise<MetadataOptions>;
+  loadOptions(publicId?: string): Promise<MetadataOptions>;
   /** The only metadata mutation boundary: one database RPC invocation. */
   updateMetadataAtomically(input: ProjectMetadataInput, actorAdminUserId: string): Promise<unknown>;
 }
@@ -63,7 +63,7 @@ function lookupFieldErrors(input: ProjectMetadataInput, options: MetadataOptions
 }
 
 export async function loadProjectMetadataEditorData(gateway: ProjectMetadataGateway, publicId: string): Promise<ProjectMetadataEditorData | null> {
-  const options = await gateway.loadOptions();
+  const options = await gateway.loadOptions(publicId);
   const snapshot = await gateway.loadProject(publicId, options);
   if (!snapshot) return null;
 
@@ -92,7 +92,7 @@ export async function saveProjectMetadata(gateway: ProjectMetadataGateway, rawIn
   const input = parsed.data;
   let options: MetadataOptions;
   try {
-    options = await gateway.loadOptions();
+    options = await gateway.loadOptions(input.publicId);
   } catch {
     return failure('INTERNAL_FAILURE');
   }
@@ -131,14 +131,25 @@ export function resolveUniqueLookupId(options: MetadataOption[], name: string | 
 export class SupabaseProjectMetadataGateway implements ProjectMetadataGateway {
   constructor(private readonly supabase: SupabaseClient) {}
 
-  async loadOptions(): Promise<MetadataOptions> {
+  async loadOptions(publicId?: string): Promise<MetadataOptions> {
     const [programs, disciplines, industryCategories] = await Promise.all([
-      this.supabase.from('programs').select('id, name').order('name'),
-      this.supabase.from('disciplines').select('id, name').order('name'),
-      this.supabase.from('industry_categories').select('id, name').order('name'),
+      this.supabase.from('programs').select('id, name, retired_at').order('name'),
+      this.supabase.from('disciplines').select('id, name, retired_at').order('name'),
+      this.supabase.from('industry_categories').select('id, name, retired_at').order('name'),
     ]);
     if (programs.error || disciplines.error || industryCategories.error) throw new Error('Lookup load failed');
-    return { programs: programs.data || [], disciplines: disciplines.data || [], industryCategories: industryCategories.data || [] };
+    const entries = (rows: Array<{ id: string; name: string; retired_at?: string | null }> | null): MetadataOption[] =>
+      (rows ?? []).map(row => ({ id: row.id, name: row.name, retiredAt: row.retired_at ?? null }));
+    const all = { programs: entries(programs.data), disciplines: entries(disciplines.data), industryCategories: entries(industryCategories.data) };
+    // Preserve actual existing retired assignments, not caller-selected IDs. New projects only see active choices.
+    const existing = publicId ? await this.loadProject(publicId, all) : null;
+    const allowed = (options: MetadataOption[], retained: readonly string[]): MetadataOption[] =>
+      options.filter(option => !option.retiredAt || retained.includes(option.id));
+    return {
+      programs: allowed(all.programs, existing ? [existing.programId] : []),
+      disciplines: allowed(all.disciplines, existing?.disciplineIds ?? []),
+      industryCategories: allowed(all.industryCategories, existing?.industryCategoryIds ?? []),
+    };
   }
 
   async loadProject(publicId: string, options?: MetadataOptions): Promise<ProjectSnapshot | null> {
