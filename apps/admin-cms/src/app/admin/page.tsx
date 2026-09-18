@@ -21,6 +21,7 @@ import { ErrorState } from '../../components/ui/error-state';
 import { EmptyState } from '../../components/ui/empty-state';
 import { BulkProjectReviewBusyProvider } from '../../components/admin-dashboard/BulkProjectReviewBusyContext';
 import type { BulkArchiveExecutionTarget } from '../../components/admin-dashboard/BulkArchivePanel';
+import type { BulkPublishExecutionTarget } from '../../components/admin-dashboard/BulkPublishPanel';
 import { getServerEnv } from '../../lib/env';
 import { resolvePublicationExecutionTarget } from '../../projects/publicationExecutionPolicy';
 import {
@@ -72,6 +73,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const canReviewBulk = hasPermission(authContext.permissions, 'projects.review');
   const canRunAssistiveBulk = hasPermission(authContext.permissions, 'projects.edit');
   const canArchiveBulk = hasPermission(authContext.permissions, 'projects.archive');
+  const canDeleteBulk = hasPermission(authContext.permissions, 'projects.delete');
   let archiveExecutionTarget: BulkArchiveExecutionTarget = null;
   if (canArchiveBulk) {
     try {
@@ -84,6 +86,26 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             : null);
     } catch {
       archiveExecutionTarget = isStagingRuntimeEnvironment()
+        ? 'staging-unavailable'
+        : isProductionRuntimeEnvironment()
+          ? 'production-unavailable'
+          : null;
+    }
+  }
+
+  const canPublishBulk = hasPermission(authContext.permissions, 'projects.publish');
+  let publishExecutionTarget: BulkPublishExecutionTarget = null;
+  if (canPublishBulk) {
+    try {
+      const env = getServerEnv();
+      publishExecutionTarget = resolvePublicationExecutionTarget(env.supabaseUrl)
+        ?? (isStagingRuntimeEnvironment()
+          ? 'staging-unavailable'
+          : isProductionRuntimeEnvironment()
+            ? 'production-unavailable'
+            : null);
+    } catch {
+      publishExecutionTarget = isStagingRuntimeEnvironment()
         ? 'staging-unavailable'
         : isProductionRuntimeEnvironment()
           ? 'production-unavailable'
@@ -210,7 +232,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   canReviewBulk={canReviewBulk}
                   canRunAssistiveBulk={canRunAssistiveBulk}
                   canArchiveBulk={canArchiveBulk}
+                  canDeleteBulk={canDeleteBulk}
                   archiveExecutionTarget={archiveExecutionTarget}
+                  canPublishBulk={canPublishBulk}
+                  publishExecutionTarget={publishExecutionTarget}
                 />
               )}
             </BulkProjectReviewBusyProvider>

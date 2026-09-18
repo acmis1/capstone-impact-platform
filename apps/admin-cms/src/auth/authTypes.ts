@@ -4,6 +4,7 @@ export type AdminPermission =
   | 'projects.read'
   | 'projects.review'
   | 'projects.archive'
+  | 'projects.delete'
   | 'projects.edit'
   | 'projects.publish'
   | 'staff.manage'

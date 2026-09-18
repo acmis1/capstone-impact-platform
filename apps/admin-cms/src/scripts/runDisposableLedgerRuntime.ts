@@ -63,10 +63,12 @@ const CORRECTION_MIGRATIONS = [
   '20260911120000_gallery_full_text_equivalents.sql',
   '20260914100000_layout_recipe_library.sql',
   '20260916120000_archived_project_restore.sql',
+  '20260917090000_archived_project_republish_media_rearm.sql',
+  '20260917120000_governed_project_soft_delete.sql',
 ];
 
 const PRE_CORRECTION_MIGRATION_COUNT = 51;
-const CURRENT_MAIN_MIGRATION_COUNT = 59;
+const CURRENT_MAIN_MIGRATION_COUNT = 61;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');

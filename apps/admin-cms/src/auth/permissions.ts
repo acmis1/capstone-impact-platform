@@ -16,6 +16,7 @@ export const CANONICAL_PERMISSION_ORDER: readonly AdminPermission[] = [
   'projects.read',
   'projects.review',
   'projects.archive',
+  'projects.delete',
   'projects.edit',
   'projects.publish',
   'staff.manage',
@@ -25,7 +26,7 @@ export const CANONICAL_PERMISSION_ORDER: readonly AdminPermission[] = [
 const RECOGNIZED_ROLES = new Set<AdminRole>(CANONICAL_ROLE_ORDER);
 
 const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
-  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish', 'staff.manage', 'taxonomy.manage'],
+  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.delete', 'projects.edit', 'projects.publish', 'staff.manage', 'taxonomy.manage'],
   reviewer: ['projects.read', 'projects.review'],
   editor: ['projects.read', 'projects.edit'],
 };

@@ -15,11 +15,12 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       expect(perms).toContain('projects.read');
       expect(perms).toContain('projects.review');
       expect(perms).toContain('projects.archive');
+      expect(perms).toContain('projects.delete');
       expect(perms).toContain('projects.edit');
       expect(perms).toContain('projects.publish');
       expect(perms).toContain('staff.manage');
       expect(perms).toContain('taxonomy.manage');
-      expect(perms.length).toBe(7);
+      expect(perms.length).toBe(8);
     });
 
     it('returns exact permissions for reviewer role', () => {
@@ -27,6 +28,7 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       expect(perms).toContain('projects.read');
       expect(perms).toContain('projects.review');
       expect(perms).not.toContain('projects.archive');
+      expect(perms).not.toContain('projects.delete');
       expect(perms).not.toContain('projects.edit');
       expect(perms.length).toBe(2);
     });
@@ -37,6 +39,7 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       expect(perms).toContain('projects.edit');
       expect(perms).not.toContain('projects.review');
       expect(perms).not.toContain('projects.archive');
+      expect(perms).not.toContain('projects.delete');
       expect(perms.length).toBe(2);
     });
 

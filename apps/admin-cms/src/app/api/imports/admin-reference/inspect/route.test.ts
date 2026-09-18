@@ -27,13 +27,29 @@ function mockAdmin(permissions: AdminPermission[] = ['projects.edit']) {
   });
 }
 
-async function createXlsxFile(headers: string[] = ['Group Name', 'Title']): Promise<File> {
+async function createXlsxFile(
+  headers: string[] = ['Group Name', 'Title'],
+  rows: string[][] = [['Group A', 'Title A']],
+  sheetName = 'Sheet1',
+): Promise<File> {
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Sheet1');
+  const ws = wb.addWorksheet(sheetName);
   ws.addRow(headers);
-  ws.addRow(['Group A', 'Title A']);
+  for (const row of rows) ws.addRow(row);
   const buf = await wb.xlsx.writeBuffer();
   return new File([buf], 'reference.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+function createRawMultipartRequest(body: ArrayBuffer, declaredBoundary: string): NextRequest {
+  return new NextRequest(URL, {
+    method: 'POST',
+    headers: {
+      origin: ORIGIN,
+      'content-type': `multipart/form-data; boundary=${declaredBoundary}`,
+      'content-length': String(body.byteLength),
+    },
+    body,
+  });
 }
 
 describe('POST /api/imports/admin-reference/inspect route security & contract', () => {
@@ -93,7 +109,15 @@ describe('POST /api/imports/admin-reference/inspect route security & contract', 
     vi.mocked(validateSameOrigin).mockReturnValue(true);
     mockAdmin(['projects.edit']);
 
-    const file = await createXlsxFile(['Group Name', 'Project Title', 'Program']);
+    const file = await createXlsxFile(
+      ['Group Name', 'Project Title', 'Program'],
+      [
+        ['Group A', 'Project A', 'Program A'],
+        ['Group B', 'Project B', 'Program B'],
+        ['Group C', 'Project C', 'Program C'],
+      ],
+      'School Reference',
+    );
     const formData = new FormData();
     formData.append('referenceFile', file);
 
@@ -110,12 +134,35 @@ describe('POST /api/imports/admin-reference/inspect route security & contract', 
     expect(json.success).toBe(true);
     expect(json.referenceWorkbookFingerprint).toMatch(/^[a-f0-9]{64}$/);
     expect(json.worksheets).toHaveLength(1);
-    expect(json.worksheets[0].name).toBe('Sheet1');
+    expect(json.worksheets[0].name).toBe('School Reference');
+    expect(json.worksheets[0].rowCount).toBe(3);
     expect(json.worksheets[0].headers).toEqual(['Group Name', 'Project Title', 'Program']);
 
     // Assert privacy: raw participant cell values are not in structural summary
-    expect(JSON.stringify(json)).not.toContain('Group A');
-    expect(JSON.stringify(json)).not.toContain('Title A');
+    const responseText = JSON.stringify(json);
+    for (const value of [
+      'Group A', 'Project A', 'Program A',
+      'Group B', 'Project B', 'Program B',
+      'Group C', 'Project C', 'Program C',
+    ]) {
+      expect(responseText).not.toContain(value);
+    }
+  });
+
+  it('rejects a missing referenceFile field', async () => {
+    vi.mocked(validateSameOrigin).mockReturnValue(true);
+    mockAdmin(['projects.edit']);
+
+    const formData = new FormData();
+    const req = new NextRequest(URL, {
+      method: 'POST',
+      headers: { origin: ORIGIN, 'content-length': '36' },
+      body: formData,
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MISSING_REFERENCE_FILE');
   });
 
   it('rejects invalid file extension (non-.xlsx)', async () => {
@@ -194,6 +241,68 @@ describe('POST /api/imports/admin-reference/inspect route security & contract', 
     const res = await POST(req);
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_WORKBOOK');
+  });
+
+  it.each([
+    {
+      name: 'truncated multipart body',
+      bodyBoundary: 'lane-b',
+      declaredBoundary: 'lane-b',
+      closingBoundary: false,
+    },
+    {
+      name: 'mismatched multipart boundary',
+      bodyBoundary: 'different-boundary',
+      declaredBoundary: 'lane-b',
+      closingBoundary: true,
+    },
+  ])('rejects a $name as INVALID_WORKBOOK', async ({ bodyBoundary, declaredBoundary, closingBoundary }) => {
+    vi.mocked(validateSameOrigin).mockReturnValue(true);
+    mockAdmin(['projects.edit']);
+
+    const suffix = closingBoundary ? `\r\n--${bodyBoundary}--\r\n` : '';
+    const body = new TextEncoder().encode(
+      `--${bodyBoundary}\r\n` +
+      'Content-Disposition: form-data; name="referenceFile"; filename="reference.xlsx"\r\n' +
+      'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n' +
+      `PK${suffix}`,
+    );
+
+    const res = await POST(createRawMultipartRequest(body.buffer, declaredBoundary));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_WORKBOOK');
+  });
+
+  it('rejects a missing Content-Length before multipart parsing', async () => {
+    vi.mocked(validateSameOrigin).mockReturnValue(true);
+    mockAdmin(['projects.edit']);
+
+    const req = new NextRequest(URL, {
+      method: 'POST',
+      headers: { origin: ORIGIN },
+      body: new FormData(),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MISSING_CONTENT_LENGTH');
+  });
+
+  it('rejects an oversized declared Content-Length before multipart parsing', async () => {
+    vi.mocked(validateSameOrigin).mockReturnValue(true);
+    mockAdmin(['projects.edit']);
+
+    const req = new NextRequest(URL, {
+      method: 'POST',
+      headers: {
+        origin: ORIGIN,
+        'content-length': String(27 * 1024 * 1024 + 1),
+      },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(413);
+    expect((await res.json()).code).toBe('REQUEST_TOO_LARGE');
   });
 
   it('rejects an oversized reference workbook before parsing', async () => {

@@ -25,52 +25,46 @@ import {
 } from './verifyLayoutRecipeRuntime';
 
 const MIGRATION_58_FILE = '20260914100000_layout_recipe_library.sql';
-const MIGRATION_59_FILE = '20260916120000_archived_project_restore.sql';
+const RELEASE_TAIL_FILES = [
+  MIGRATION_58_FILE,
+  '20260916120000_archived_project_restore.sql',
+  '20260917090000_archived_project_republish_media_rearm.sql',
+  '20260917120000_governed_project_soft_delete.sql',
+] as const;
 
-function migration58Paths(repositoryRoot: string, identity: DisposableStackIdentity) {
+function migrationPaths(
+  repositoryRoot: string,
+  identity: DisposableStackIdentity,
+  migrationFile: (typeof RELEASE_TAIL_FILES)[number],
+) {
   const copiedMigrationsDirectory = path.resolve(identity.workdir, 'supabase', 'migrations');
-  const copiedMigration = path.resolve(copiedMigrationsDirectory, MIGRATION_58_FILE);
-  if (path.dirname(copiedMigration) !== copiedMigrationsDirectory || path.basename(copiedMigration) !== MIGRATION_58_FILE) {
+  const copiedMigration = path.resolve(copiedMigrationsDirectory, migrationFile);
+  if (path.dirname(copiedMigration) !== copiedMigrationsDirectory || path.basename(copiedMigration) !== migrationFile) {
     throw new Error('LAYOUT_RUNTIME_MIGRATION_PATH_UNSAFE');
   }
   return {
-    sourceMigration: path.resolve(repositoryRoot, 'infra', 'supabase', 'migrations', MIGRATION_58_FILE),
-    copiedMigration,
-  };
-}
-
-function migration59Paths(repositoryRoot: string, identity: DisposableStackIdentity) {
-  const copiedMigrationsDirectory = path.resolve(identity.workdir, 'supabase', 'migrations');
-  const copiedMigration = path.resolve(copiedMigrationsDirectory, MIGRATION_59_FILE);
-  if (path.dirname(copiedMigration) !== copiedMigrationsDirectory || path.basename(copiedMigration) !== MIGRATION_59_FILE) {
-    throw new Error('LAYOUT_RUNTIME_MIGRATION_PATH_UNSAFE');
-  }
-  return {
-    sourceMigration: path.resolve(repositoryRoot, 'infra', 'supabase', 'migrations', MIGRATION_59_FILE),
+    sourceMigration: path.resolve(repositoryRoot, 'infra', 'supabase', 'migrations', migrationFile),
     copiedMigration,
   };
 }
 
 function withholdReleaseTail(repositoryRoot: string, identity: DisposableStackIdentity): void {
-  for (const paths of [migration58Paths(repositoryRoot, identity), migration59Paths(repositoryRoot, identity)]) {
-    if (!fs.existsSync(paths.sourceMigration) || !fs.existsSync(paths.copiedMigration)) {
+  for (const migrationFile of RELEASE_TAIL_FILES) {
+    const { sourceMigration, copiedMigration } = migrationPaths(repositoryRoot, identity, migrationFile);
+    if (!fs.existsSync(sourceMigration) || !fs.existsSync(copiedMigration)) {
       throw new Error('LAYOUT_RUNTIME_MIGRATION_MISSING');
     }
-    fs.rmSync(paths.copiedMigration);
-    if (fs.existsSync(paths.copiedMigration)) throw new Error('LAYOUT_RUNTIME_MIGRATION_WITHHOLD_FAILED');
+    fs.rmSync(copiedMigration);
+    if (fs.existsSync(copiedMigration)) throw new Error('LAYOUT_RUNTIME_MIGRATION_WITHHOLD_FAILED');
   }
 }
 
-function restoreMigration58(repositoryRoot: string, identity: DisposableStackIdentity): void {
-  const { sourceMigration, copiedMigration } = migration58Paths(repositoryRoot, identity);
-  if (!fs.existsSync(sourceMigration) || fs.existsSync(copiedMigration)) {
-    throw new Error('LAYOUT_RUNTIME_MIGRATION_RESTORE_UNSAFE');
-  }
-  fs.copyFileSync(sourceMigration, copiedMigration, fs.constants.COPYFILE_EXCL);
-}
-
-function restoreMigration59(repositoryRoot: string, identity: DisposableStackIdentity): void {
-  const { sourceMigration, copiedMigration } = migration59Paths(repositoryRoot, identity);
+function restoreMigration(
+  repositoryRoot: string,
+  identity: DisposableStackIdentity,
+  migrationFile: (typeof RELEASE_TAIL_FILES)[number],
+): void {
+  const { sourceMigration, copiedMigration } = migrationPaths(repositoryRoot, identity, migrationFile);
   if (!fs.existsSync(sourceMigration) || fs.existsSync(copiedMigration)) {
     throw new Error('LAYOUT_RUNTIME_MIGRATION_RESTORE_UNSAFE');
   }
@@ -90,7 +84,7 @@ function restrictedMigrationEnvironment(extra: Partial<NodeJS.ProcessEnv>): Node
   return { ...childEnvironment, ...extra };
 }
 
-function applyMigration58(repositoryRoot: string, identity: DisposableStackIdentity, networkId: string): void {
+function applyPendingMigrations(repositoryRoot: string, identity: DisposableStackIdentity, networkId: string): void {
   const proxy = startDockerLoopbackProxy(repositoryRoot);
   try {
     execFileSync(process.execPath, [
@@ -132,13 +126,15 @@ export async function runDisposableLayoutRecipeRuntime(): Promise<void> {
     startDisposableStack(repositoryRoot, identity, networkId);
     assertDatabaseContainerOwned(identity);
     const baseline = await seedLayoutRecipeUpgradeBaseline(repositoryRoot, identity);
-    restoreMigration58(repositoryRoot, identity);
-    applyMigration58(repositoryRoot, identity, networkId);
+    restoreMigration(repositoryRoot, identity, MIGRATION_58_FILE);
+    applyPendingMigrations(repositoryRoot, identity, networkId);
     await verifyLayoutRecipeUpgradePreservation(repositoryRoot, identity, baseline);
-    restoreMigration59(repositoryRoot, identity);
-    applyMigration58(repositoryRoot, identity, networkId);
+    restoreMigration(repositoryRoot, identity, RELEASE_TAIL_FILES[1]);
+    restoreMigration(repositoryRoot, identity, RELEASE_TAIL_FILES[2]);
+    restoreMigration(repositoryRoot, identity, RELEASE_TAIL_FILES[3]);
+    applyPendingMigrations(repositoryRoot, identity, networkId);
     await verifyLayoutRecipeRuntime(repositoryRoot, identity);
-    console.log('PASS: exact retained-state 57 -> 58 preservation and current M59 layout recipe runtime');
+    console.log('PASS: exact retained-state 57 -> 58 preservation and current M61 layout recipe runtime');
   } catch (error) {
     console.error('FAIL: layout recipe disposable runtime');
     if (error instanceof Error && error.message.startsWith('LAYOUT_RUNTIME_')) console.error(error.message);

@@ -188,4 +188,94 @@ describe('Admin projects page authorization boundary', () => {
       archiveExecutionTarget: 'production-unavailable',
     }));
   });
+
+  it('derives bulk delete permission only from the authorized server context', async () => {
+    mocks.requireAdmin.mockResolvedValueOnce({
+      ...AUTHORIZED_CONTEXT,
+      permissions: ['projects.read', 'projects.review'],
+    });
+    mocks.listProjectsPage.mockResolvedValueOnce({
+      projects: [{ id: 1, publicId: 'draft-1', title: 'Draft project', status: 'draft' }],
+      total: 1, page: 1, pageSize: 25, pageCount: 1,
+    });
+
+    await renderAdminPage();
+
+    expect(mocks.projectTableProps).toHaveBeenCalledWith(expect.objectContaining({
+      canDeleteBulk: false,
+    }));
+
+    mocks.requireAdmin.mockResolvedValueOnce({
+      ...AUTHORIZED_CONTEXT,
+      permissions: ['projects.read', 'projects.review', 'projects.delete'],
+    });
+    mocks.listProjectsPage.mockResolvedValueOnce({
+      projects: [{ id: 1, publicId: 'draft-1', title: 'Draft project', status: 'draft' }],
+      total: 1, page: 1, pageSize: 25, pageCount: 1,
+    });
+
+    await renderAdminPage();
+
+    expect(mocks.projectTableProps).toHaveBeenCalledWith(expect.objectContaining({
+      canDeleteBulk: true,
+    }));
+  });
+
+  it('derives bulk publish permission and named target only for authorized publish role', async () => {
+    // Reviewer role without projects.publish
+    mocks.requireAdmin.mockResolvedValueOnce({
+      ...AUTHORIZED_CONTEXT,
+      permissions: ['projects.read', 'projects.review'],
+    });
+    mocks.listProjectsPage.mockResolvedValueOnce({
+      projects: [{ id: 1, publicId: 'approved-1', title: 'Approved project', status: 'approved' }],
+      total: 1, page: 1, pageSize: 25, pageCount: 1,
+    });
+
+    await renderAdminPage();
+
+    expect(mocks.projectTableProps).toHaveBeenCalledWith(expect.objectContaining({
+      canReviewBulk: true,
+      canPublishBulk: false,
+      publishExecutionTarget: null,
+    }));
+
+    // Admin role with projects.publish
+    mocks.requireAdmin.mockResolvedValueOnce({
+      ...AUTHORIZED_CONTEXT,
+      permissions: ['projects.read', 'projects.review', 'projects.publish'],
+    });
+    mocks.listProjectsPage.mockResolvedValueOnce({
+      projects: [{ id: 1, publicId: 'approved-1', title: 'Approved project', status: 'approved' }],
+      total: 1, page: 1, pageSize: 25, pageCount: 1,
+    });
+
+    await renderAdminPage();
+
+    expect(mocks.projectTableProps).toHaveBeenCalledWith(expect.objectContaining({
+      canReviewBulk: true,
+      canPublishBulk: true,
+      publishExecutionTarget: 'local',
+    }));
+  });
+
+  it('derives production-unavailable for bulk publish when production enablement is absent', async () => {
+    mocks.requireAdmin.mockResolvedValueOnce({
+      ...AUTHORIZED_CONTEXT,
+      permissions: ['projects.read', 'projects.review', 'projects.publish'],
+    });
+    mocks.listProjectsPage.mockResolvedValueOnce({
+      projects: [{ id: 1, publicId: 'approved-1', title: 'Approved project', status: 'approved' }],
+      total: 1, page: 1, pageSize: 25, pageCount: 1,
+    });
+    mocks.resolvePublicationExecutionTarget.mockReturnValueOnce(null);
+    mocks.isProductionRuntimeEnvironment.mockReturnValue(true);
+
+    await renderAdminPage();
+
+    expect(mocks.projectTableProps).toHaveBeenCalledWith(expect.objectContaining({
+      canPublishBulk: true,
+      publishExecutionTarget: 'production-unavailable',
+    }));
+  });
 });

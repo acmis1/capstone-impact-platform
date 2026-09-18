@@ -7,6 +7,7 @@ import { ProjectDetailSectionNavigation } from '../../../../components/admin/Pro
 import { ProjectMediaSummary } from '../../../../components/admin/ProjectMediaSummary';
 import { ProjectValidationSummary } from '../../../../components/admin/ProjectValidationSummary';
 import { StagingReviewActions } from '../../../../components/admin/StagingReviewActions';
+import { ProjectSoftDeleteAction } from '../../../../components/admin/ProjectSoftDeleteAction';
 import { getAllowedReviewActions } from '../../../../workflow/projectWorkflow';
 import { createSupabaseAdminClientCore } from '../../../../lib/supabase/adminCore';
 import { Project } from '../../../../domain/project';
@@ -150,6 +151,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let mediaAvailable = false;
   let approvalMedia: ApprovalMediaInput | null = null;
   let canReview = false;
+  let canSoftDelete = false;
   let initialAssistiveInspection: AssistiveInspectionView | null = null;
   let initialAssistiveInspectionReadFailed = false;
   let canExecuteAssistiveChecks = false;
@@ -171,6 +173,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   if (project && adminContext && !loadError) {
     canEditMetadata = hasPermission(adminContext.permissions, 'projects.edit');
     canReview = hasPermission(adminContext.permissions, 'projects.review');
+    canSoftDelete = hasPermission(adminContext.permissions, 'projects.delete');
     canManagePreview = canManageParticipantPreview(adminContext.permissions);
     canPreparePublicationPlan = canPreparePublication(adminContext.permissions);
     canResolveCorrection = canResolveParticipantCorrection(adminContext.permissions);
@@ -413,7 +416,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   const canSubmitForReview = submitForReview !== null && canEditMetadata;
   const showSubmitButton = canSubmitForReview && submitForReview!.ready;
   const showSubmitBlockers = canSubmitForReview && !submitForReview!.ready;
-  const hasCanonicalAction = showSubmitButton || permittedReviewActions.length > 0;
+  const hasCanonicalAction = showSubmitButton || permittedReviewActions.length > 0 || canSoftDelete;
   // Participant confirmation and publication only become operational after approval. Before
   // that they stay present and reachable, but collapsed so they do not compete with editing.
   const laterStagesActive = project.status === 'approved' || project.status === 'published';
@@ -574,6 +577,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                       allowedActions={permittedReviewActions}
                     />
                   )}
+                  {canSoftDelete && <ProjectSoftDeleteAction publicId={project.publicId || ''} />}
                 </div>
               )}
             </div>

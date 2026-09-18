@@ -19,6 +19,7 @@ import {
   type AssistiveRecordableDisposition,
   assistiveRecordableDispositionSchema,
   ASSISTIVE_PIPELINE_VERSION,
+  BULK_ASSISTIVE_MAX_PUBLIC_ID_LENGTH,
 } from '../../../../assistive-validation';
 import { AdminAuthError } from '../../../../auth/authTypes';
 import { hasPermission } from '../../../../auth/permissions';
@@ -27,7 +28,7 @@ import { getServerEnv } from '../../../../lib/env';
 import { createSupabaseAdminClient } from '../../../../lib/supabase/admin';
 
 const uuid = z.uuid();
-const publicIdSchema = z.string().min(1).max(50);
+const publicIdSchema = z.string().min(1).max(BULK_ASSISTIVE_MAX_PUBLIC_ID_LENGTH);
 
 export type RunAssistiveChecksActionResult =
   | { ok: true; runId: string; status: string }
