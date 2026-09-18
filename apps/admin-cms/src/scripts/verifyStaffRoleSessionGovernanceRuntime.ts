@@ -28,7 +28,7 @@ type StaffRuntime = {
 };
 
 const EXPECTED_PERMISSIONS = {
-  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish', 'staff.manage', 'taxonomy.manage'],
+  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.delete', 'projects.edit', 'projects.publish', 'staff.manage', 'taxonomy.manage'],
   reviewer: ['projects.read', 'projects.review'],
   editor: ['projects.read', 'projects.edit'],
 } as const;

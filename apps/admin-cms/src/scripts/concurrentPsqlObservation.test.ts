@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(new URL('./runDisposableStagingMigrationUpgrade.ts', import.meta.url), 'utf8');
+const source = readFileSync(new URL('./runDisposableStagingMigrationUpgrade.ts', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const tree = ts.createSourceFile('verifier.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 function functionText(name: string): string {
   const found = tree.statements.filter((node): node is ts.FunctionDeclaration =>

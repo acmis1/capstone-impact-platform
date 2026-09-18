@@ -16,7 +16,7 @@ function declaredNumber(name: string): number {
 }
 
 function declaredCorrectionMigrations(): string[] {
-  const block = runnerSource.match(/const CORRECTION_MIGRATIONS = \[(.*?)\];/s)?.[1];
+  const block = runnerSource.match(/const CORRECTION_MIGRATIONS = \[([\s\S]*?)\];/)?.[1];
   if (!block) throw new Error('Missing CORRECTION_MIGRATIONS');
   return [...block.matchAll(/'([^']+\.sql)'/g)].map((match) => match[1]);
 }

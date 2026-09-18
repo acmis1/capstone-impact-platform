@@ -4082,6 +4082,87 @@ function softDeleteCode(publicId: string, expectedUpdatedAtSql: string, actorId 
   );
 }
 
+function javascriptRecordHashFromArtifact(artifactContent: string, publicId: string): string {
+  const record = (JSON.parse(artifactContent) as PublicFeedRecord[]).find((candidate) => candidate.publicId === publicId);
+  assert.ok(record, `The exact artifact did not contain retained member ${publicId}.`);
+  const serialized = JSON.stringify(record);
+  assert.ok(serialized, `The retained member ${publicId} was not JSON-serializable.`);
+  return createHash('sha256').update(Buffer.from(serialized, 'utf8')).digest('hex');
+}
+
+function softDeleteMemberHashProbe(targetPublicId: string, memberPublicId: string, versionId: string, expectedHash: string, replacementHash: string): string {
+  return psql(`
+\\set QUIET 1
+BEGIN;
+ALTER TABLE public.public_feed_version_members DISABLE TRIGGER reject_public_feed_member_mutation;
+WITH changed AS (
+  UPDATE public.public_feed_version_members
+     SET record_hash='${replacementHash}'
+   WHERE version_id='${versionId}'::uuid
+     AND public_id='${memberPublicId}'
+     AND record_hash='${expectedHash}'
+  RETURNING 1
+)
+SELECT CASE WHEN count(*) = 1 THEN 'MUTATED' ELSE 'NOT_EXACT' END FROM changed;
+ALTER TABLE public.public_feed_version_members ENABLE TRIGGER reject_public_feed_member_mutation;
+SELECT (item->>'disposition') || ':' || (item->>'reasonCode')
+  FROM pg_catalog.jsonb_array_elements((public.get_project_soft_delete_preflight(ARRAY['${targetPublicId}'], '${ADMIN_ID}'::uuid))->'items') item;
+ROLLBACK;
+`);
+}
+
+function softDeletePairedMemberHashProbe(
+  targetPublicId: string,
+  memberPublicId: string,
+  operationId: string,
+  baselineVersionId: string,
+  removalVersionId: string,
+  baselineHash: string,
+  removalHash: string,
+  replacementHash: string,
+): string {
+  return psql(`
+\\set QUIET 1
+BEGIN;
+ALTER TABLE public.public_feed_version_members DISABLE TRIGGER reject_public_feed_member_mutation;
+WITH changed AS (
+  UPDATE public.public_feed_version_members
+     SET record_hash='${replacementHash}'
+   WHERE public_id='${memberPublicId}'
+     AND ((version_id='${baselineVersionId}'::uuid AND record_hash='${baselineHash}')
+       OR (version_id='${removalVersionId}'::uuid AND record_hash='${removalHash}'))
+  RETURNING 1
+)
+SELECT 'MEMBERS=' || count(*)::text FROM changed;
+WITH changed AS (
+  UPDATE public.public_feed_operations operation
+     SET candidate_members=(
+       SELECT pg_catalog.jsonb_agg(
+         CASE WHEN item.value->>'publicId'='${memberPublicId}'
+           THEN pg_catalog.jsonb_set(item.value, '{recordHash}', pg_catalog.to_jsonb('${replacementHash}'::text), false)
+           ELSE item.value
+         END ORDER BY item.ordinality
+       )
+         FROM pg_catalog.jsonb_array_elements(operation.candidate_members)
+           WITH ORDINALITY AS item(value, ordinality)
+     )
+   WHERE operation.id='${operationId}'::uuid
+     AND operation.kind='removal'
+     AND operation.state='COMPLETED'
+     AND EXISTS (
+       SELECT 1 FROM pg_catalog.jsonb_array_elements(operation.candidate_members) item
+        WHERE item->>'publicId'='${memberPublicId}' AND item->>'recordHash'='${removalHash}'
+     )
+  RETURNING 1
+)
+SELECT 'MANIFEST=' || count(*)::text FROM changed;
+ALTER TABLE public.public_feed_version_members ENABLE TRIGGER reject_public_feed_member_mutation;
+SELECT (item->>'disposition') || ':' || (item->>'reasonCode')
+  FROM pg_catalog.jsonb_array_elements((public.get_project_soft_delete_preflight(ARRAY['${targetPublicId}'], '${ADMIN_ID}'::uuid))->'items') item;
+ROLLBACK;
+`);
+}
+
 function activateSoftDeleteFixtureFeed(feedBucket: string, feedPath: string): void {
   psql(`
 DO $soft_delete_activation$
@@ -4170,7 +4251,7 @@ async function prepareSoftDeletePublicationFixture(
       key: `drafts/${publicId}/poster_image/poster.png`,
       bytes: imageBytes,
       contentType: 'image/png',
-      altText: 'Synthetic Delete61 poster.',
+      altText: null,
     },
     {
       assetType: 'poster_pdf',
@@ -4198,7 +4279,7 @@ SELECT project.id, fixture.asset_type, fixture.file_name, fixture.bucket, fixtur
        fixture.mime_type, fixture.file_size_bytes, false, fixture.alt_text_public
   FROM public.projects project
  CROSS JOIN (VALUES
-   ('${objects[0].assetType}', '${objects[0].fileName}', '${objects[0].bucket}', '${objects[0].key}', '${objects[0].contentType}', ${objects[0].bytes.length}, '${objects[0].altText}'),
+   ('${objects[0].assetType}', '${objects[0].fileName}', '${objects[0].bucket}', '${objects[0].key}', '${objects[0].contentType}', ${objects[0].bytes.length}, NULL),
    ('${objects[1].assetType}', '${objects[1].fileName}', '${objects[1].bucket}', '${objects[1].key}', '${objects[1].contentType}', ${objects[1].bytes.length}, NULL)
  ) AS fixture(asset_type, file_name, bucket, storage_path, mime_type, file_size_bytes, alt_text_public)
  WHERE project.public_id='${publicId}';
@@ -4266,6 +4347,7 @@ async function verifyGovernedSoftDeleteRuntime(client: SupabaseClient): Promise<
   const softDeleteFeedBucket = 'public-feeds';
   const softDeleteFeedPath = 'upgrade-soft-delete/public-feed.json';
   const publicationFixtureIds = [
+    'upgrade-delete-f3-retained',
     'upgrade-delete-prior-public',
     'upgrade-delete-two-cycles',
     'upgrade-delete-published',
@@ -4309,6 +4391,7 @@ SELECT candidate.public_id, candidate.title, candidate.public_id,
        CASE WHEN candidate.archived_from IS NULL THEN NULL ELSE 'Synthetic governed-delete rehearsal.' END,
        CASE WHEN candidate.public_id = 'upgrade-delete-ambiguous-removal' THEN '${removalCompletedAt}'::timestamptz ELSE NULL END
 FROM (VALUES
+  ('upgrade-delete-f3-retained', 'Unrelated retained F3 public record', 'approved', false, NULL::text),
   ('upgrade-delete-eligible', 'Eligible private project', 'draft', false, NULL::text),
   ('upgrade-delete-stale', 'Stale request project', 'approved', false, NULL::text),
   ('upgrade-delete-published', 'Published project', 'approved', false, NULL::text),
@@ -4382,6 +4465,7 @@ COMMIT;
     );
   }
 
+  await publishSoftDeleteFixture(client, 'upgrade-delete-f3-retained', softDeleteFeedBucket, softDeleteFeedPath);
   await publishSoftDeleteFixture(client, 'upgrade-delete-prior-public', softDeleteFeedBucket, softDeleteFeedPath);
   await removeSoftDeleteFixture(client, 'upgrade-delete-prior-public', softDeleteFeedBucket, softDeleteFeedPath);
 
@@ -4409,6 +4493,82 @@ COMMIT;
     WHERE public_id='upgrade-delete-feed-member';`);
 
   await removeSoftDeleteFixture(client, 'upgrade-delete-no-feed-change', softDeleteFeedBucket, softDeleteFeedPath);
+
+  const f3TargetPublicId = 'upgrade-delete-prior-public';
+  const f3RetainedPublicId = 'upgrade-delete-f3-retained';
+  assert.equal(
+    psql("SELECT (item->>'disposition') || ':' || (item->>'reasonCode') FROM pg_catalog.jsonb_array_elements((public.get_project_soft_delete_preflight(ARRAY['upgrade-delete-prior-public'], '" + ADMIN_ID + "'::uuid))->'items') item;"),
+    'eligible:ELIGIBLE',
+    'F3 clean completed-removal control was not eligible before member-hash mutation.',
+  );
+  assert.equal(
+    psql("SELECT count(*)::text FROM public.public_feed_operations WHERE public_id='upgrade-delete-prior-public' AND kind='removal' AND state='COMPLETED';"),
+    '1',
+    'F3 selected removal evidence was not a unique completed operation.',
+  );
+  const f3RemovalOperationId = psql("SELECT id::text FROM public.public_feed_operations WHERE public_id='upgrade-delete-prior-public' AND kind='removal' AND state='COMPLETED';");
+  const f3BaselineVersionId = psql(`SELECT baseline_version_id::text FROM public.public_feed_operations WHERE id='${f3RemovalOperationId}'::uuid;`);
+  const f3RemovalVersionId = psql(`SELECT id::text FROM public.public_feed_versions WHERE operation_id='${f3RemovalOperationId}'::uuid;`);
+  const f3CurrentHeadVersionId = psql('SELECT current_version_id::text FROM public.public_feed_head WHERE singleton=true;');
+  assert.equal(
+    new Set([f3BaselineVersionId, f3RemovalVersionId, f3CurrentHeadVersionId]).size,
+    3,
+    'F3 baseline, selected removal, and later current-head probes did not use independent version rows.',
+  );
+  assert.equal(
+    psql(`SELECT (headVersion.version_number > removalVersion.version_number AND head.current_version_id IS DISTINCT FROM removalVersion.id)::text
+      FROM public.public_feed_head head
+      JOIN public.public_feed_versions headVersion ON headVersion.id=head.current_version_id
+      JOIN public.public_feed_versions removalVersion ON removalVersion.id='${f3RemovalVersionId}'::uuid
+     WHERE head.singleton=true;`),
+    'true',
+    'F3 current head did not advance beyond the selected removal version.',
+  );
+  const f3ExpectedHashes = [
+    javascriptRecordHashFromArtifact(psql(`SELECT artifact_content FROM public.public_feed_versions WHERE id='${f3BaselineVersionId}'::uuid;`), f3RetainedPublicId),
+    javascriptRecordHashFromArtifact(psql(`SELECT artifact_content FROM public.public_feed_versions WHERE id='${f3RemovalVersionId}'::uuid;`), f3RetainedPublicId),
+    javascriptRecordHashFromArtifact(psql(`SELECT artifact_content FROM public.public_feed_versions WHERE id='${f3CurrentHeadVersionId}'::uuid;`), f3RetainedPublicId),
+  ];
+  for (const [versionId, expectedHash] of [
+    [f3BaselineVersionId, f3ExpectedHashes[0]],
+    [f3RemovalVersionId, f3ExpectedHashes[1]],
+    [f3CurrentHeadVersionId, f3ExpectedHashes[2]],
+  ] as const) {
+    assert.equal(
+      psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id='${versionId}'::uuid AND public_id='${f3RetainedPublicId}';`),
+      expectedHash,
+      `F3 exact JavaScript hash did not match the stored member row for ${versionId}.`,
+    );
+  }
+  const f3WrongHashes = ['a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64), 'd'.repeat(64)];
+  f3WrongHashes.forEach((wrongHash, index) => assert.notEqual(wrongHash, f3ExpectedHashes[index % 3]));
+  const f3ProbeResults = [
+    softDeleteMemberHashProbe(f3TargetPublicId, f3RetainedPublicId, f3BaselineVersionId, f3ExpectedHashes[0], f3WrongHashes[0]),
+    softDeleteMemberHashProbe(f3TargetPublicId, f3RetainedPublicId, f3RemovalVersionId, f3ExpectedHashes[1], f3WrongHashes[1]),
+    softDeleteMemberHashProbe(f3TargetPublicId, f3RetainedPublicId, f3CurrentHeadVersionId, f3ExpectedHashes[2], f3WrongHashes[2]),
+    softDeletePairedMemberHashProbe(
+      f3TargetPublicId, f3RetainedPublicId, f3RemovalOperationId, f3BaselineVersionId, f3RemovalVersionId,
+      f3ExpectedHashes[0], f3ExpectedHashes[1], f3WrongHashes[3],
+    ),
+  ];
+  assert.deepEqual(
+    f3ProbeResults,
+    [
+      'MUTATED\nblocked:REMOVAL_EVIDENCE_AMBIGUOUS',
+      'MUTATED\nblocked:REMOVAL_EVIDENCE_AMBIGUOUS',
+      'MUTATED\nblocked:REMOVAL_EVIDENCE_AMBIGUOUS',
+      'MEMBERS=2\nMANIFEST=1\nblocked:REMOVAL_EVIDENCE_AMBIGUOUS',
+    ],
+    'F3 member-hash/artifact-binding probe did not fail closed for every corruption variant.',
+  );
+  assert.equal(
+    psql(`SELECT count(*)::text || '|' || (SELECT count(*) FROM pg_catalog.jsonb_array_elements((SELECT candidate_members FROM public.public_feed_operations WHERE id='${f3RemovalOperationId}'::uuid)) item WHERE item->>'publicId'='${f3RetainedPublicId}' AND item->>'recordHash'='${f3ExpectedHashes[1]}') FROM public.public_feed_version_members
+       WHERE (version_id='${f3BaselineVersionId}'::uuid AND public_id='${f3RetainedPublicId}' AND record_hash='${f3ExpectedHashes[0]}')
+          OR (version_id='${f3RemovalVersionId}'::uuid AND public_id='${f3RetainedPublicId}' AND record_hash='${f3ExpectedHashes[1]}')
+          OR (version_id='${f3CurrentHeadVersionId}'::uuid AND public_id='${f3RetainedPublicId}' AND record_hash='${f3ExpectedHashes[2]}');`),
+    '3|1',
+    'F3 rollback probe left persisted member or manifest-hash drift.',
+  );
 
   const retainedUpload = await client.storage
     .from(retainedStorageObject.bucket)

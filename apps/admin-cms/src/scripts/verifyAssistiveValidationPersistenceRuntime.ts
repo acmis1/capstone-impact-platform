@@ -237,7 +237,7 @@ async function main(): Promise<void> {
       public_id: `${publicId}-deleted`,
       title: 'Soft-deleted assistive fixture',
       summary: 'Synthetic soft-deleted project fixture.',
-      status: 'draft',
+      status: 'deleted',
       year: 2026,
       deleted_at: new Date().toISOString(),
     }).select('id').single();
