@@ -26,6 +26,7 @@ import {
   type VerifiedPublicFeedArtifact,
 } from '../feed/publicFeedArtifact';
 import type { PublicFeedRecord } from '../domain/publicFeed';
+import { waitForDisposableRpcReadiness } from './disposableRpcReadiness';
 
 /**
  * Proves the exact hosted-like 48 -> 49 -> 50 -> 51 -> 52 -> 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 -> 61 migration transition on a stack this
@@ -150,6 +151,8 @@ const PREVIEW_WRAPPER_IDENTITY = 'p_public_id text, p_admin_id uuid, p_token_has
 
 const ADMIN_ID = '3f000000-0000-4000-8000-000000000001';
 const ADMIN_AUTH_ID = '3f000000-0000-4000-8000-000000000101';
+const RPC_READINESS_PROBE_PROJECT_ID = '3f000000-0000-4000-8000-000000000063';
+const RPC_READINESS_PROBE_PUBLIC_ID = 'upgrade-delete-rpc-readiness-probe';
 const LINKS_ABSENT_PUBLIC_ID = 'upgrade-links-absent';
 const LINKS_PRESENT_PUBLIC_ID = 'upgrade-links-present';
 const CORRECTION_PUBLIC_ID = 'upgrade-correction-open';
@@ -159,6 +162,10 @@ const SYNTHETIC_REPOSITORY_URL = 'https://repository.invalid/upgrade-rehearsal';
 
 const DOCKER_COMMAND_TIMEOUT_MS = 30_000;
 const PSQL_COMMAND_TIMEOUT_MS = 120_000;
+const RPC_READINESS_MAX_ATTEMPTS = 12;
+const RPC_READINESS_DEADLINE_MS = 10_000;
+const RPC_READINESS_REQUEST_TIMEOUT_MS = 2_000;
+const RPC_READINESS_RETRY_DELAY_MS = 100;
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
 const portBase = Number.parseInt(process.env.CAPSTONE_STAGING_UPGRADE_PORT_BASE ?? '54920', 10);
@@ -5155,6 +5162,61 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.soft_delete_then_pause(text,timestamptz,uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.soft_delete_then_pause(text,timestamptz,uuid) TO service_role;`);
+  psql("NOTIFY pgrst, 'reload schema';");
+  const readinessProbeAbsence = () => psql(
+    `SELECT count(*)::text FROM public.projects WHERE id='${RPC_READINESS_PROBE_PROJECT_ID}'::uuid OR public_id='${RPC_READINESS_PROBE_PUBLIC_ID}';`,
+  );
+  assert.equal(readinessProbeAbsence(), '0', 'The dedicated RPC readiness probe identifiers are not absent.');
+  const readinessEvidence = () => [
+    tableFingerprint('public.projects'),
+    tableFingerprint('public.public_feed_operations'),
+    tableFingerprint('public.public_feed_operation_events'),
+    tableFingerprint('public.approval_records'),
+  ];
+  const readinessEvidenceBefore = readinessEvidence();
+  await waitForDisposableRpcReadiness([
+    {
+      name: 'begin_synthetic_publication',
+      invoke: async (signal) => {
+        const result = await client.rpc('begin_synthetic_publication', {
+          p_project_id: RPC_READINESS_PROBE_PROJECT_ID,
+          p_admin_id: ADMIN_ID,
+        }).abortSignal(signal);
+        return { data: result.data, error: result.error };
+      },
+      isExpected: (data) => data === null,
+    },
+    {
+      name: 'soft_delete_then_pause',
+      invoke: async (signal) => {
+        const result = await client.rpc('soft_delete_then_pause', {
+          p_public_id: RPC_READINESS_PROBE_PUBLIC_ID,
+          p_expected_updated_at: '2000-01-01T00:00:00Z',
+          p_admin_id: ADMIN_ID,
+        }).abortSignal(signal);
+        return { data: result.data, error: result.error };
+      },
+      isExpected: (data) => (
+        data !== null
+        && typeof data === 'object'
+        && !Array.isArray(data)
+        && Object.keys(data).length === 1
+        && Object.keys(data)[0] === 'resultCode'
+        && (data as { resultCode?: unknown }).resultCode === 'PROJECT_NOT_FOUND'
+      ),
+    },
+  ], {
+    maxAttempts: RPC_READINESS_MAX_ATTEMPTS,
+    deadlineMs: RPC_READINESS_DEADLINE_MS,
+    requestTimeoutMs: RPC_READINESS_REQUEST_TIMEOUT_MS,
+    retryDelayMs: RPC_READINESS_RETRY_DELAY_MS,
+  });
+  assert.equal(readinessProbeAbsence(), '0', 'A readiness probe created a project row.');
+  assert.deepEqual(
+    readinessEvidence(),
+    readinessEvidenceBefore,
+    'RPC readiness probes changed disposable project, operation, or audit evidence.',
+  );
   const publicationPromise = Promise.resolve(client.rpc('begin_synthetic_publication', {
     p_project_id: psql("SELECT id::text FROM public.projects WHERE public_id='upgrade-delete-publication-race';"),
     p_admin_id: ADMIN_ID,
