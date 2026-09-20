@@ -111,8 +111,11 @@ There was no schema change, no business-data deletion, no email send, and no Dud
    is pinned and asserted in CI, Docker build stages, and the Render build command.
 6. **Repository/handoff hardening:** free GitHub secret scanning, push protection, and vulnerability
    alerts are enabled. CodeQL's original production language-policy ReDoS alert is fixed; remaining
-   alerts are retained/triaged rather than silently dismissed. Automatic dependency-update PRs remain
-   disabled to avoid an unreviewed post-closure dependency sweep.
+   alerts are retained/triaged rather than silently dismissed. The first completed Dependabot scan
+   exposed 25 alerts: 17 are in immutable historical `Prototype/`; the active root has no critical/high
+   runtime alert, but retains four high development-only, two medium development-only, and two medium
+   runtime-scope advisories recorded in the disposition register. Automatic dependency-update PRs
+   remain disabled to avoid an unreviewed post-closure dependency sweep.
 
 ---
 
