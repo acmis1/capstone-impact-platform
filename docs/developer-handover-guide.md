@@ -12,7 +12,7 @@ This guide gives a new maintainer the shortest safe path to understand, verify, 
 4. Supabase configuration, migrations, and governed runbooks under `infra/supabase/`.
 5. Historical `Prototype/` evidence only. Do not add active functionality there or connect it to the Admin/CMS.
 
-The active application is `apps/admin-cms` (Next.js 16 and TypeScript). Supabase provides PostgreSQL, Auth, and Storage. The approved-only public JSON feed is the integration boundary consumed by the Duda presentation layer.
+The active application is `apps/admin-cms` (Next.js 16 and TypeScript). Supabase provides PostgreSQL, Auth, and Storage. The published-only public JSON feed is the integration boundary consumed by the Duda presentation layer; `approved` records are publication candidates until governed publication runs. Current release identity and deployed-versus-candidate state: [release and closure status record](handover/release-closure-status.md).
 
 ## Repository maintenance map
 
@@ -32,10 +32,26 @@ The active application is `apps/admin-cms` (Next.js 16 and TypeScript). Supabase
 | Local Supabase configuration | `infra/supabase/config.toml`, `infra/supabase/local-development.md` |
 | Hosted reconciliation | `infra/supabase/staging-reconciliation-runbook.md` |
 | Deployment contract | `docs/admin-cms-hosted-deployment.md` and `docs/m6-operational-readiness.md` |
+| Current release identity and closure status | `docs/handover/release-closure-status.md`, `docs/handover/closure-audit-disposition-register.md` |
+| Handoff package builder/verifier | `tools/handoff/` (`npm run handoff:build`, `npm run handoff:verify`, `npm run test:handoff`) |
+| Application + worker release and rollback procedure | `docs/operations/release-rollout-runbook.md` |
+
+### Known maintenance note: two proxy files, no proxy session refresh
+
+`apps/admin-cms/src/proxy.ts` is the only proxy entry point Next.js executes, because the App Router
+lives under `src/`; the older root-level `apps/admin-cms/proxy.ts` is never detected and is dead
+code. The executed file deliberately does not call `updateSession()`, so the Supabase Auth session
+is **not** refreshed by the proxy on ordinary page navigations. Impact assessment: this is not an
+authorisation weakness — `requireAdmin()` re-verifies the session claims server-side on every
+request and fails closed — but a long-idle browser session is refreshed only when a Route Handler or
+Server Action writes cookies, so idle staff may be asked to sign in again sooner than a refreshed
+session would require. Do not change live authentication behaviour as part of another change: a
+reviewed change of its own should delete the root file and either restore proxy session refresh or
+document the intended session lifetime. See the [closure audit disposition register](handover/closure-audit-disposition-register.md) (F-11).
 
 ## Local setup
 
-Use the pinned Node `24.14.1`, npm `11.11.0`, repository Supabase CLI, Docker, and synthetic fixtures:
+Use the pinned Node `24.21.0`, npm `11.11.0`, repository Supabase CLI, Docker, and synthetic fixtures:
 
 ```bash
 npm ci
@@ -104,7 +120,7 @@ Live Duda cutover is not authorized by normal application work. Public-feed writ
 
 The Local recovery verifier is intentionally narrow. It may destroy only the randomly named schema and bucket whose current execution proves ownership. It never resets the database, mutates canonical tables/buckets, writes backups to the repository, or contacts hosted Supabase.
 
-Run it only under `docs/system-recovery-readiness.md`, preserve the pre-task stack state, and label the bounded probe result `LOCAL_RECOVERY_MECHANICS_VERIFIED`. The current 52-migration staging-origin → isolated PostgreSQL 17 recovery is separately recorded as `VERIFIED_STAGING` in [Current-52 Recovery Evidence](m6-current52-recovery-evidence-2026-09-08.md). Managed hosted PITR, hosted-to-hosted recovery, production recovery, configuration, DNS, and Duda recovery still require their supervised M6 boundaries and must not be inferred from either Local result.
+Run it only under `docs/system-recovery-readiness.md`, preserve the pre-task stack state, and label the bounded probe result `LOCAL_RECOVERY_MECHANICS_VERIFIED`. The dated (2026-09-08) 52-migration staging-origin → isolated PostgreSQL 17 recovery is separately recorded as `VERIFIED_STAGING` in [Current-52 Recovery Evidence](m6-current52-recovery-evidence-2026-09-08.md). Managed hosted PITR, hosted-to-hosted recovery, production recovery, configuration, DNS, and Duda recovery still require their supervised M6 boundaries and must not be inferred from either Local result.
 
 When changing the verifier, preserve and test ownership proof, post-loss authority revocation, competitor-resource refusal, cleanup-on-failure, canonical-resource non-mutation, repeat execution, and loopback-only targeting.
 

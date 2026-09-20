@@ -12,7 +12,7 @@ body:
     attributes:
       label: Operating System & Toolchain
       description: OS version, Node version, npm version, Docker status
-      placeholder: "e.g. Windows 11, Node v24.14.1, npm 11.11.0, Docker Desktop active"
+      placeholder: "e.g. Windows 11, Node v24.21.0, npm 11.11.0, Docker Desktop active"
     validations:
       required: true
   - type: textarea

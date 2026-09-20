@@ -11,7 +11,7 @@ This guide outlines the contributor workflow, repository branching rules, databa
 
 All contributors must install and verify the canonical toolchain before making repository modifications.
 
-- **Node.js**: `Node >= 24.14.1 < 25` (Pinned via `.nvmrc` to `24.14.1`; Node 24 is the maintained LTS line used for verification).
+- **Node.js**: `Node >= 24.21.0 < 25` (Pinned via `.nvmrc` to `24.21.0`; Node 24 is the maintained LTS line used for verification, and the pin is the current security-release floor).
 - **npm**: `npm >= 11.11.0 < 12` (Declared in `packageManager` as `npm@11.11.0`).
 - **Docker**: Docker Desktop (Windows/macOS) or Docker Engine (Linux) running locally.
 - **Supabase CLI**: Pinned in `package.json` devDependencies as `supabase@2.109.1`.
@@ -74,7 +74,7 @@ npm run supabase:stop
 
 ## E. Database & Migration Governance
 
-1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete an existing migration. Migrations `0001` through `0058` are historical immutable bytes on current `main`.
+1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete an existing migration. Every migration on `main` is immutable bytes; the current inventory is recorded in the [release and closure status record](docs/handover/release-closure-status.md).
 2. **New Schema Changes**: Any schema, policy, or grant change requires a new 14-digit timestamped migration file in `infra/supabase/migrations/` (`YYYYMMDDHHMMSS_description.sql`).
 3. **Local Replay & Reset Verification**: Verify all schema changes locally by running `npm run supabase:reset` to replay migrations from zero in strict timestamp order.
 4. **Static Contract Tests**: Add static contract tests in `apps/admin-cms/src/security/` for any new database migration file.
@@ -84,12 +84,13 @@ npm run supabase:stop
    - New postgres-owned functions are private by default; execution privileges must be explicitly revoked from `PUBLIC`, `anon`, and `authenticated`, and granted only to intended roles (e.g. `service_role`).
    - Do not alter `supabase_admin` default privileges.
 
-### Migration Inventory (58 Timestamped Migrations)
+### Migration Inventory
 
-The current repository and hosted staging contain 58 migrations through
-`20260914100000_layout_recipe_library.sql`; Migration 0058 was applied and verified on staging on 15 September 2026. See the
-[selected migration inventory](infra/supabase/README.md#selected-migration-inventory-58-migrations-total)
-and [local development guide](infra/supabase/local-development.md) for current replay and bucket
+The tracked migration count, the latest migration file and the hosted-application evidence for
+them are recorded once, in the [release and closure status record](docs/handover/release-closure-status.md);
+`npm run check:onboarding-docs` fails if that record and `infra/supabase/migrations/` disagree. See the
+[selected migration inventory](infra/supabase/README.md#selected-migration-inventory)
+and [local development guide](infra/supabase/local-development.md) for replay and bucket
 ownership. The first nine migrations below are historical milestones, not the complete inventory.
 
 1. `20260601035138_staging_schema.sql` — Schema baseline and constraints
@@ -114,7 +115,7 @@ inventory does not prove hosted deployment; obtain fresh migration/schema eviden
 A contribution is complete when:
 - The work requires zero hosted resource or dashboard access for local execution.
 - `npm run onboarding:check` passes (12/12 automated checks).
-- All 58 repository database migrations replay cleanly via `npm run supabase:reset`.
+- All repository database migrations replay cleanly via `npm run supabase:reset`.
 - `npm run check:feed` passes schema validation.
 - `npm run lint --workspace=apps/admin-cms` reports 0 errors and 0 warnings.
 - `npm run test:admin` passes all unit and security tests.
@@ -171,6 +172,7 @@ A contribution is complete when:
 7. **Review Expectations & Self-Merging Prohibition**:
    - Self-merging without maintainer review is strictly prohibited.
    - Request review from a maintainer (`@acmis1`).
+   - *PP1 project-phase exception (recorded, not a policy change):* on 17 September 2026 the project owner explicitly authorised merging PP1 pull requests without waiting for a human teammate approval, including future PP1 PRs. That exception does not waive independent technical review, exact-head CI, final diff inspection, migration/data-integrity review, generated-file checks or post-merge verification, and it ends with the PP1 project phase; after ownership transfer the School should enforce the human-approval rule through branch protection. See the [release and closure status record](docs/handover/release-closure-status.md) §4.
    - If changes are requested during review, make corrective commits on your feature branch and push to update the open PR.
 
 8. **Branch Cleanup After Squash Merge**:

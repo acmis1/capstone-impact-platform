@@ -61,16 +61,19 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     readdirSync: () => [...validMigrations],
   };
 
-  it('1. Supported Node 24 (24.14.1) and npm 11 (11.11.0) pass toolchain checks', () => {
-    expect(parseSemverMajorMinorPatch('24.14.1')).toEqual({ major: 24, minor: 14, patch: 1 });
-    expect(isVersionInNode24Range('24.14.1')).toBe(true);
-    expect(isVersionInNode24Range('v24.14.1')).toBe(true);
+  it('1. Supported Node 24 (24.21.0) and npm 11 (11.11.0) pass toolchain checks', () => {
+    expect(parseSemverMajorMinorPatch('24.21.0')).toEqual({ major: 24, minor: 21, patch: 0 });
+    expect(isVersionInNode24Range('24.21.0')).toBe(true);
+    expect(isVersionInNode24Range('v24.21.0')).toBe(true);
+    expect(isVersionInNode24Range('24.14.1')).toBe(false);
+    expect(isVersionInNode24Range('24.20.0')).toBe(false);
+    expect(isVersionInNode24Range('24.22.1')).toBe(true);
     expect(isVersionInNpm11Range('11.11.0')).toBe(true);
 
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: defaultMockExec,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: defaultFsOverride,
     });
 
@@ -104,7 +107,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: mockExecNpm10,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: defaultFsOverride,
     });
 
@@ -123,7 +126,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: mockExecNoDocker,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: defaultFsOverride,
     });
 
@@ -142,7 +145,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: mockExecNoGit,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: defaultFsOverride,
     });
 
@@ -160,7 +163,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: mockExecGitLsFail,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: defaultFsOverride,
     });
 
@@ -179,7 +182,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: mockExecTrackedEnv,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: defaultFsOverride,
     });
 
@@ -198,7 +201,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: mockExecTrackedUsers,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: defaultFsOverride,
     });
 
@@ -265,7 +268,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: defaultMockExec,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: fsMissingPkg,
     });
 
@@ -290,7 +293,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: defaultMockExec,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: fsWrongVer,
     });
 
@@ -320,7 +323,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: defaultMockExec,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: fsNoBinary,
     });
 
@@ -343,7 +346,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: repoWithSpaces,
       execRunner: customExec,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: defaultFsOverride,
     });
 
@@ -368,7 +371,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: defaultMockExec,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: fsStringBin,
     });
 
@@ -390,7 +393,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: defaultMockExec,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: fsObjectBin,
     });
 
@@ -412,7 +415,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: defaultMockExec,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: fsNoBinEntry,
     });
 
@@ -443,7 +446,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: defaultMockExec,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: fsMissingDeclaredTarget,
     });
 
@@ -467,7 +470,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const result = performOnboardingCheck({
       repoRoot: realRepoRoot,
       execRunner: defaultMockExec,
-      nodeVersion: 'v24.14.1',
+      nodeVersion: 'v24.21.0',
       fsOverride: fsMissingShim,
     });
 

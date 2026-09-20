@@ -10,7 +10,7 @@ For existing-project layouts, deleted-project recovery, category retirement and 
 - Confirm the page identifies the intended test/staging environment before making a controlled change.
 - Use only approved synthetic data in staging. Follow institutional privacy policy in any later production environment.
 - If the service displays a permission, configuration, readiness, recovery, or identity error, stop and use the escalation table below.
-- This guide describes the candidate's operator controls, not a deployment receipt. Each control requires the matching deployed release, environment, and capabilities. M60/M61 were self-verified in the dated 18 September 2026 staging release `79fe1b333d16fafe9aa15e5572e230d74640f365`; M62 maintenance requires its own deployment receipt. Do not infer hosted verification, staff UAT, provider qualification or institutional approval merely from this guide.
+- This guide describes the candidate's operator controls, not a deployment receipt. Each control requires the matching deployed release, environment, and capabilities. M60/M61 were self-verified in the dated 18 September 2026 staging release `79fe1b333d16fafe9aa15e5572e230d74640f365`; the M62 maintenance release was applied to staging later the same day, and the [release and closure status record](handover/release-closure-status.md) holds that receipt and the currently observed release identity. Do not infer hosted verification, staff UAT, provider qualification or institutional approval merely from this guide.
 - Do not edit database rows, Storage objects, browser storage, feed JSON, or provider settings to “repair” a workflow.
 
 ## Sign in and navigate

@@ -318,7 +318,8 @@ There is no "reset everything" procedure, and none should be invented.
 - **Pause processing:** disable `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` on Admin, or suspend
   the dispatcher job. Queued jobs simply wait.
 - **Resume:** re-enable, confirm availability reports ready, then tell staff.
-- **Rollback:** deploy the previously registered digest and re-register it. A rollback is valid only
+- **Rollback (Profile B continuous worker):** follow the [release rollout runbook](release-rollout-runbook.md) — configuration, application and worker move together.
+- **Rollback (Profile A):** deploy the previously registered digest and re-register it. A rollback is valid only
   to a commit with the same pipeline and capability identities and a compatible schema. Never roll a
   database migration back through the executor.
 - **Rotate the dispatcher credential:** `ALTER ROLE capstone_assistive_dispatcher WITH PASSWORD …`,

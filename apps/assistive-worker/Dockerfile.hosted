@@ -1,9 +1,12 @@
-FROM node:24.14.1-bookworm-slim AS coordinator-build
+FROM node:24.21.0-bookworm-slim AS coordinator-build
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY apps/admin-cms/package.json apps/admin-cms/package.json
+
+# The base image bundles a newer npm; pin the repository's exact npm before any npm command.
+RUN npm install -g npm@11.11.0 && test "$(npm -v)" = "11.11.0"
 
 RUN npm ci --ignore-scripts
 
@@ -12,7 +15,7 @@ COPY apps/assistive-worker/tests/fixtures/phase-2-consumer-native-pdf.json apps/
 
 RUN npm run build:assistive-worker --workspace=apps/admin-cms
 
-FROM node:24.14.1-bookworm-slim AS provider-build
+FROM node:24.21.0-bookworm-slim AS provider-build
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/opt/capstone/venv/bin:$PATH \
@@ -65,7 +68,7 @@ RUN mkdir -p /opt/capstone/artifacts/paddle /opt/capstone/artifacts/languagetool
 
 RUN python3 -c "import paddle; import paddleocr; import paddlex; from capstone_assistive_worker.ocr.contract import OcrAvailabilityState; from capstone_assistive_worker.ocr.paddle_title import PaddleTitleOcrProvider; availability = PaddleTitleOcrProvider(models_dir='/opt/capstone/artifacts/paddle').availability(); assert availability.state is OcrAvailabilityState.AVAILABLE, availability.message"
 
-FROM node:24.14.1-bookworm-slim
+FROM node:24.21.0-bookworm-slim
 
 ARG CAPSTONE_DEPLOYMENT_VERSION=""
 

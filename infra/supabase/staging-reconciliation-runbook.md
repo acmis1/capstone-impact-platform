@@ -8,13 +8,15 @@
 ## 1. Context & Governance Baseline
 
 1. **Historical/Paused Staging Origin**: Initial database DDL statements (`0001` through `0006`) were applied manually to the historical paused Supabase instance (`capstone-admin-cms-staging-2026`) using the dashboard SQL Editor. This manual baseline is not the normal state of active staging-v2.
-2. **Active staging-v2 Evidence**: Historical point-in-time read-only observations recorded 46 rows through `20260828120000`, 48/48 through `20260831090000_postgres17_maintain_privilege_alignment`, 52 rows through `20260906120000_public_removal_completion_reconciliation`, and 57 rows after the authorized 0053–0057 release. Current hosted evidence records 58 rows through `20260914100000_layout_recipe_library`. The release-specific [Staging Migrations 0049–0051 Rollout Plan](../../docs/operations/staging-migrations-49-51-rollout.md) remains a historical rollout record and authorizes no mutation.
-3. **Evidence Boundary**: The current repository contract has 47 public application tables, 3 non-public execution-control tables, 4 storage buckets, 96 service-role application RPC signatures across 95 names, and 4 non-public dispatcher routines. Current M58 hosted evidence verifies the two empty layout-recipe tables, retained data and historical preview behavior, and bounded readiness/helper authority. The full catalog totals and `GATE4_MATCH` from the prior 57-migration capture remain historical evidence; do not recast them as an M58 snapshot. Neither evidence set proves Auth identities, Storage objects, hosted recovery, monitoring, or UAT.
+2. **Active staging-v2 Evidence**: Historical point-in-time read-only observations recorded 46 rows through `20260828120000`, 48/48 through `20260831090000_postgres17_maintain_privilege_alignment`, 52 rows through `20260906120000_public_removal_completion_reconciliation`, and 57 rows after the authorized 0053–0057 release. A later dated 2026-09-15 observation recorded 58 rows through `20260914100000_layout_recipe_library`; the currently evidenced hosted migration state (Migration 0062 applied 2026-09-18) is recorded only in the [release and closure status record](../../docs/handover/release-closure-status.md). The release-specific [Staging Migrations 0049–0051 Rollout Plan](../../docs/operations/staging-migrations-49-51-rollout.md) remains a historical rollout record and authorizes no mutation.
+3. **Evidence Boundary**: Historical M57/M58 documentation recorded 47 public application tables, 3 non-public execution-control tables, 4 storage buckets, 96 service-role application RPC signatures across 95 names, and 4 non-public dispatcher routines. These are not the current candidate's catalog acceptance targets: derive those from the exact reviewed source and disposable comparator. Dated M58 hosted evidence verified the two empty layout-recipe tables, retained data and historical preview behavior, and bounded readiness/helper authority. The full catalog totals and `GATE4_MATCH` from the prior 57-migration capture remain historical evidence; do not recast them as an M58 snapshot. Neither evidence set proves Auth identities, Storage objects, hosted recovery, monitoring, or UAT.
 4. **Scope of Migration Repair**: `supabase migration repair` modifies **only the tracking history table** (`supabase_migrations.schema_migrations`). It does not alter database tables, columns, constraints, or RPC functions. It is never routine for active staging-v2: it may be considered only if future read-only reconciliation demonstrates a real history mismatch and separate authorization is granted. `supabase db push` remains governed and must not be run casually.
 
 ---
 
-## 2. Expected Repository State (58 Migrations)
+## 2. Expected Repository State
+
+The tracked migration count and latest file are recorded in the [release and closure status record](../../docs/handover/release-closure-status.md); the totals below were captured at the dated evidence points named in each paragraph.
 
 ### A. Authoritative Migration Inventory
 
@@ -120,7 +122,7 @@ All commands in Gates 1–4 perform read-only inspection. They make zero databas
 ### Gate 1: Toolchain & Working Tree Verification
 Verify pinned versions and clean working tree:
 ```bash
-node --version       # Expected: >= 24.14.1 < 25
+node --version       # Expected: >= 24.21.0 < 25
 npm --version        # Expected: >= 11.11.0 < 12
 git status --short --untracked-files=no
 git rev-parse HEAD   # Verify against origin/main
@@ -162,20 +164,20 @@ SELECT version, inserted_at
   FROM supabase_migrations.schema_migrations
  ORDER BY version ASC;
 ```
-Record exact count and missing timestamps against the 59 repository migrations; current hosted staging is verified through Migration 0058, so Migration 0059 remains unapplied until a separately authorized release and every later candidate still requires fresh alignment evidence.
+Record exact count and missing timestamps against the tracked repository migrations (count in the [status record](../../docs/handover/release-closure-status.md)); the migrations evidenced as applied on hosted staging, and the provenance of that evidence, are recorded there too, and every later candidate still requires fresh alignment evidence.
 
 ### Historical 53–57 release order
 
-For merged main `90646e084f827e399617078b21a91dee3e899799`, the then-deployed bundle had to be
+For the earlier merged main `90646e084f827e399617078b21a91dee3e899799`, the then-deployed bundle had to be
 closed for maintenance before the release window begins. The truthful order is: verify
 preconditions → apply missing forward migrations 53–57 → fresh Gate 3 → fresh Gate 4 → advisor
 recheck → deploy the exact merged-main SHA → verify health, readiness, deployment SHA, and smoke
 → reopen. Do not deploy this application bundle before migrations 53–57: its `/api/readiness`
 required the Migration-57 release capability sentinel.
 
-For active staging-v2, historical point-in-time evidence first recorded 46 rows through `20260828120000`, then 48/48 through `20260831090000`, 52 rows through `20260906120000_public_removal_completion_reconciliation`, and 57 rows through `20260911120000_gallery_full_text_equivalents`. The current verified observation records 58 rows through `20260914100000_layout_recipe_library`. Recheck migration alignment for each release candidate and whenever reconciliation is required; migration history alone does not establish exact schema, grant, or RPC parity.
+For active staging-v2, historical point-in-time evidence first recorded 46 rows through `20260828120000`, then 48/48 through `20260831090000`, 52 rows through `20260906120000_public_removal_completion_reconciliation`, and 57 rows through `20260911120000_gallery_full_text_equivalents`. A later dated 2026-09-15 observation recorded 58 rows through `20260914100000_layout_recipe_library`; the currently evidenced state is in the [release and closure status record](../../docs/handover/release-closure-status.md). Recheck migration alignment for each release candidate and whenever reconciliation is required; migration history alone does not establish exact schema, grant, or RPC parity.
 
-The current Admin/CMS staging deployment is `capstone-admin-cms-staging-v2` deployment `dep-dake50fqj5pc73arnfn0` at exact merged-main SHA `95fe7ea023f6eba0a0161f636aae05e721c018f2`. `/api/readiness` reports `READY`, 58 expected migrations through `20260914100000_layout_recipe_library`, and a current database capability; `/login` returns HTTP 200. This current state does not rewrite the historical 53–57 release evidence above.
+The current Admin/CMS staging deployment identity is recorded in the [release and closure status record](../../docs/handover/release-closure-status.md). At the earlier 2026-09-15 observation it was deployment `dep-dake50fqj5pc73arnfn0` at `95fe7ea023f6eba0a0161f636aae05e721c018f2` with `/api/readiness` reporting `READY`, 58 expected migrations through `20260914100000_layout_recipe_library`, and a current database capability. Neither state rewrites the historical 53–57 release evidence above.
 
 The configured Data API exposes `public`, `graphql_public`, and `storage`, not `supabase_migrations`. Therefore the automated checker truthfully reports `MIGRATION_HISTORY_READABLE = NO` and `HOSTED_RECORDED_MIGRATIONS = UNKNOWN`; this separately governed read-only evidence is mandatory and must not be replaced with a `public.schema_migrations` fallback.
 
@@ -255,13 +257,13 @@ Evaluate empirical evidence from Gates 1–4 to determine the required path:
 ```mermaid
 flowchart TD
     G[Gates 1-4 Evidence] --> C{Schema & History State}
-    C -->|All 59 migrations applied & history matches| PA[Path A: Ready for Deployment Decision]
+    C -->|All tracked migrations applied & history matches| PA[Path A: Ready for Deployment Decision]
     C -->|Read-only evidence shows history mismatch| PB[Path B: Phased Reconciliation & Push]
     C -->|Unexpected column/table drift| PC[Path C: Drift Resolution Required]
     C -->|Target mismatch or unauthorized| PD[Path D: Stop & Abort]
 ```
 
-- **Path A (Full Match / Ready)**: All 59 migrations, 47 public application tables, 3 non-public execution-control tables, 96 service-role application RPC signatures across 95 names, 4 dispatcher routines, 4 canonical buckets, exact constraints/grants, and absence of unexpected schema objects are verified by combined automated and governed manual evidence. Active staging-v2 has M58 preservation/readiness evidence and an exact-SHA application deployment; M59 remains repository-only in this change. The full structural totals above remain tied to their M57 capture. This does not prove recovery, monitoring, human UAT, or institutional/live acceptance.
+- **Path A (Full Match / Ready)**: every tracked migration (count in the status record) is applied with matching history, and the schema, grants, RPC signatures, dispatcher routines, canonical buckets and absence of unexpected objects match the repository contract for that exact candidate through combined automated and governed manual evidence. The structural totals quoted in §2 (47 public application tables, 96 RPC signatures, and so on) are the dated M57/M58 capture values and must be re-derived for the candidate being reconciled, not reused as the Path A target. Which migrations are evidenced as applied on active staging-v2 is stated only in the status record. Path A does not prove recovery, monitoring, human UAT, or institutional/live acceptance.
 - **Path B (Phased Reconciliation / Conditional)**: Future read-only evidence shows a real history mismatch or missing forward migration; any repair or migration application requires separate authorization. Proceed to Gate 6 only after that authorization.
 - **Path C (Drift Detected)**: Unrecognized columns, conflicting constraint names, or manual schema changes detected. STOP. Document drift and formulate an explicit resolution plan.
 - **Path D (Abort)**: Target identity mismatch or lack of operator authorization. STOP immediately.
@@ -274,7 +276,7 @@ flowchart TD
 > **EXPLICIT PROJECT-OWNER APPROVAL REQUIRED**
 > The commands below modify database tables or migration tracking records. They must never be executed autonomously.
 
-These mutating gates are conditional and are not routine maintenance for active staging-v2. Its historical 46-row, 48/48, 52-row, and 57-row observations are superseded by current 58-migration history and M58 preservation/readiness evidence. Missing forward migrations were not a tracking-history defect in this release. Do not use migration repair merely to make a count match; first obtain read-only evidence of a real history mismatch and separate authorization.
+These mutating gates are conditional and are not routine maintenance for active staging-v2. Its historical 46-row, 48/48, 52-row, 57-row and 58-row observations are superseded by the later Migration 0062 application recorded in the status record. Missing forward migrations were not a tracking-history defect in this release. Do not use migration repair merely to make a count match; first obtain read-only evidence of a real history mismatch and separate authorization.
 
 ### Gate 6: Separately Authorized Reconciliation & Migration
 

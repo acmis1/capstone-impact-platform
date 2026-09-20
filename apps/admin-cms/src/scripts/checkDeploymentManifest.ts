@@ -6,10 +6,10 @@ const require = createRequire(import.meta.url);
 const yaml = require('js-yaml') as { load(input: string): unknown };
 
 export const DEPLOYMENT_MANIFEST_PATH = 'infra/deployment/admin-cms-staging.manifest.yaml';
-const EXPECTED_BUILD_COMMAND = 'npm ci && npm run build:admin';
+const EXPECTED_BUILD_COMMAND = "npm install -g npm@11.11.0 && test \"$(npm -v)\" = \"11.11.0\" && npm ci && npm run build:admin";
 const EXPECTED_START_COMMAND = 'npm run start --workspace=apps/admin-cms';
 const EXPECTED_HEALTH_PATH = '/api/readiness';
-const EXPECTED_NODE_VERSION = '24.14.1';
+const EXPECTED_NODE_VERSION = '24.21.0';
 const EXPECTED_NPM_VERSION = '11.11.0';
 const EXPECTED_ENV_VALUES = new Map<string, string | boolean>([
   ['CAPSTONE_RUNTIME_ENV', 'staging'],
@@ -222,7 +222,7 @@ export function verifyDeploymentManifest(
   const appPackage = readJson(repoRoot, 'apps/admin-cms/package.json');
   expectEqual(failures, rootPackage.packageManager, `npm@${EXPECTED_NPM_VERSION}`, 'packageManager');
   const rootEngines = isRecord(rootPackage.engines) ? rootPackage.engines : {};
-  expectEqual(failures, rootEngines.node, '>=24.14.1 <25', 'root engines.node');
+  expectEqual(failures, rootEngines.node, '>=24.21.0 <25', 'root engines.node');
   expectEqual(failures, rootEngines.npm, '>=11.11.0 <12', 'root engines.npm');
   const rootScripts = isRecord(rootPackage.scripts) ? rootPackage.scripts : {};
   const appScripts = isRecord(appPackage.scripts) ? appPackage.scripts : {};

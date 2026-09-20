@@ -15,7 +15,7 @@ async function main() {
     await provisionLocalStaffUsers({ credentialsOutputPath });
     console.log('✅ Local synthetic staff users successfully provisioned.');
     console.log('Local development accounts provisioned.');
-  } catch (err: unknown) {
+  } catch {
     const msg = 'Local account provisioning failed.';
     console.error(`❌ Local staff user provisioning failed: ${msg}`);
     process.exit(1);

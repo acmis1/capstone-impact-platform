@@ -11,15 +11,15 @@ This guide provides solutions for common issues developers may encounter when se
 
 ### Problem: Unsupported Node.js or npm Version
 - **Symptom**: `onboarding:check` fails with `[FAIL] Node.js version check` or `[FAIL] npm version check`.
-- **Cause**: Installed Node.js or npm is outside the pinned range (`Node >= 24.14.1 < 25`, `npm >= 11.11.0 < 12`).
-- **Solution**: Use `nvm` (Node Version Manager) or `nvm-windows` to install and switch to Node 24.14.1:
+- **Cause**: Installed Node.js or npm is outside the pinned range (`Node >= 24.21.0 < 25`, `npm >= 11.11.0 < 12`).
+- **Solution**: Use `nvm` (Node Version Manager) or `nvm-windows` to install and switch to Node 24.21.0:
   ```bash
-  nvm install 24.14.1
-  nvm use 24.14.1
+  nvm install 24.21.0
+  nvm use 24.21.0
   ```
   Verify versions:
   ```bash
-  node -v  # Expected: v24.14.1
+  node -v  # Expected: v24.21.0
   npm -v   # Expected: 11.11.0 or >=11.11.0 <12
   ```
 

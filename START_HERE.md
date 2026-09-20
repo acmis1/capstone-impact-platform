@@ -9,7 +9,7 @@ Welcome to the Capstone Impact Platform repository (`acmis1/capstone-impact-plat
 
 ## 1. Project Purpose
 
-The Capstone Impact Platform is a school-owned administrative CMS and publication pipeline. It collects project participant submissions, validates project metadata and poster assets, provides staff review workflows, and compiles approved project records into a stable public JSON showcase feed.
+The Capstone Impact Platform is a school-owned administrative CMS and publication pipeline. It collects project participant submissions, validates project metadata and poster assets, provides staff review workflows, and compiles published project records into a stable public JSON showcase feed (approved records are publication candidates until the governed publication workflow runs).
 
 - **Active Application Code**: [`apps/admin-cms/`](./apps/admin-cms/) — The modern Next.js 16 application containing the admin dashboard, review APIs, schema validators, and public feed compiler.
 - **Active Database Infrastructure**: [`infra/supabase/`](./infra/supabase/) — PostgreSQL migrations, seed SQL, and local development runbooks.
@@ -38,7 +38,7 @@ The Capstone Impact Platform is a school-owned administrative CMS and publicatio
 
 Before running the application, verify your toolchain:
 
-1. **Node.js**: Requires `Node >= 24.14.1 < 25`. Pinned to `24.14.1` in `.nvmrc`. Verify with `node -v`. Use `nvm` or `nvm-windows` to switch versions if needed.
+1. **Node.js**: Requires `Node >= 24.21.0 < 25`. Pinned to `24.21.0` in `.nvmrc`. Verify with `node -v`. Use `nvm` or `nvm-windows` to switch versions if needed.
 2. **npm**: Requires `npm >= 11.11.0 < 12`. Pinned in `packageManager` to `npm@11.11.0`. Verify with `npm -v`.
 3. **Docker**: Docker Desktop (Windows/macOS) or Docker Engine (Linux) must be launched **before** setup. Verify Docker daemon is active with `docker ps`. Initial setup will automatically download required Supabase Docker images, which may take several minutes on first run. Docker must remain running while executing local commands or `npm run verify:all`.
 4. **Supabase CLI**: Installed locally as a repository devDependency (`supabase@2.109.1`) via `npm ci`. You do **not** need to install `supabase` globally or run `supabase login`.
@@ -127,7 +127,7 @@ capstone-impact-platform/
 │   └── developer-troubleshooting.md # Developer setup troubleshooting guide
 ├── infra/
 │   └── supabase/             # Database migrations, seed SQL, runbooks
-│       └── migrations/       # 58 timestamped PostgreSQL migration files
+│       └── migrations/       # append-only timestamped PostgreSQL migrations (count: docs/handover/release-closure-status.md)
 ├── Prototype/                # Historical feasibility material and immutable reference snapshot
 ├── AGENTS.md                 # Agent governance & repository rules
 ├── CONTRIBUTING.md           # Contributor workflow & safety rules
@@ -225,12 +225,12 @@ npm run verify:all
 
 ## 10. Database Migration Rules
 
-1. **Append-Only Policy**: Current `main` contains 58 append-only migrations in `infra/supabase/migrations/`. **Never modify, rename, or delete an existing migration.** Migrations `0001`-`0058` retain their historical bytes through `20260914100000_layout_recipe_library.sql`.
+1. **Append-Only Policy**: `infra/supabase/migrations/` is append-only; the current count and latest file are recorded in the [release and closure status record](docs/handover/release-closure-status.md) and asserted by `npm run check:onboarding-docs`. **Never modify, rename, or delete an existing migration.** Every migration already on `main` retains its bytes; `hostedDeploymentReadiness.ts` carries the byte-identity manifest.
 2. **New Migrations**: If your feature requires schema, index, RLS, or function changes:
    - Create a new 14-digit timestamped file: `infra/supabase/migrations/YYYYMMDDHHMMSS_description.sql`.
    - Replay locally using `npm run supabase:reset`.
    - Add static contract tests in `apps/admin-cms/src/security/`.
-3. **Local/Repo Scope**: Local reset replays all 58 repository migrations through `20260914100000_layout_recipe_library`. Hosted staging is also verified at 58 migrations through that canonical Migration 0058; earlier 52- and 57-migration evidence remains historical.
+3. **Local/Repo Scope**: Local reset replays every repository migration in order. Which migrations are evidenced as applied on hosted staging, and with what provenance, is stated only in the [release and closure status record](docs/handover/release-closure-status.md); earlier 52-, 57-, 58- and 61-migration observations are dated history.
 
 ---
 
@@ -296,7 +296,7 @@ Do not select broad roadmap topics directly from `docs/implementation-backlog.md
 - ❌ **DO NOT** hardcode or commit API keys, secrets, credentials, passwords, or connection strings.
 - ❌ **DO NOT** use real participant, staff, or supervisor personal identity data (use synthetic data only).
 - ❌ **DO NOT** modify, delete, or redirect current checks to historical `Prototype/` material; maintain the Duda presentation layer under `apps/public-layer/`.
-- ❌ **DO NOT** edit, rename, or delete any of the 58 repository migration files through `0058`; migrations are append-only. Migrations `0001`–`0057` retain their historical bytes, and hosted staging is verified through `0058`; this does not authorize routine hosted mutation.
+- ❌ **DO NOT** edit, rename, or delete any repository migration file; migrations are append-only and every merged migration retains its historical bytes. Hosted verification state lives in the [release and closure status record](docs/handover/release-closure-status.md); nothing there authorizes routine hosted mutation.
 - ❌ **DO NOT** self-merge Pull Requests without maintainer sign-off.
 
 ---

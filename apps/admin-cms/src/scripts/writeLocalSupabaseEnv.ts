@@ -18,7 +18,7 @@ function main() {
     generateLocalEnvironmentFile({ outputPath, force });
     console.log('✅ Local environment file successfully written.');
     console.log('Local environment configuration completed.');
-  } catch (err: unknown) {
+  } catch {
     const msg = 'Local environment configuration failed.';
     console.error(`❌ Local environment generation failed: ${msg}`);
     process.exit(1);

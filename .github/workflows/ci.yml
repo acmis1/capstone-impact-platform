@@ -23,24 +23,26 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     timeout-minutes: 20
     steps:
+
       - name: Checkout repository (full history)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
 
-      - name: Verify exact Node.js and npm versions
-        run: |
-          node -v
-          npm -v
+      - name: Assert exact npm version
+        run: node -e "const v = require('node:child_process').execSync('npm -v').toString().trim(); if (v !== '11.11.0') { console.error('Expected npm 11.11.0, found ' + v); process.exit(1); }"
+
+      - name: Verify exact Node.js version
+        run: node -v
 
       - name: Install dependencies
         run: npm ci
@@ -81,6 +83,9 @@ jobs:
       - name: TypeScript Typecheck
         run: npm run typecheck:admin
 
+      - name: Handoff Package Builder and Verifier Tests
+        run: npm run test:handoff
+
       - name: Next.js Production Build
         run: npm run build:admin
 
@@ -98,19 +103,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+
       - name: Checkout repository (full history)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
+
+      - name: Assert exact npm version
+        run: node -e "const v = require('node:child_process').execSync('npm -v').toString().trim(); if (v !== '11.11.0') { console.error('Expected npm 11.11.0, found ' + v); process.exit(1); }"
 
       - name: Install dependencies
         run: npm ci
@@ -123,19 +132,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+
       - name: Checkout repository (full history)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
+
+      - name: Assert exact npm version
+        run: node -e "const v = require('node:child_process').execSync('npm -v').toString().trim(); if (v !== '11.11.0') { console.error('Expected npm 11.11.0, found ' + v); process.exit(1); }"
 
       - name: Install dependencies
         run: npm ci
@@ -144,6 +157,7 @@ jobs:
       # Local job can only prove Migration 0048 is inert there. This job owns a throwaway
       # PostgreSQL 17 container with synthetic roles and tables only, and proves the migration
       # removes exactly MAINTAIN from exactly service_role on exactly the five aligned tables.
+
       - name: Verify PostgreSQL 17 MAINTAIN privilege alignment runtime behavior
         run: npm run verify:pg17-maintain-privilege-runtime
 
@@ -152,30 +166,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+
       - name: Checkout repository (full history)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
 
-      - name: Verify exact Node.js and npm versions
-        run: |
-          node -v
-          npm -v
+      - name: Assert exact npm version
+        run: node -e "const v = require('node:child_process').execSync('npm -v').toString().trim(); if (v !== '11.11.0') { console.error('Expected npm 11.11.0, found ' + v); process.exit(1); }"
+
+      - name: Verify exact Node.js version
+        run: node -v
 
       - name: Install dependencies
         run: npm ci
 
       # Owns independent synthetic source/restore stacks, loopback networks, volumes, temporary
       # workdirs and bundle. No hosted credential or external Supabase project is available here.
+
       - name: Verify synthetic PostgreSQL 17 to 17 zero-cost recovery
         run: npm run verify:zero-cost-recovery-rehearsal
         env:
@@ -186,19 +203,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+
       - name: Checkout repository (full history)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
+
+      - name: Assert exact npm version
+        run: node -e "const v = require('node:child_process').execSync('npm -v').toString().trim(); if (v !== '11.11.0') { console.error('Expected npm 11.11.0, found ' + v); process.exit(1); }"
 
       - name: Install dependencies
         run: npm ci
@@ -206,6 +227,7 @@ jobs:
       # Each step owns a throwaway project id, port block, Docker network and workdir. Activating
       # the ledger head is irreversible and its history refuses fixture deletion, so these runtimes
       # can never share the canonical Local stack.
+
       - name: Verify main-to-integrated deployment ledger migration upgrade
         run: npm run verify:public-feed-ledger-runtime:disposable -- upgrade
         env:
@@ -233,31 +255,36 @@ jobs:
           CAPSTONE_LEDGER_RUNTIME_PORT_BASE: '55220'
 
   staging-migration-upgrade:
-    name: Disposable Staging Migration 0048 to 0058 Upgrade
+    name: Disposable Staging Migration Upgrade (0048 baseline to current inventory)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+
       - name: Checkout repository (full history)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
+
+      - name: Assert exact npm version
+        run: node -e "const v = require('node:child_process').execSync('npm -v').toString().trim(); if (v !== '11.11.0') { console.error('Expected npm 11.11.0, found ' + v); process.exit(1); }"
 
       - name: Install dependencies
         run: npm ci
 
       # Provisions exactly the 48-migration hosted baseline on its own disposable stack, seeds
-      # representative synthetic 48-state evidence, then applies 0049 through 0058 one at a time.
+      # representative synthetic 48-state evidence, then applies 0049 through the current inventory one at a time.
       # It owns every resource it creates, verifies its own cleanup, and contacts no hosted system.
-      - name: Verify the exact 0048 to 0058 migration upgrade on an owned disposable stack
+
+      - name: Verify the exact 0048-to-current migration upgrade on an owned disposable stack
         run: npm run verify:staging-migration-upgrade:disposable
 
   layout-recipe-runtime:
@@ -265,25 +292,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+
       - name: Checkout repository (full history)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
+
+      - name: Assert exact npm version
+        run: node -e "const v = require('node:child_process').execSync('npm -v').toString().trim(); if (v !== '11.11.0') { console.error('Expected npm 11.11.0, found ' + v); process.exit(1); }"
 
       - name: Install dependencies
         run: npm ci
 
       # Owns its loopback-only stack, synthetic fixtures, port block, network and workdir. It
       # verifies exact cleanup and contacts no hosted Supabase, Render or Duda system.
+
       - name: Verify retained-state Migration 0058 layout recipe runtime behavior
         run: npm run verify:layout-recipe-runtime:disposable
         env:
@@ -294,25 +326,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+
       - name: Checkout repository (full history)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
+
+      - name: Assert exact npm version
+        run: node -e "const v = require('node:child_process').execSync('npm -v').toString().trim(); if (v !== '11.11.0') { console.error('Expected npm 11.11.0, found ' + v); process.exit(1); }"
 
       - name: Install dependencies
         run: npm ci
 
       # This mutation-heavy verifier owns its stack and verifies cleanup on success and failure.
       # It must never share the Local Integration stack or consume hosted credentials.
+
       - name: Verify participant-owned corrections on an owned disposable stack
         run: npm exec --workspace=apps/admin-cms -- tsx src/scripts/runDisposableParticipantCorrectionsRuntime.ts
 
@@ -321,24 +358,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+
       - name: Checkout repository (full history)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
 
-      - name: Verify exact Node.js and npm versions
-        run: |
-          node -v
-          npm -v
+      - name: Assert exact npm version
+        run: node -e "const v = require('node:child_process').execSync('npm -v').toString().trim(); if (v !== '11.11.0') { console.error('Expected npm 11.11.0, found ' + v); process.exit(1); }"
+
+      - name: Verify exact Node.js version
+        run: node -v
 
       - name: Install dependencies
         run: npm ci
@@ -347,6 +386,7 @@ jobs:
         run: npm run onboarding:check
 
       # These destructive migration-upgrade verifiers must run before normal Local setup establishes shared staff and storage fixtures.
+
       - name: Start Local Supabase specifically for migration-upgrade verification
         run: npm run supabase:start
         env:
@@ -421,6 +461,7 @@ jobs:
 
       # Runs after the media staging and import-review foundations it builds on, and before the
       # participant preview suite, which consumes the snapshot-alt invariant.
+
       - name: Verify snapshot image alt text runtime behavior
         run: npm run verify:snapshot-image-alt-text-runtime --workspace=apps/admin-cms
 
@@ -471,6 +512,7 @@ jobs:
 
       # Reuses this job's loopback Local stack. This deterministic evaluator does not publish,
       # contact hosted services, or replace the separate browser and annual-publication gates.
+
       - name: Verify deterministic release-evaluation evidence and repeatability
         run: npm run verify:release-evaluation
 

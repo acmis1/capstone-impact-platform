@@ -1,7 +1,7 @@
 # Runtime configuration contract
 
 **Source-reviewed:** 15 September 2026
-**Scope:** current merged main `95fe7ea023f6eba0a0161f636aae05e721c018f2`
+**Scope:** the variable contract of current `main`; for the exact release identities observed running, see the [release and closure status record](release-closure-status.md)
 **Status:** implementation and configuration handoff; not a deployment record or institutional authorization
 
 This document is the source-backed reference for runtime and deployment configuration. The
@@ -22,7 +22,7 @@ reminder-runner profile.
 | --- | --- |
 | Implemented | Explicit production configuration paths exist for the hosted continuous assistive worker and participant reminder runner. Their production capabilities are independently gated. Migration 56 (`20260910120200_assistive_worker_production_identity.sql`) carries the exact `staging`/`production` heartbeat identity and refuses cross-environment relabelling of an existing worker instance. |
 | Enabled | No capability is enabled by the committed examples or staging manifest. Production controls default to false and require exact values where the resolver requires them. |
-| Deployed | The Admin/CMS staging web service `capstone-admin-cms-staging-v2` is deployed at exact merged-main SHA `95fe7ea023f6eba0a0161f636aae05e721c018f2` and reports `READY` through 58 migrations. This does not prove worker or reminder-runner adoption: hosted assistive executor registrations remain `0`. |
+| Deployed | The Admin/CMS staging web service `capstone-admin-cms-staging-v2` runs the release recorded in the [release and closure status record](release-closure-status.md) §1 (previously observed backend `9690ee0faa37fda502a15b4403f1e293f79b519f`, 62 migrations, team receipts dated 2026-09-18). A readiness read proves the deployed commit and database capability sentinel only; it does not prove worker or reminder-runner adoption. The staging continuous worker recorded there runs on a team member's machine, not institutional compute. |
 | Authorized | No flag, configured SHA, image digest, manifest, build or test supplies institutional authorization. Real production infrastructure, SMTP/domain/provider approval, ownership transfer and final cutover remain external decisions. |
 
 AI, OCR, language checking and duplicate detection remain assistive-only. They have no approval,

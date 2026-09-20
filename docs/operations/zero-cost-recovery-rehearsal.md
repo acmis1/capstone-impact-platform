@@ -201,9 +201,9 @@ npm run capture:recovery-backup -- \
 
 Required terminal evidence includes `SOURCE_CAPTURE_COMPLETE`, the exact reviewed SHA and its
 matching migration manifest, bounded database/Auth/execution-control counts, canonical bucket
-summaries, `SOURCE_MUTATIONS = NONE`, and `PRIVATE_RECOVERY_EVIDENCE_NEVER_COMMIT`. The current
-repository contains 58 migrations through
-`20260914100000_layout_recipe_library.sql`; active staging-v2 is also verified at 58 migrations through Migration 0058. The four buckets and exact 57-migration Gate 4 totals remain historical evidence, while M58 preservation checks separately verified the empty layout-recipe tables and bounded readiness/helper authority. Any hosted-origin capture must still fail closed unless source parity is freshly established for its exact candidate. Historical 48/48 and 52-row evidence
+summaries, `SOURCE_MUTATIONS = NONE`, and `PRIVATE_RECOVERY_EVIDENCE_NEVER_COMMIT`. The tracked
+migration count and the hosted evidence are recorded in the [release and closure status record](../handover/release-closure-status.md); at the time of this rehearsal the repository contained 58 migrations through
+`20260914100000_layout_recipe_library.sql` and active staging-v2 was verified at 58 migrations through Migration 0058. The four buckets and exact 57-migration Gate 4 totals remain historical evidence, while M58 preservation checks separately verified the empty layout-recipe tables and bounded readiness/helper authority. Any hosted-origin capture must still fail closed unless source parity is freshly established for its exact candidate. Historical 48/48 and 52-row evidence
 through `20260906120000` remains historical. The prior 57-migration deployment and its qualification
 boundaries remain recorded in [Staging-57 Deployment Evidence](../staging-57-deployment-evidence-2026-09-13.md).
 Source parity must still be separately verified before any authorized hosted-origin capture.
@@ -246,7 +246,7 @@ removes that partial target. Diagnostics distinguish `ROLE_PLATFORM_ACL_COMPATIB
 then restores only approved PP1 managed-schema customizations, restores Storage through the API,
 and checks:
 
-- the exact repository/bundle migration manifest and latest migration (58 migrations for this candidate);
+- the exact repository/bundle migration manifest and latest migration (58 migrations for the candidate rehearsed here);
 - the complete public application and execution-control table inventory;
 - safe table row counts and order-independent checksums;
 - Auth user/identity counts and zero orphan identities;

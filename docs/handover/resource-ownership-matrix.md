@@ -63,7 +63,7 @@ transfer. They are left blank here because inventing them would be a false recor
 | Required final class | B — transfer, or C — recreate under a School organisation | B, or C — recreate and restore |
 | Account / identifier | | |
 | Transferable | Yes — organisation ownership transfer | Yes, with the organisation |
-| Redeployable | Yes | Yes — the 58-migration candidate plus a compatible restored backup reproduces the reviewed repository state exactly |
+| Redeployable | Yes | Yes — the tracked migration inventory (see the [release and closure status record](release-closure-status.md)) plus a compatible restored backup reproduces the reviewed repository state exactly |
 | Procedure | Transfer to a School-controlled organisation, or create a School organisation and move the project | Transfer with the organisation; or create a project, apply migrations, restore database and storage, re-provision staff, rotate keys |
 | Secret owner | Database / infrastructure maintainer | Database / infrastructure maintainer |
 | Backup owner | N/A | **Operator-driven. Free plans include no automatic backups** |
@@ -75,7 +75,7 @@ transfer. They are left blank here because inventing them would be a false recor
 | Field | Render workspace and Admin/CMS service | Cloud subscription (Profile A only) | School Linux amd64 Docker host (Profile B only) |
 | :--- | :--- | :--- | :--- |
 | Purpose | Serves the Admin/CMS | Runs the dispatcher and heavy worker jobs | Runs the continuous worker |
-| Current class | D — team-owned | Not provisioned | Not provisioned |
+| Current class | D — team-owned | Not provisioned | Not provisioned as School compute. The staging continuous worker currently runs on a project-team member's Windows PC under Docker Desktop (class D, non-institutional; see the [status record](release-closure-status.md) §4) |
 | Required final class | B or C | A — a dedicated School-controlled subscription | A |
 | Account / identifier | | | |
 | Transferable | Yes — workspace transfer or invite | Not applicable — created by the School | Not applicable |
@@ -144,7 +144,7 @@ transferred or recreated before handover completes.
 
 1. Confirm the institutional accounts and aliases that will own each resource.
 2. Transfer or fork the repository; reconfigure branch protection and code owners.
-3. Transfer or recreate the Supabase organisation and project; apply all 58 reviewed repository migrations; restore data
+3. Transfer or recreate the Supabase organisation and project; apply all reviewed repository migrations; restore data
    if recreating; re-provision staff accounts.
 4. Rotate every credential into School-controlled storage and revoke the previous values.
 5. Transfer or recreate the Admin/CMS hosting service.

@@ -8,7 +8,7 @@ This directory contains the version-controlled database schema migrations, polic
 
 > [!NOTE]
 > * **Local Development:** The versioned manifest is checked by `check:deployment-manifest`; runtime rehearsals prove only the exact tested candidate. Windows may require CI for disposable Docker verification when local endpoint protection has quarantined a helper. Do not disable endpoint protection, recreate quarantined payloads, or label an interrupted local run a pass.
-> * **Active Hosted Staging:** Use the verified staging-v2 service and compare `/api/readiness` with the intended commit/manifest before a change. The completed 18 September 2026 release `79fe1b333d16fafe9aa15e5572e230d74640f365` is a dated 61-migration baseline, with retained data/Storage/history and synthetic lifecycle self-verification. Later candidate migration 0062 is not automatically deployed. Older 46/48/52/57/58/59 observations remain historical, not current-state authority. Staff UAT was unavailable; institutional, managed recovery, provider and production acceptance remain separate.
+> * **Active Hosted Staging:** Use the verified staging-v2 service and compare `/api/readiness` with the intended commit/manifest before a change. The release, migration count and worker identity observed on staging, with provenance and date, are recorded only in the [release and closure status record](../../docs/handover/release-closure-status.md) (Migration 0062 applied 2026-09-18 per team receipt). The earlier 18 September 2026 release `79fe1b333d16fafe9aa15e5572e230d74640f365` (61 migrations) and the older 46/48/52/57/58/59 observations remain historical, not current-state authority. Staff UAT was unavailable; institutional, managed recovery, provider and production acceptance remain separate.
 > * **Historical/Paused Hosted Staging (`capstone-admin-cms-staging-2026`):** This is the environment associated with the old manually evolved migration baseline. Its history must not be confused with the active staging-v2 evidence.
 > * **Corrective Fix:** Migration `0006` corrected the initial administrator bootstrap runtime by replacing `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
 > * **Default Execution Hardening:** Migration `0007` (`20260803174000_harden_function_execute_defaults.sql`) establishes global postgres-owned function default privilege revokes and conditionally revokes execution on the optional hosted RLS helper.
@@ -26,7 +26,7 @@ This directory contains the version-controlled database schema migrations, polic
 Reproducible local Supabase development is fully supported via Docker and the pinned repository CLI. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) and the [Local Development Guide](./local-development.md) for developer standards and setup instructions.
 
 ### Toolchain Contract
-- **Node.js**: `>= 24.14.1 < 25` (Pinned via `.nvmrc` to `24.14.1`; Node 24 is the maintained LTS line used for verification)
+- **Node.js**: `>= 24.21.0 < 25` (Pinned via `.nvmrc` to `24.21.0`; Node 24 is the maintained LTS line used for verification)
 - **npm**: `>= 11.11.0 < 12` (Declared in `packageManager` as `npm@11.11.0`)
 
 ```bash
@@ -68,12 +68,14 @@ npm run supabase:stop
 1. **Target Environment Only:** These migrations are governed for the active `capstone-admin-cms-staging-v2-2026` Supabase project. The historical `capstone-admin-cms-staging-2026` project is paused and is not a routine target.
 2. **Never Apply to Recovery/Demo Projects:** Under no circumstances should these files be executed on the Prototype recovery project or any previous demo baseline.
 3. **Governed Hosted Changes:** Any hosted migration application or migration-history repair requires the 7-gate process and explicit project-owner authorization. `supabase migration repair` is not routine for active staging-v2.
-4. **Controlled Duda Boundary:** The maintained `apps/public-layer` renderer consumes the approved feed contract and has bounded Duda TEST evidence. Staging remains isolated from the live Impact/Duda showcase; no live cutover or production publication is claimed.
+4. **Controlled Duda Boundary:** The maintained `apps/public-layer` renderer consumes the published-only feed contract and has bounded Duda TEST evidence. Staging remains isolated from the live Impact/Duda showcase; no live cutover or production publication is claimed.
 5. **No Real Personal Data:** Real participant, supervisor, or stakeholder personal data must never be loaded into staging.
 
 ---
 
-## Selected Migration Inventory (58 Migrations Total)
+## Selected Migration Inventory
+
+The complete tracked count and latest file are recorded in the [release and closure status record](../../docs/handover/release-closure-status.md) and asserted by `npm run check:onboarding-docs`; the list below is a selection of milestones, not the full inventory.
 
 The executable files under `migrations/` and the exact manifest enforced by
 `apps/admin-cms/src/deployment/hostedDeploymentReadiness.ts` are authoritative. The entries below

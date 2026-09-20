@@ -241,7 +241,7 @@ other environment. The migration does not relabel, delete, or backfill existing 
 Use `docker compose stop` to pause and the same `up -d --no-build` command to resume. Queued jobs wait
 and existing lease recovery handles interrupted work. Never clear claim tokens or delete queue rows.
 
-Treat every upgrade or rollback as one coordinated Admin/CMS and worker maintenance operation:
+Treat every upgrade or rollback as one coordinated Admin/CMS and worker maintenance operation (the step-by-step procedure, the source-backed identity contract, the graceful-stop derivation and the receipt/packaging order are in the [release rollout runbook](release-rollout-runbook.md)):
 
 1. Keep the current Admin expected deployment identity and worker running while the replacement is
    built and accepted from its clean reviewed checkout.
