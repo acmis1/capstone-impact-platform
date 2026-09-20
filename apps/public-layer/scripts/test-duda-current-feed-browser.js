@@ -807,6 +807,16 @@ function harnessDriver() {
       const project = window.__CAPSTONE_HARNESS_FIXTURE.find(p => p.id === (isLong ? 202592 : 202502));
       check(Boolean(document.querySelector('.layout-preset-technical_detail')), 'technical_detail preset renders');
       check(
+        getComputedStyle(document.querySelector('.technical-header h1')).color === 'rgb(17, 24, 39)',
+        'technical detail title stays dark against the light report card under Duda heading styles',
+      );
+      check(
+        Array.from(document.querySelectorAll('.technical-aside-card h2')).every(
+          (heading) => getComputedStyle(heading).color === 'rgb(15, 23, 42)',
+        ),
+        'technical detail sidebar headings stay dark against light cards under Duda heading styles',
+      );
+      check(
         document.querySelector('iframe')?.src === 'https://www.youtube.com/embed/AbCdEfGhI12',
         'YouTube URL renders as the expected embed',
       );
@@ -1449,9 +1459,15 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases, runt
     };
   `;
 
-  const detailMarkup = scenario === 'detail-poster-duda-wrapper'
-    ? `<div class="duda-host-wrapper">${detailHtml}</div>`
-    : detailHtml;
+  const technicalDudaHeadingTheme = scenario === 'detail-technical' || scenario === 'detail-technical-long';
+  const detailMarkup = technicalDudaHeadingTheme
+    ? `<div id="dm"><div class="dmContent">${detailHtml}</div></div>`
+    : scenario === 'detail-poster-duda-wrapper'
+      ? `<div class="duda-host-wrapper">${detailHtml}</div>`
+      : detailHtml;
+  const technicalDudaHeadingCss = technicalDudaHeadingTheme
+    ? '#dm div.dmContent h1 { color: rgb(255, 255, 255); } #dm div.dmContent h2 { color: rgb(252, 252, 252); }'
+    : '';
 
   return `<!doctype html>
 <html lang="en">
@@ -1459,7 +1475,7 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases, runt
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Duda current-feed local harness</title>
-  <style>html, body { margin: 0; width: 100%; min-height: 100%; background: #0f172a; } .duda-host-wrapper { display: table; margin-left: 2.75rem; } ${listingCss}\n${detailCss}</style>
+  <style>html, body { margin: 0; width: 100%; min-height: 100%; background: #0f172a; } .duda-host-wrapper { display: table; margin-left: 2.75rem; } ${listingCss}\n${detailCss}\n${technicalDudaHeadingCss}</style>
   <script>${harnessSetup}</script>
 </head>
 <body>

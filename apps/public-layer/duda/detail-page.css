@@ -115,7 +115,7 @@
   font-weight: 850;
 }
 
-#project-detail .technical-header h1 {
+#project-detail .layout-preset-technical_detail .technical-header h1 {
   color: #111827;
   font-size: clamp(2rem, 4vw, 3rem);
   line-height: 1.18;
@@ -791,7 +791,7 @@
   margin-bottom: 1.5rem;
 }
 
-#project-detail .technical-aside-card h2 {
+#project-detail .layout-preset-technical_detail .technical-aside-card h2 {
   margin: 0 0 0.85rem;
   color: #0f172a;
   font-size: 0.85rem;
