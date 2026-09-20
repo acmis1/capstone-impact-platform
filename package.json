@@ -114,8 +114,8 @@
     "benchmark:local-scaling": "npm run benchmark:local-scaling --workspace=apps/admin-cms --"
   },
   "devDependencies": {
-    "jszip": "3.10.1",
+    "jszip": "3.10.2",
     "server-only": "^0.0.1",
-    "supabase": "2.109.1"
+    "supabase": "2.117.0"
   }
 }
