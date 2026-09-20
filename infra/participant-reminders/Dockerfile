@@ -7,6 +7,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/admin-cms/package.json apps/admin-cms/package.json
 
+# The base image bundles a newer npm; pin the repository's exact npm before any npm command.
+RUN npm install -g npm@11.11.0 && test "$(npm -v)" = "11.11.0"
+
 RUN npm ci --ignore-scripts
 
 COPY apps/admin-cms/tsconfig.json apps/admin-cms/tsconfig.json

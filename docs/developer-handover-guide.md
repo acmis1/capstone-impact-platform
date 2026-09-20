@@ -34,6 +34,7 @@ The active application is `apps/admin-cms` (Next.js 16 and TypeScript). Supabase
 | Deployment contract | `docs/admin-cms-hosted-deployment.md` and `docs/m6-operational-readiness.md` |
 | Current release identity and closure status | `docs/handover/release-closure-status.md`, `docs/handover/closure-audit-disposition-register.md` |
 | Handoff package builder/verifier | `tools/handoff/` (`npm run handoff:build`, `npm run handoff:verify`, `npm run test:handoff`) |
+| Application + worker release and rollback procedure | `docs/operations/release-rollout-runbook.md` |
 
 ### Known maintenance note: two proxy files, no proxy session refresh
 

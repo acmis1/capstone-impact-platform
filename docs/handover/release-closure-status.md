@@ -17,6 +17,16 @@ the entry-point documents do not present another count as current.
 
 ## 1. Identity summary
 
+The machine-readable declaration below is the only place where a commit is asserted to be a
+*current* identity; `npm run check:onboarding-docs` reads it. Every other commit mentioned in this
+record or elsewhere is a receipt, a candidate or dated history, not a current runtime identity.
+
+<!-- current-identity
+main: 5c88a6c1ff9a435cb1d4299d617543465175afa1
+deployed-backend: 9690ee0faa37fda502a15b4403f1e293f79b519f
+public-layer: 5c88a6c1ff9a435cb1d4299d617543465175afa1
+-->
+
 | Item | Value | Evidence class | Provenance |
 | --- | --- | --- | --- |
 | Repository | `https://github.com/acmis1/capstone-impact-platform` | Source | GitHub |
@@ -77,10 +87,23 @@ Branch `fix/final-handoff-closure-20260920`, based on `5c88a6c1…`, contains:
    a CI display-label correction for the disposable migration-upgrade job.
 
 Deployment of this candidate requires, in order: independent review → exact-head CI → merge →
-post-merge `main` CI → worker image rebuild from the merged commit and replacement of the running
-continuous worker (its heartbeat compatibility is by pipeline version and capabilities, so the old
-worker keeps working, but it would still run the old Node and old regex) → Admin/CMS redeploy →
-fresh `/api/readiness` read → update of §1 with the new receipts. None of that has happened.
+post-merge `main` CI → the coordinated rollout in the
+[release rollout runbook](../operations/release-rollout-runbook.md): worker image built and accepted at
+the merged commit, old worker stopped gracefully, Admin/CMS redeployed **together with**
+`CAPSTONE_ASSISTIVE_EXPECTED_WORKER_DEPLOYMENT_VERSION` set to that commit, new worker started at
+the same commit, then application readiness **and** worker availability verified separately. The
+application, its expected-worker configuration and the worker heartbeat must carry the same commit
+(`resolveAssistiveWorkerRuntimeIdentity` and `get_assistive_worker_availability` fail closed
+otherwise), so assistive checks are unavailable for a bounded window during every application
+commit change; pipeline/capability compatibility alone does not keep the old worker accepted. Only
+after the receipts exist is §1 updated and a released package built. None of that has happened.
+
+5. **Corrective follow-up (2026-09-21)** after ChatGPT's independent review of `49eea9b1…`: rollout
+   identity contract documented in the runbook above and pinned by
+   `rolloutIdentityContract.test.ts`; the handoff verifier now validates the raw archive inventory
+   before extraction; the documentation drift check judges each clause with explicit conventions and
+   only the `current-identity` block declares current commits; npm `11.11.0` is pinned and asserted
+   at every Docker build stage and workflow job that runs npm.
 
 ---
 

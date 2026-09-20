@@ -49,6 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -62,12 +63,16 @@ jobs:
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
 
+      - name: Assert exact npm version
+        run: node -e "const v = require('node:child_process').execSync('npm -v').toString().trim(); if (v !== '11.11.0') { console.error('Expected npm 11.11.0, found ' + v); process.exit(1); }"
+
       - name: Install dependencies
         run: npm ci
 
       # These are authenticated-surface component contracts in jsdom with synthetic inputs and
       # mocked requests. They cover keyboard/focus and permission-sensitive rendering, but do not
       # claim a real Auth session, a native screen reader, or end-to-end browser acceptance.
+
       - name: Verify key Admin interaction contracts without hosted Auth
         run: >-
           npm run test:run --workspace=apps/admin-cms --
@@ -91,6 +96,7 @@ jobs:
 
       # Revalidates retained evidence integrity and claim boundaries; it does not replay the
       # historical manual browser session or manufacture native assistive-technology evidence.
+
       - name: Verify retained accessibility UAT evidence integrity
         run: npm run verify:accessibility-uat-evidence
 
@@ -109,6 +115,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -122,11 +129,15 @@ jobs:
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
 
+      - name: Assert exact npm version
+        run: node -e "const v = require('node:child_process').execSync('npm -v').toString().trim(); if (v !== '11.11.0') { console.error('Expected npm 11.11.0, found ' + v); process.exit(1); }"
+
       - name: Install dependencies
         run: npm ci
 
       # Owns an empty throwaway Local stack, loopback ports, network and workdir. It neither uses
       # secrets nor contacts hosted Supabase, Duda, Render, email, or production publication.
+
       - name: Verify annual-scale governed publication on disposable Local infrastructure
         run: npm run verify:annual-publication-evidence
         env:

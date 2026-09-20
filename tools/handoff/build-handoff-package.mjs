@@ -69,6 +69,12 @@ export function parseArguments(argv) {
   }
   if (!options.out) throw new Error('--out <directory> is required');
   if (!['candidate', 'released'].includes(options.status)) throw new Error('--status must be candidate or released');
+  if (options.status === 'released' && (!options.deployedBackend || !options.workerImage)) {
+    throw new Error('--status released requires --deployed-backend and --worker-image recorded from the release receipts');
+  }
+  for (const [flag, value] of [['--deployed-backend', options.deployedBackend], ['--public-layer', options.publicLayer]]) {
+    if (value && !/^[0-9a-f]{40}$/.test(value)) throw new Error(`${flag} must be a full lowercase 40-hex commit`);
+  }
   return options;
 }
 
@@ -121,9 +127,15 @@ has been merged to \`main\`, deployed to the staging Admin/CMS, built into a wor
 installed on the Duda site unless the status record inside \`${SOURCE_DIRECTORY}/\` says so with a receipt.
 The deployed backend listed above (if any) is an earlier release; the difference between it and
 this candidate is described in the status record.`
-    : `**Released.** This package was built from the accepted commit. Confirm that the status record
-inside \`${SOURCE_DIRECTORY}/\` carries the deployment receipts for this exact commit before treating the
-running system as identical to it.`}
+    : `**Released — composite identity.** The **deployed runtime commit is \`${options.deployedBackend}\`**
+(Admin/CMS build and the continuous worker image \`${options.workerImage}\`), observed running and
+recorded in receipts *before* this package was built. The **source commit of this package is
+\`${commit}\`**; when the two differ, every commit between them is documentation only (release
+receipts and status-record updates) and changes no runtime behaviour. Do not redeploy the source
+commit merely to make the identifiers equal, and do not treat this package as a request to merge or
+deploy anything: it describes a release that has already happened. The authoritative statement of
+the running identities is the \`current-identity\` block in
+[\`${SOURCE_DIRECTORY}/docs/handover/release-closure-status.md\`](${SOURCE_DIRECTORY}/docs/handover/release-closure-status.md).`}
 
 ## 2. Start reading here
 
@@ -151,16 +163,22 @@ Relative links inside \`${SOURCE_DIRECTORY}/\` resolve within this package becau
 - This package makes **no** statement about demonstration data: it does not assert that any demo
   project identifiers are present, absent or reusable. Inspect the staging Admin/CMS directly.
 
-## 4. Maintenance and deployment handback (smallest sequence)
+## 4. Maintenance and deployment handback
 
-1. Independent review of the source commit's diff against its base.
-2. Exact-head CI green on the commit (all workflows), then merge to \`main\`, then post-merge CI.
-3. Rebuild the worker image from the merged commit, replace the running worker, confirm heartbeat
-   compatibility, then redeploy the Admin/CMS and read \`/api/readiness\` fresh.
-4. Tag the release, regenerate this package with \`--status released\` from the merged commit, and
-   add the receipts to the status record.
+${options.status === 'candidate'
+    ? `This candidate has not been merged or deployed. The release sequence — independent review,
+exact-head CI, merge, post-merge CI, then the coordinated application/configuration/worker
+rollout with its bounded assistive-unavailability window, verification, receipts, and only then a
+released package — is the tracked procedure in
+[\`${SOURCE_DIRECTORY}/docs/operations/release-rollout-runbook.md\`](${SOURCE_DIRECTORY}/docs/operations/release-rollout-runbook.md).
+This page deliberately does not restate it.`
+    : `The runtime commit above was rolled out and verified under the tracked procedure in
+[\`${SOURCE_DIRECTORY}/docs/operations/release-rollout-runbook.md\`](${SOURCE_DIRECTORY}/docs/operations/release-rollout-runbook.md)
+before this package was built; its receipts are under \`${EVIDENCE_DIRECTORY}/\`. Future maintenance releases
+follow the same runbook: application build, expected-worker configuration and worker container
+move together, with a bounded assistive-unavailability window and a receipt before any new package.`}
 
-Details: [\`${SOURCE_DIRECTORY}/docs/post-audit-maintenance-guide.md\`](${SOURCE_DIRECTORY}/docs/post-audit-maintenance-guide.md).
+Operator controls: [\`${SOURCE_DIRECTORY}/docs/post-audit-maintenance-guide.md\`](${SOURCE_DIRECTORY}/docs/post-audit-maintenance-guide.md).
 
 ## 5. Verifying this package
 
