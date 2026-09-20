@@ -2,11 +2,13 @@
 
 **STATUS:** Current — handover entry point
 **PURPOSE:** Operations
-**LAST VERIFIED:** 2026-09-20
+**LAST VERIFIED:** 2026-09-21
 
-If you have just been given responsibility for the Capstone Impact Platform, start here. This page
-is the map: it tells you what the system is, which document answers which question, and what still
-has to happen before handover is complete.
+If you have just been given responsibility for the Capstone Impact Platform, start here. The
+project-team technical implementation is frozen and the closure runtime has been verified on staging;
+the exact identities and evidence boundary are in the release/closure status record. This page is
+the map for taking over maintenance and for completing the remaining **institutional** ownership,
+training/UAT, provider, recovery, monitoring, live-cutover, KPI, and sign-off actions.
 
 You should not need anyone from the original project team, and you should not need any AI
 assistant's conversation history. Everything is in this repository. If something is missing, that is

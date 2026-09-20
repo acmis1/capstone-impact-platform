@@ -1,8 +1,8 @@
 # M6 Operational Readiness and Recovery Contract
 
-## Current-status interpretation — 18 September 2026
+## Current-status interpretation — 21 September 2026
 
-The current hosted release identity is recorded only in the [release and closure status record](handover/release-closure-status.md) (Admin/CMS and worker `9690ee0faa37fda502a15b4403f1e293f79b519f` with 62 migrations, team receipts dated 2026-09-18; public-layer hotfix `5c88a6c1ff9a435cb1d4299d617543465175afa1` Save-installed on the Duda TEST site). The earlier 18 September 2026 release `79fe1b333d16fafe9aa15e5572e230d74640f365` with 61 migrations, and the M58/52/57 paragraphs below, are dated historical evidence, not the current schema assertion. Any later candidate requires fresh exact-head CI, migration rehearsal, matched app/worker deployment and self-verification before that record is updated. Staff UAT is unavailable, not completed. See [Post-audit maintenance](post-audit-maintenance-guide.md).
+The current hosted Admin/CMS, continuous-worker and Duda TEST renderer identities are recorded only in the [release and closure status record](handover/release-closure-status.md), which now carries the verified 2026-09-21 staging closure runtime. The 18 September 2026 `9690…`/62 and `79fe…`/61 releases, and the M58/52/57 paragraphs below, are dated historical evidence rather than current-state assertions. Any later runtime candidate requires fresh exact-head CI, matched app/worker deployment and self-verification before that record is updated. Staff UAT remains unavailable, not completed. See [Post-audit maintenance](post-audit-maintenance-guide.md).
 
 This document is the canonical PP1 M6 operational-readiness contract for the active Admin/CMS. It defines what the repository can prove now, what a supervised hosted rehearsal must prove later, and which decisions remain with the institution. It does not authorize a deployment, hosted mutation, restore, rollback, DNS change, Duda change, email, or secret access.
 

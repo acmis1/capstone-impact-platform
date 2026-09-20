@@ -139,22 +139,30 @@ retention comparison.
    TEST layer was re-installed, `public-layer`) in the `current-identity` block to the observed
    commits, and add the receipt references. This is normally a **documentation-only commit `D`**
    on `main` after `M`.
-3. `main` (`D`) and `deployed-backend` (`M`) now legitimately differ. That is the intended
-   composite identity: the deployed runtime is `M`; the source of record is `D`; the difference is
-   documentation. **Do not redeploy to make the SHAs equal** — a documentation-only commit changes
-   no runtime behaviour, and redeploying it would only reopen the assistive window and require a
-   new receipt, which is the self-referential loop this rule exists to prevent. Redeploy only when a
+3. Repository `main` (`D`) and `deployed-backend` (`M`) now legitimately differ. That is the
+   intended composite identity: the deployed runtime is `M`; the package/source-of-record is `D`;
+   the difference is documentation. Because a tracked file cannot contain the hash of the commit
+   that contains itself, the status record's machine-readable `main` field remains the latest
+   **runtime-bearing** `main` commit (`M`); the package manifest records `D` separately as its exact
+   source commit. **Do not redeploy to make the SHAs equal** — a documentation-only commit changes
+   no runtime behaviour and redeploying it would reopen the assistive window. Redeploy only when a
    later commit changes runtime code, and then start again at §3.
 4. Build the released package from `D` with the observed identities as build inputs:
-   `npm run handoff:build -- --out <output-directory> --status released --commit D --deployed-backend M --worker-image
-   <tag and image ID> --public-layer <observed> --evidence <sanitized receipts>` and verify it with
-   `npm run handoff:verify -- --zip <zip> --commit D`. A released package carries no instruction to
-   merge or deploy its own source commit; it states the runtime commit and links here.
+
+   ```bash
+   npm run handoff:build -- --out <output-directory> --status released --commit D \
+     --deployed-backend M --worker-image "<tag and image ID>" \
+     --public-layer <observed> --evidence <sanitized-receipts-directory>
+   npm run handoff:verify -- --zip <zip> --commit D
+   ```
+
+   A released package carries no instruction to merge or deploy its own source commit; it states
+   the runtime commit and links here.
 
 ## 6. What this runbook does not cover
 
 Production cutover (separate identity, capability and institutional gates), Profile A on-demand
 executor releases (registration and image digest; see the
 [zero-cost assistive executor](zero-cost-assistive-executor.md)), live Duda publication, and any
-step that needs institutional authorisation. Nothing in this runbook has been executed against the
-hosted environment as part of the closure candidate; it documents the contract the code enforces.
+step that needs institutional authorisation. The staging procedure was executed for the PP1 closure
+runtime on 2026-09-21; that does not turn staging evidence into institutional or production acceptance.
