@@ -98,8 +98,8 @@ deployed commit and image recorded in the status record.
    - `GET /api/readiness` returns `readiness: ready`, `deploymentCommit.value = M`,
      `expectedMigrations.count` equal to the tracked inventory, `databaseCapability: current`;
      `GET /api/health` returns 200. **This proves the application only.**
-   - Worker: container logs show the preflight passed and `READY` heartbeats every 15 s with no
-     `ASSISTIVE_WORKER_HEARTBEAT_FAILED`; `get_assistive_worker_availability` (governed server
+   - Worker: verify fresh `READY` heartbeat records (the publisher interval is 15 s); do not
+     assume the container logs print heartbeat payloads. `get_assistive_worker_availability` (governed server
      context) returns `AVAILABLE` with `compatibleWorkerCount = 1` for `deployment_version = M`, or
      equivalently a project page shows the assistive control enabled rather than "temporarily
      unavailable". Availability must be observed **after** step 4 completed; an observation taken
@@ -146,7 +146,7 @@ retention comparison.
    new receipt, which is the self-referential loop this rule exists to prevent. Redeploy only when a
    later commit changes runtime code, and then start again at §3.
 4. Build the released package from `D` with the observed identities as build inputs:
-   `npm run handoff:build -- --status released --commit D --deployed-backend M --worker-image
+   `npm run handoff:build -- --out <output-directory> --status released --commit D --deployed-backend M --worker-image
    <tag and image ID> --public-layer <observed> --evidence <sanitized receipts>` and verify it with
    `npm run handoff:verify -- --zip <zip> --commit D`. A released package carries no instruction to
    merge or deploy its own source commit; it states the runtime commit and links here.
