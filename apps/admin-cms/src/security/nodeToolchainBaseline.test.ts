@@ -112,9 +112,10 @@ describe('Node 24 toolchain baseline', () => {
     }
   });
 
-  it('records the baseline in the staging deployment manifest', () => {
-    expect(read('infra/deployment/admin-cms-staging.manifest.yaml')).toMatch(
-      new RegExp(`\\n\\s+version: ${escapedBaseline}\\n`),
-    );
+  it.each(['LF', 'CRLF'] as const)('records the exact baseline in the staging manifest with %s endings', (endings) => {
+    const normalised = read('infra/deployment/admin-cms-staging.manifest.yaml').replace(/\r\n/g, '\n');
+    const source = endings === 'CRLF' ? normalised.replace(/\n/g, '\r\n') : normalised;
+    const manifest = yaml.load(source) as { service: { runtime: { version: string } } };
+    expect(manifest.service.runtime.version).toBe(NODE_24_BASELINE_VERSION);
   });
 });
