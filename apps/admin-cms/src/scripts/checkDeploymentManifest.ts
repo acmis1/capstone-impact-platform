@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const yaml = require('js-yaml') as { load(input: string): unknown };
 
 export const DEPLOYMENT_MANIFEST_PATH = 'infra/deployment/admin-cms-staging.manifest.yaml';
-const EXPECTED_BUILD_COMMAND = 'npm ci && npm run build:admin';
+const EXPECTED_BUILD_COMMAND = "npm install -g npm@11.11.0 && test \"$(npm -v)\" = \"11.11.0\" && npm ci && npm run build:admin";
 const EXPECTED_START_COMMAND = 'npm run start --workspace=apps/admin-cms';
 const EXPECTED_HEALTH_PATH = '/api/readiness';
 const EXPECTED_NODE_VERSION = '24.21.0';

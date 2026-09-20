@@ -32,7 +32,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 ### B. Deployment Commands
 - **Root Directory**: Repository root (`/`)
 - **Build Working Directory**: `apps/admin-cms` (or repository root with workspace targeting)
-- **Install Command**: `npm ci` (Render uses the repository `.nvmrc` Node; the exact npm pin `11.11.0` is enforced in CI and in every maintained Dockerfile build stage by `npm install -g npm@11.11.0` plus a version assertion — see `nodeToolchainBaseline.test.ts`; on Render, confirm the build log reports npm `11.11.0` or add the same pin to the build command)
+- **Combined Render Build Command**: `npm install -g npm@11.11.0 && test "$(npm -v)" = "11.11.0" && npm ci && npm run build:admin`. This explicitly selects and asserts npm `11.11.0` before dependency installation and the build; `.nvmrc` selects Node `24.21.0`. Confirm both versions in the deployment build log. The tracked deployment manifest and its validator require this exact command.
 - **Application + worker release order**: [Release Rollout Runbook](operations/release-rollout-runbook.md)
 - **Build Command**: `npm run build:admin` (or `npm run build --workspace=apps/admin-cms`)
 - **Start Command**: `npm run start --workspace=apps/admin-cms` (or `next start` inside `apps/admin-cms`)

@@ -22,7 +22,7 @@ service:
     version: 24.21.0
     npmVersion: 11.11.0
   commands:
-    installAndBuild: npm ci && npm run build:admin
+    installAndBuild: "npm install -g npm@11.11.0 && test \"$(npm -v)\" = \"11.11.0\" && npm ci && npm run build:admin"
     start: npm run start --workspace=apps/admin-cms
   health:
     path: /api/readiness

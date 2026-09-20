@@ -36,6 +36,9 @@ describe('admin CMS deployment manifest', () => {
       (serviceOf(manifest).health as TestManifest).path = '/api/health';
     }],
     ['wrong root', (manifest: TestManifest) => { serviceOf(manifest).rootDirectory = 'apps/admin-cms'; }],
+    ['unpinned npm build', (manifest: TestManifest) => {
+      (serviceOf(manifest).commands as TestManifest).installAndBuild = 'npm ci && npm run build:admin';
+    }],
     ['wrong runtime', (manifest: TestManifest) => {
       (serviceOf(manifest).runtime as TestManifest).name = 'nodejs';
     }],

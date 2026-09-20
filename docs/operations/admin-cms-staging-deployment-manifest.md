@@ -13,7 +13,7 @@ An incoming owner can reconstruct the repository-facing service settings without
   (`ap-southeast-1`), the current `main` source branch, Free plan, and auto-deploy **off**;
 - repository root as the service root (`.`);
 - Node `24.21.0` with npm `11.11.0`;
-- build `npm ci && npm run build:admin`;
+- build `npm install -g npm@11.11.0 && test "$(npm -v)" = "11.11.0" && npm ci && npm run build:admin` (the npm executable is pinned and asserted before installing dependencies);
 - start `npm run start --workspace=apps/admin-cms`;
 - health check `/api/readiness`, whose successful contract is HTTP 200 and whose route supports
   both `GET` and `HEAD`;
