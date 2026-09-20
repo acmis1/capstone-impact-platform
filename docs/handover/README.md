@@ -2,7 +2,7 @@
 
 **STATUS:** Current — handover entry point
 **PURPOSE:** Operations
-**LAST VERIFIED:** 2026-09-13
+**LAST VERIFIED:** 2026-09-20
 
 If you have just been given responsibility for the Capstone Impact Platform, start here. This page
 is the map: it tells you what the system is, which document answers which question, and what still
@@ -18,8 +18,9 @@ a defect — please raise it.
 
 School staff import project-team-authored capstone packages and review the validated content.
 Project teams provide complete corrected packages when needed; staff accept exact revisions and
-approve them, participants confirm the resulting preview, and approved projects are
-compiled into a stable JSON feed that the public Duda showcase consumes. It replaces manual email,
+approve them, participants confirm the resulting preview, and governed publication compiles
+`published` projects into a stable JSON feed that the public Duda showcase consumes (an `approved`
+project is a publication candidate, not yet public). It replaces manual email,
 spreadsheet, and page-building work.
 
 ```text
@@ -45,6 +46,15 @@ works completely without them. This is why an assistive outage is never a workfl
 
 - **[Admin/CMS Operator Guide](../admin-operator-guide.md)** — sign in, import, validation, review,
   participant previews, approval, publication, archive, and what to do when something is unavailable.
+
+### What is deployed right now, and what is not
+
+- **[Release and Closure Status Record](release-closure-status.md)** — the single current record of
+  the tracked migration inventory, the observed Admin/CMS, worker and public-layer identities with
+  their evidence provenance, the candidate-versus-deployed boundary, operational disclosures and
+  the institutional-acceptance status. Every other page defers to it for counts and commits.
+- **[Closure Audit Disposition Register](closure-audit-disposition-register.md)** — what the
+  2026-09-20 independent closure audit found and what was done about each item.
 
 ### I am the technical maintainer taking this over
 
@@ -128,8 +138,9 @@ npm run verify:all         # the full quality gate
 Then confirm you can:
 
 - sign in with a synthetic local account;
-- verify the 58-file repository candidate migration manifest (`npm run onboarding:check`), then verify applied hosted history separately through Gate 3 of the staging reconciliation runbook;
+- verify the repository candidate migration manifest (`npm run onboarding:check`; the count is asserted against the [status record](release-closure-status.md)), then verify applied hosted history separately through Gate 3 of the staging reconciliation runbook;
 - build the assistive worker image (`docker build -f apps/assistive-worker/Dockerfile.hosted .`);
+- build and verify the handoff package from an exact commit (`npm run handoff:build -- --out <dir>` then `npm run handoff:verify -- --zip <zip> --commit <sha>`);
 - run the worker locally and watch it process a queued project;
 - read current executor readiness and remaining launch capacity;
 - run the backup and restore drill against a disposable database;

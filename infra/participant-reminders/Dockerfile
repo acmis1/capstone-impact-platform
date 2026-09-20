@@ -1,6 +1,6 @@
 # Provider-neutral School-owned continuous runner. The image has no HTTP server or listening port.
 # Build from the repository root; the final layer contains only the bundled Node entrypoint.
-FROM node:24.14.1-bookworm-slim AS build
+FROM node:24.21.0-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY apps/admin-cms/src apps/admin-cms/src
 
 RUN npm run build:participant-preview-reminder-runner --workspace=apps/admin-cms
 
-FROM node:24.14.1-bookworm-slim
+FROM node:24.21.0-bookworm-slim
 
 ENV NODE_ENV=production \
     NPM_CONFIG_UPDATE_NOTIFIER=false

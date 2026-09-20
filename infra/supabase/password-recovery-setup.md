@@ -34,7 +34,7 @@ cross-browser and email-prefetch-protected path.
 ## Durable session-provenance boundary
 
 Migration `20260819214431_password_recovery_session_provenance.sql` is Migration 0029. Its addition
-brought the historical repository inventory to 29; the current repository candidate contains 61 migrations.
+brought the historical repository inventory to 29; the current count is recorded in the [release and closure status record](../../docs/handover/release-closure-status.md).
 
 `public.password_recovery_sessions` contains only:
 

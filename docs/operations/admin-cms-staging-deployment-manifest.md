@@ -12,7 +12,7 @@ An incoming owner can reconstruct the repository-facing service settings without
 - Render web service, service identity `capstone-admin-cms-staging-v2`, Singapore region
   (`ap-southeast-1`), the current `main` source branch, Free plan, and auto-deploy **off**;
 - repository root as the service root (`.`);
-- Node `24.14.1` with npm `11.11.0`;
+- Node `24.21.0` with npm `11.11.0`;
 - build `npm ci && npm run build:admin`;
 - start `npm run start --workspace=apps/admin-cms`;
 - health check `/api/readiness`, whose successful contract is HTTP 200 and whose route supports

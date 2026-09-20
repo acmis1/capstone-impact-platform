@@ -10,7 +10,7 @@ describe('participant preview reminder hosted packaging', () => {
     const dockerfile = fs.readFileSync(path.join(packagingRoot, 'Dockerfile'), 'utf8');
     const compose = fs.readFileSync(path.join(packagingRoot, 'compose.yaml'), 'utf8');
 
-    expect(dockerfile).toContain('node:24.14.1-bookworm-slim');
+    expect(dockerfile).toContain('node:24.21.0-bookworm-slim');
     expect(dockerfile).toContain('build:participant-preview-reminder-runner');
     expect(dockerfile).not.toMatch(/^\s*EXPOSE\s+/im);
     expect(compose).not.toMatch(/^\s*ports:\s*$/im);

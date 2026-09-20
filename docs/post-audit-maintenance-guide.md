@@ -1,6 +1,6 @@
 # Post-audit maintenance guide
 
-This guide describes the governed maintenance release (Migration 0062) and its operator controls. It is not a deployment receipt. Confirm that the deployed application, database and assistive worker match the intended release before using new controls. Historical release observations remain dated evidence, not current-state claims.
+This guide describes the governed maintenance release (Migration 0062) and its operator controls. It is not a deployment receipt. Confirm that the deployed application, database and assistive worker match the intended release before using new controls; the observed identities and their receipts are recorded in the [release and closure status record](handover/release-closure-status.md). Historical release observations remain dated evidence, not current-state claims.
 
 ## Create and inspect a reusable layout
 

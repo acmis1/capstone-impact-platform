@@ -89,12 +89,20 @@ export function parseSemverMajorMinorPatch(versionStr: string): { major: number;
   };
 }
 
+/**
+ * Pinned Node 24 maintenance baseline. The lower bound is the security-release floor adopted by
+ * `.nvmrc`, the workspace `engines`, CI and the maintained Dockerfiles; bump every one together.
+ */
+export const NODE_24_BASELINE = { major: 24, minor: 21, patch: 0 } as const;
+export const NODE_24_BASELINE_VERSION = `${NODE_24_BASELINE.major}.${NODE_24_BASELINE.minor}.${NODE_24_BASELINE.patch}`;
+export const NODE_24_RANGE_LABEL = `>=${NODE_24_BASELINE_VERSION} <25`;
+
 export function isVersionInNode24Range(versionStr: string): boolean {
   const parsed = parseSemverMajorMinorPatch(versionStr);
   if (!parsed) return false;
-  if (parsed.major !== 24) return false;
-  if (parsed.minor < 14) return false;
-  if (parsed.minor === 14 && parsed.patch < 1) return false;
+  if (parsed.major !== NODE_24_BASELINE.major) return false;
+  if (parsed.minor < NODE_24_BASELINE.minor) return false;
+  if (parsed.minor === NODE_24_BASELINE.minor && parsed.patch < NODE_24_BASELINE.patch) return false;
   return true;
 }
 
@@ -168,11 +176,11 @@ export function performOnboardingCheck(options?: {
 
   const nodeOk = isVersionInNode24Range(currentNodeVer);
   items.push({
-    name: 'Node.js Toolchain (>=24.14.1 <25)',
+    name: `Node.js Toolchain (${NODE_24_RANGE_LABEL})`,
     passed: nodeOk,
     message: nodeOk
-      ? `PASS: Node.js ${currentNodeVer} (matches .nvmrc 24.14.1)`
-      : `FAIL: Node.js ${currentNodeVer} does not satisfy supported Node 24 range (>=24.14.1 <25)`,
+      ? `PASS: Node.js ${currentNodeVer} (satisfies .nvmrc baseline ${NODE_24_BASELINE_VERSION})`
+      : `FAIL: Node.js ${currentNodeVer} does not satisfy supported Node 24 range (${NODE_24_RANGE_LABEL})`,
   });
 
   let npmVer = 'unknown';

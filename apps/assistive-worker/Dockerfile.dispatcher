@@ -8,7 +8,7 @@
 # It reaches only the execution-control database role and the cloud control plane, never project
 # content, and it exposes no inbound interface.
 
-FROM node:24.14.1-bookworm-slim AS build
+FROM node:24.21.0-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ COPY apps/admin-cms/src apps/admin-cms/src
 
 RUN npm run build:dispatcher --workspace=apps/admin-cms
 
-FROM node:24.14.1-bookworm-slim
+FROM node:24.21.0-bookworm-slim
 
 ENV NODE_ENV=production \
     NPM_CONFIG_UPDATE_NOTIFIER=false

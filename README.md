@@ -24,10 +24,10 @@ The target workflow needs structured submissions, validation, review, archival a
 | Project content review and corrections | Staff inspect project-team-authored content in the Admin/CMS. Corrections use complete project-team/participant replacement packages that staff compare and explicitly accept; the former direct metadata and gallery-description write paths remain only as fail-closed compatibility code. |
 | Ingestion | Package parsing, metadata/file validation, import-batch tracking and import-review foundations are implemented. |
 | Media and feed | Private draft storage, validated promotion, published-only JSON compilation, immutable deployment ledger/head, history UI, controlled reconciliation, and explicitly enabled disposable-Local/verified-staging historical-feed rollback paths are implemented. These paths are not live production publication or backup/DR. |
-| Local Supabase | Pinned CLI 2.109.1, 57 timestamped migrations, 3 config-managed local storage buckets plus the migration-owned `participant-corrections-private` bucket (4 canonical release buckets), synthetic staff provisioning and automated verifiers implemented. *(Repository migrations newer than the recorded hosted baseline remain repository/local only and are not represented as applied to hosted staging.)* |
+| Local Supabase | Pinned CLI 2.109.1, the append-only timestamped migration inventory recorded in the [release and closure status record](./docs/handover/release-closure-status.md), 3 config-managed local storage buckets plus the migration-owned `participant-corrections-private` bucket (4 canonical release buckets), synthetic staff provisioning and automated verifiers implemented. *(Repository migrations are never represented as applied to hosted staging without a dated receipt in that record.)* |
 | Staging Guardrails | Target environment identity checks, hostname matching, loopback rejection and double-acknowledgement CLI flags implemented. |
-| Quality & Onboarding | Node 24.14.1 and npm 11.11.0 toolchain contract, `npm run onboarding:check` precheck, and unit tests implemented. Verified in a clean Windows remote-clone run; macOS, Linux and independent human onboarding remain unverified. |
-| Pending | Hosted migration reconciliation, hosted staff lifecycle, interactive browser UAT matrix, cross-platform human onboarding verification and production cutover. |
+| Quality & Onboarding | Node 24.21.0 and npm 11.11.0 toolchain contract, `npm run onboarding:check` precheck, and unit tests implemented. Verified in a clean Windows remote-clone run and by Ubuntu CI; native macOS corrective verification passed on the recorded local checkout (not an independent fresh-clone human trial); native Linux and independent human onboarding remain unverified. |
+| Pending | Hosted staff lifecycle, interactive browser UAT matrix, cross-platform human onboarding verification, institutional acceptance and production cutover. Current release identity, deployed-versus-candidate state and pending institutional actions: [release and closure status record](./docs/handover/release-closure-status.md). |
 
 ## Architecture
 
@@ -59,7 +59,7 @@ Staff use the protected Next.js application. Server-side authentication and auth
 From a fresh checkout (no hosted keys or organization access needed for local development):
 
 Prerequisites:
-- **Node.js**: `>= 24.14.1 < 25` (Pinned via `.nvmrc` to `24.14.1`)
+- **Node.js**: `>= 24.21.0 < 25` (Pinned via `.nvmrc` to `24.21.0`)
 - **npm**: `>= 11.11.0 < 12` (Declared in `packageManager` as `npm@11.11.0`)
 - **Docker Desktop / Engine**: Must be active locally.
 
@@ -117,6 +117,7 @@ Run from the repository root:
 | Document | Role |
 | --- | --- |
 | [`START_HERE.md`](./START_HERE.md) | Developer onboarding guide, daily workflow, and commands. |
+| [`docs/handover/release-closure-status.md`](./docs/handover/release-closure-status.md) | Single current record of release identity: tracked migration inventory, observed deployed backend/worker/public-layer identities, candidate-versus-deployed state, and pending institutional acceptance. |
 | [`docs/first-contribution.md`](./docs/first-contribution.md) | Beginner-safe step-by-step local contribution walkthrough. |
 | [`docs/onboarding-acceptance-checklist.md`](./docs/onboarding-acceptance-checklist.md) | Human onboarding acceptance checklist and comprehension checks. |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Contributor workflow, branch rules, and safety contract. |

@@ -14,7 +14,7 @@ Ensure that administrative workflows, participant project data, and public showc
 ```
 [Participant Packages] ─► [HTTPS Upload (Target)] ─► [CMS Admin UI] ── (Server-side auth and permission guards) ──► [PostgreSQL & Storage]
                                                                                            │
-[Duda Shell (Public UI)] ◄── (HTTPS GET) ◄── [Stable Public JSON Feed] ◄── [Approved Public Feed Storage]
+[Duda Shell (Public UI)] ◄── (HTTPS GET) ◄── [Stable Public JSON Feed] ◄── [Published Public Feed Storage]
 ```
 *(Note: The complete HTTPS participant-upload workflow is a target design and is not currently operational. The repository-owned `apps/public-layer/duda/` renderer implements and tests the public-feed listing/detail contract, including search and public-URL policy, and is now saved in the authorized Duda TEST editor. Synthetic data-backed acceptance passed through the governed staging feed; no Duda Publish/Republish or live RMIT/Impact publication occurred. Any Admin/CMS-to-production Duda cutover requires separate authorization and verification. The current authorization implementation uses the server-only `requireAdmin` helper, protected admin layout, protected API routes, and permission checks.)*
 
@@ -24,7 +24,7 @@ Ensure that administrative workflows, participant project data, and public showc
 
 | Security Control | Scope / Description | Status |
 | :--- | :--- | :--- |
-| **Auth and schema migrations** | Repository and hosted staging have 58 append-only migrations through `20260914100000_layout_recipe_library` | Migration 58 is `IMPLEMENTED_AND_TESTED` and `VERIFIED_STAGING`; the prior hosted 57 state remains historical evidence in [Staging-57 Deployment Evidence](staging-57-deployment-evidence-2026-09-13.md) |
+| **Auth and schema migrations** | Append-only migrations; the tracked count, latest file and hosted evidence are recorded in the [release and closure status record](handover/release-closure-status.md) | Later migrations are `IMPLEMENTED_AND_TESTED` in the repository and staging-self-verified per the dated receipts in that record; the prior hosted 57 state remains historical evidence in [Staging-57 Deployment Evidence](staging-57-deployment-evidence-2026-09-13.md) |
 | **Claims/Session Authorization Helper** | Verification of admin roles and permission checks via `requireAdmin` helper | `IMPLEMENTED_AND_TESTED` |
 | **Protected Layout & Route guards** | Protected admin layout and API route session validation guards | `IMPLEMENTED_AND_TESTED` |
 | **Live Session Verification** | Initial administrator activation is historical evidence; current staging-v2 is a separate target | `HISTORICAL_EVIDENCE` |

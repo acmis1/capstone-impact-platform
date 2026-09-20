@@ -26,8 +26,6 @@ export type LogFn = (msg: string) => void;
 export type ResetFailureCategory = 'DATABASE_NOT_READY' | 'DATABASE_RESTARTING' | 'DATABASE_CONNECTION_REFUSED' | 'DATABASE_CONNECTION_BUSY' | 'TRANSIENT_CONTAINER_STATE' | 'MIGRATION_FAILURE' | 'SEED_FAILURE' | 'COMMAND_NOT_FOUND' | 'COMMAND_TIMED_OUT' | 'COMMAND_TERMINATED' | 'NON_TRANSIENT_RESET_FAILURE' | 'UNKNOWN_RESET_FAILURE';
 export type DatabaseReadiness = 'READY' | 'STARTING' | 'UNHEALTHY' | 'STOPPED' | 'UNKNOWN';
 
-const TRANSIENT_RESET_FAILURES = new Set<ResetFailureCategory>(['DATABASE_NOT_READY', 'DATABASE_RESTARTING', 'DATABASE_CONNECTION_REFUSED', 'DATABASE_CONNECTION_BUSY', 'TRANSIENT_CONTAINER_STATE']);
-
 export function classifyResetFailure(raw: string): ResetFailureCategory {
   const value = raw.toLowerCase();
   if (/migration/.test(value)) return 'MIGRATION_FAILURE';

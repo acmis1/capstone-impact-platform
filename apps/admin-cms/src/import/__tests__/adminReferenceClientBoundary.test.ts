@@ -5,7 +5,6 @@ import {
   ADMIN_REFERENCE_LIMITS,
   CANONICAL_MATCHABLE_FIELDS,
   CANONICAL_COMPARABLE_FIELDS,
-  adminReferenceFieldMappingSchema,
   adminReferenceMappingConfigSchema,
 } from '../adminReferenceSharedContract';
 import * as serverReconciliation from '../adminReferenceReconciliation';

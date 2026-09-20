@@ -19,7 +19,7 @@ The platform is designed to support at least **100 projects per year** and remai
 *   **Duda Public Showcase Layer** (`VERIFIED_TEST` / `TEST_SITE_DATA_BACKED_ACCEPTANCE`): The maintained `apps/public-layer/duda/` renderer is a responsive public presentation shell with tested listing/detail/search behavior. The synthetic acceptance used the governed staging feed; live Duda/Impact publication was not performed.
 *   **School-Owned Admin/CMS** (`IMPLEMENTED FOUNDATION` under `apps/admin-cms`): A standalone Next.js and TypeScript application which serves as the absolute operational source of truth.
 *   **Supabase Database & Storage** (`IMPLEMENTED FOUNDATION`): PostgreSQL database storing admin records and public assets.
-*   **Approved-Only Public Feed** (`IMPLEMENTED FOUNDATION`): A schema-validated JSON payload (`capstones-latest.json`) compiled and written to a stable public Storage bucket.
+*   **Published-Only Public Feed** (`IMPLEMENTED FOUNDATION`; `approved` records are publication candidates): A schema-validated JSON payload (`capstones-latest.json`) compiled and written to a stable public Storage bucket.
 
 ---
 
@@ -49,7 +49,7 @@ Standardized Form (single project) ┘
    └── Only the current confirmed approved version proceeds to:
        └── Publication Preparation
        └── Controlled Publication
-       └── Approved-Only Public Feed
+       └── Published-Only Public Feed
        └── Duda Client-side Listing & Detail Rendering
    └── Post-Publishing: Archive / Unpublish / Failure Recovery
 ```
@@ -65,7 +65,7 @@ The correction path loops back through review and approval. Participant-owned co
 ---
 
 ## 6. Duda Constraints
-*   **Duda Configuration and Arrangements**: No Duda upgrade has been approved. Duda native collections cannot be relied upon for the required scale of 100+ projects per year under the available arrangement. The repository solution uses an external approved-only JSON feed and client-side listing/detail rendering, including tested Year, Program, Discipline, Industry Sector, and public-field search. The authorized Duda TEST editor now has the saved search renderer and passed bounded synthetic acceptance; production/live Duda cutover remains unperformed. These integration-specific IDs are implementation details, not permanent public API promises.
+*   **Duda Configuration and Arrangements**: No Duda upgrade has been approved. Duda native collections cannot be relied upon for the required scale of 100+ projects per year under the available arrangement. The repository solution uses an external published-only JSON feed and client-side listing/detail rendering, including tested Year, Program, Discipline, Industry Sector, and public-field search. The authorized Duda TEST editor now has the saved search renderer and passed bounded synthetic acceptance; production/live Duda cutover remains unperformed. These integration-specific IDs are implementation details, not permanent public API promises.
 *   **Verification Boundary**: The team currently has access only to an authenticated Duda TEST site. The official RMIT production website was not provided or verified, and no live Duda publication is claimed.
 
 ---
@@ -93,7 +93,7 @@ The correction path loops back through review and approval. Participant-owned co
 
 ## 10. Current Verified State
 *   The `main` branch is the repository source of truth. Verified deployment commits and historical promotion SHAs are recorded in the Prototype recovery/deployment runbooks and Git history.
-*   The latest verified Admin/CMS Render staging application baseline (2026-09-15) is deployment `dep-dake50fqj5pc73arnfn0` at exact merged-main SHA `95fe7ea023f6eba0a0161f636aae05e721c018f2`; `/api/readiness` and `/login` returned HTTP 200, readiness was `READY` through all 58 migrations ending at `20260914100000_layout_recipe_library`, and the canonical feed remained exactly `[]`. This is not production, recovery, monitoring, or human-acceptance evidence.
+*   The current hosted release identity (Admin/CMS, worker and public layer) and its evidence provenance are recorded only in the [release and closure status record](handover/release-closure-status.md). The 2026-09-15 observation of deployment `dep-dake50fqj5pc73arnfn0` at `95fe7ea023f6eba0a0161f636aae05e721c018f2` (readiness `READY` through 58 migrations, canonical feed `[]`) is dated history. None of this is production, recovery, monitoring, or human-acceptance evidence.
 *   Duda TEST has `TEST_SITE_DATA_BACKED_ACCEPTANCE` for one synthetic project: listing, public-field search, all four facets, reusable detail navigation, and populated-listing mobile no-overflow passed; governed cleanup removed the project from the TEST presentation. The detail screenshot proves navigation only, not mobile detail accessibility.
 *   Initial administrator authentication (`auth.users` -> `admin_users`), `bootstrap_initial_admin` execution (`CREATED`), `npm run check:admin-auth` (`READY_FOR_MANUAL_LOGIN_TEST`), and dashboard login/logout on `capstone-admin-cms-staging-2026` are historical activation evidence. The active target is staging-v2.
 
@@ -109,7 +109,7 @@ The correction path loops back through review and approval. Participant-owned co
 *   **Participant Final-Preview Confirmation**: Providing participants a preview link, sending notification emails, and scheduling reminders.
 *   **Participant Correction Requests**: Allowing participants to submit specific feedback if data is wrong.
 *   **Human Administrative Approval**: A school staff member must review and approve records before publishing.
-*   **Approved-Only Public Feed**: Stripping administrative metadata and updating the stable JSON feed.
+*   **Published-Only Public Feed**: Stripping administrative metadata and updating the stable JSON feed with `published` records only.
 *   **Search & Dynamic Filters**: Repository public-renderer search plus metadata filtering (Year, Program, Discipline, Industry) is implemented and tested; the authorized Duda TEST configuration passed bounded synthetic acceptance, while production/live cutover remains pending.
 *   **Archive/Unpublish Flows**: Safe archival of database records and removal of projects from the public feed.
 *   **Measurement Metrics**: Demonstrating, on the same comparable cohort, at least a **50% end-to-end elapsed publishing-time reduction and at least a 50% human-manpower reduction measured in total person-hours** compared with the current manual workflow. Both independent thresholds must pass; neither result may compensate for the other. The [manual efficiency instrument](templates/release-evaluation-manual-efficiency.md) is currently unfilled, so BRIEF-SC01 remains `NOT MEASURED`.

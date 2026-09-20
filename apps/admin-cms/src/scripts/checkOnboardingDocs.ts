@@ -1,9 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { checkMarkdownLinks, checkTerminology, checkYaml } from './repositoryChecks';
-
-const require = createRequire(import.meta.url);
+import { checkReleaseStatusDrift } from './releaseStatusDrift';
 
 export function checkOnboardingDocs(repoRoot = path.resolve(__dirname, '../../../../')): string[] {
   const failures: string[] = [];
@@ -195,6 +193,10 @@ export function checkOnboardingDocs(repoRoot = path.resolve(__dirname, '../../..
       }
     }
   }
+
+  // 14. Current-state release identity (migration inventory, release commits, feed semantics) must
+  //     match the single status record; dated history stays allowed when marked as such.
+  failures.push(...checkReleaseStatusDrift(repoRoot));
 
   // Also include general terminology, YAML, and link checks
   failures.push(...checkTerminology(repoRoot));

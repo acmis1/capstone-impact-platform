@@ -14,7 +14,7 @@ Please record your local system parameters:
 - **Tester Name / Handle**: ____________________
 - **Date**: ____________________
 - **Operating System**: [ ] Windows 11 / 10  |  [ ] macOS  |  [ ] Linux (Distro: ________)
-- **Node.js Version** (`node -v`): ____________________ *(Expected: v24.14.1)*
+- **Node.js Version** (`node -v`): ____________________ *(Expected: v24.21.0)*
 - **npm Version** (`npm -v`): ____________________ *(Expected: 11.11.0 or >=11.11.0 <12)*
 - **Docker Engine / Desktop Version** (`docker -v`): ____________________
 - **Available System Memory (RAM)**: ____________________ GB

@@ -29,10 +29,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
@@ -81,6 +81,9 @@ jobs:
       - name: TypeScript Typecheck
         run: npm run typecheck:admin
 
+      - name: Handoff Package Builder and Verifier Tests
+        run: npm run test:handoff
+
       - name: Next.js Production Build
         run: npm run build:admin
 
@@ -104,10 +107,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
@@ -129,10 +132,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
@@ -158,10 +161,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
@@ -192,10 +195,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
@@ -233,7 +236,7 @@ jobs:
           CAPSTONE_LEDGER_RUNTIME_PORT_BASE: '55220'
 
   staging-migration-upgrade:
-    name: Disposable Staging Migration 0048 to 0058 Upgrade
+    name: Disposable Staging Migration Upgrade (0048 baseline to current inventory)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -243,10 +246,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
@@ -255,9 +258,9 @@ jobs:
         run: npm ci
 
       # Provisions exactly the 48-migration hosted baseline on its own disposable stack, seeds
-      # representative synthetic 48-state evidence, then applies 0049 through 0058 one at a time.
+      # representative synthetic 48-state evidence, then applies 0049 through the current inventory one at a time.
       # It owns every resource it creates, verifies its own cleanup, and contacts no hosted system.
-      - name: Verify the exact 0048 to 0058 migration upgrade on an owned disposable stack
+      - name: Verify the exact 0048-to-current migration upgrade on an owned disposable stack
         run: npm run verify:staging-migration-upgrade:disposable
 
   layout-recipe-runtime:
@@ -271,10 +274,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
@@ -300,10 +303,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0
@@ -327,10 +330,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1
+      - name: Setup Node.js 24.21.0
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24.14.1'
+          node-version: '24.21.0'
 
       - name: Install npm 11.11.0 (pinned)
         run: npm install -g npm@11.11.0

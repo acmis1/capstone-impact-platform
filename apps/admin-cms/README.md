@@ -48,7 +48,7 @@ The explicit `npm run verify:release-evaluation` command runs the deterministic 
 | Media validation/storage | Yes | Offline media validation plus governed metadata/media staging and private draft storage paths are covered by tests | Hosted staging schema/storage qualification is recorded; production and human workflow verification remain pending |
 | Published-only feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled live cutover pending |
 | Public deployment ledger | Yes | Exact-byte versions, explicit head, controlled writer/recovery, history UI, reconciliation, and disposable-Local/verified-staging rollback policies are tested | Active hosted enablement and production acceptance remain separate |
-| Duda integration | Maintained presentation package | `apps/public-layer` renderer and approved-feed contract have loopback and bounded Duda TEST evidence | Live Duda publication remains pending authorization |
+| Duda integration | Maintained presentation package | `apps/public-layer` renderer and the published-only feed contract have loopback and bounded Duda TEST evidence | Live Duda publication remains pending authorization |
 | Database schema/RLS | Versioned | The checked repository migration manifest and exact-head runtime rehearsal define the candidate contract | Hosted version must be matched to `/api/readiness` and the dated rollout receipt; institutional acceptance is separate |
 | Automated testing | Yes | Vitest offline suite, onboarding precheck, and merged-main CI | Hosted staging smoke is separate from human/UAT acceptance |
 | Production publication paths | Implemented, disabled | Exact production identity and enablement policies and routes are tested | Undeployed, unauthorized, and not live; hardening and controlled cutover pending |
@@ -88,7 +88,7 @@ The browser receives only browser-safe configuration. Server code resolves the a
 
 ## Prerequisites
 
-- **Node.js**: `>= 24.14.1 < 25` (Pinned via root `.nvmrc` to `24.14.1`).
+- **Node.js**: `>= 24.21.0 < 25` (Pinned via root `.nvmrc` to `24.21.0`).
 - **npm**: `>= 11.11.0 < 12` (Declared in `packageManager` as `npm@11.11.0`).
 - Docker Desktop or Docker Engine (running locally for Supabase containers; no cloud account required for local development).
 - An explicitly authorized isolated Supabase environment for database-backed staging checks and operations.
@@ -213,7 +213,7 @@ Do not blindly reinitialize an already-applied environment. Use the [Supabase mi
 
 ## Database and migrations
 
-The repository migration manifest is the current source of truth; never infer hosted delivery from files being present. The completed 18 September 2026 staging rollout of `79fe1b333d16fafe9aa15e5572e230d74640f365` applied and self-verified 61 migrations, preserving original Storage bytes and feed/history. This is a dated baseline, not a claim that later candidates are deployed. Governed maintenance adds the forward Migration 0062 and needs its own exact-head rehearsal and rollout evidence. Never target `Prototype/`, blindly reinitialize existing environments, or confuse staging self-verification with staff/production acceptance.
+The repository migration manifest is the current source of truth; never infer hosted delivery from files being present. Which release, migration count and worker image were observed on hosted staging, with what provenance and date, is recorded only in the [release and closure status record](../../docs/handover/release-closure-status.md); earlier dated rollouts (for example the 18 September 2026 61-migration release `79fe1b333d16fafe9aa15e5572e230d74640f365`, later superseded by the Migration 0062 rollout recorded there) are history, not current-state claims. Never target `Prototype/`, blindly reinitialize existing environments, or confuse staging self-verification with staff/production acceptance.
 
 - [`20260601035138_staging_schema.sql`](../../infra/supabase/migrations/20260601035138_staging_schema.sql) defines the relational schema, constraints, indexes and timestamps.
 - [`20260601035139_staging_rls_policies.sql`](../../infra/supabase/migrations/20260601035139_staging_rls_policies.sql) establishes the restrictive Row-Level Security baseline.

@@ -22,7 +22,7 @@ Related: [Resource Ownership Matrix](resource-ownership-matrix.md) ·
 | **Storage** | Local buckets with synthetic fixtures | Throwaway buckets | Hosted buckets, synthetic content | School-controlled buckets |
 | **Admin/CMS host** | `127.0.0.1:3000` | Not served | Hosted web service | School-controlled host |
 | **Public target** | None | None | No live publication | The School's Duda showcase |
-| **Executor** | Loopback worker on the developer machine | Not run | One chosen profile | One chosen profile |
+| **Executor** | Loopback worker on the developer machine | Not run | Currently Profile B (continuous worker) on a project-team member's Windows PC via Docker Desktop — not institutional compute; see the [status record](release-closure-status.md) §4 | One chosen profile on School compute |
 | **Runtime identity** | `CAPSTONE_RUNTIME_ENV` unset or local | Local | Exactly `staging`, with a matching expected host | Candidate code requires exactly `production` with a matching expected host; no operational identity is established yet |
 | **Owner** | The developer | CI or the developer | Currently team-owned; must become School-owned | School |
 | **Secret source** | Generated locally, git-ignored | Generated per run | Hosting platform secret store | School-controlled secret store |

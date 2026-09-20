@@ -60,7 +60,11 @@ const MASK_PATTERNS = [
   /\b[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+\b/g,
   /\bv?\d+(?:\.\d+){1,3}(?:-[0-9A-Za-z.-]+)?\b/g,
   /\b(?:[A-Z][A-Z0-9]*|[a-z][a-z0-9]*)(?:_[A-Za-z0-9]+)+\b/g,
-  /\b[a-z]+(?:[A-Z][A-Za-z0-9]*)+\b/g,
+  // Camel-case identifiers. This matches exactly the strings the frozen policy pattern
+  // `\b[a-z]+(?:[A-Z][A-Za-z0-9]*)+\b` matches: consecutive upper-case-led groups always collapse
+  // into one `[A-Z][A-Za-z0-9]*` run, so the nested repetition accepted no extra input; it only
+  // created an ambiguous split that backtracked exponentially on near misses such as `a` + `A`×n + `_`.
+  /\b[a-z]+[A-Z][A-Za-z0-9]*\b/g,
 ];
 
 interface MaskedLanguageText {
@@ -132,10 +136,23 @@ function isSpelling(match: LanguageToolRawMatch): boolean {
     || match.categoryId.toUpperCase() === 'TYPOS';
 }
 
+/**
+ * The frozen policy's `internal_uppercase_compound` shape: an ASCII alphanumeric token in which a
+ * lower-case letter precedes an upper-case letter. It is the language of
+ * `^[A-Za-z0-9]*[a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$`, evaluated in one pass instead of through
+ * that pattern's three overlapping quantifiers, which backtracked polynomially on long near misses
+ * such as `aA` repeated thousands of times followed by `_`.
+ */
+function internalUppercaseCompound(token: string): boolean {
+  if (!/^[A-Za-z0-9]*$/.test(token)) return false;
+  const firstLowerCase = token.search(/[a-z]/);
+  return firstLowerCase >= 0 && /[A-Z]/.test(token.slice(firstLowerCase + 1));
+}
+
 function technicalShape(token: string): boolean {
   return Array.from(token).some((character) => character.codePointAt(0)! > 127)
     || (Array.from(token).length <= 2 && token === token.toLowerCase())
-    || /^[A-Za-z0-9]*[a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$/.test(token)
+    || internalUppercaseCompound(token)
     || /^(?=.*[A-Z0-9])[A-Z0-9]{2,}$/.test(token);
 }
 

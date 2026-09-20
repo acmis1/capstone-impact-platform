@@ -26,7 +26,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 ## 2. Toolchain & Build Contract
 
 ### A. Engine Requirements
-- **Node.js**: `>= 24.14.1 < 25` (Pinned via `.nvmrc` to `24.14.1`)
+- **Node.js**: `>= 24.21.0 < 25` (Pinned via `.nvmrc` to `24.21.0`)
 - **npm**: `>= 11.11.0 < 12` (Declared in root `packageManager` as `npm@11.11.0`)
 
 ### B. Deployment Commands
