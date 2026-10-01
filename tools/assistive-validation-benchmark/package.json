@@ -6,6 +6,6 @@
     "node": ">=24.14.1 <25"
   },
   "dependencies": {
-    "harper.js": "2.7.0"
+    "harper.js": "2.10.0"
   }
 }
